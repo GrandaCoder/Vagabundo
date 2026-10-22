@@ -19,6 +19,8 @@ export class Player {
     this.speedWalk = PLAYER_SPEED_WALK;
     this.speedRun = PLAYER_SPEED_RUN;
     this.speedMult = 1; // debuff por salud mental baja
+    this.velocity = new THREE.Vector3();
+    this.hasInertia = true;
     this._direction = new THREE.Vector3();
     this._forward = new THREE.Vector3();
     this._right = new THREE.Vector3();
@@ -112,7 +114,22 @@ export class Player {
       dir.copy(right).multiplyScalar(x).addScaledVector(forward, -z);
     }
     if (moving) dir.normalize();
-    const delta = this._delta.copy(dir).multiplyScalar(moving ? speed * dt : 0);
+    let delta;
+    if (this.hasInertia && dt > 0) {
+      this.velocity ??= new THREE.Vector3();
+      const targetSpeed = moving ? speed : 0;
+      const targetVelX = moving ? dir.x * targetSpeed : 0;
+      const targetVelZ = moving ? dir.z * targetSpeed : 0;
+      const accelRate = moving ? 22 : 18;
+      this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, targetVelX, 1 - Math.exp(-accelRate * dt));
+      this.velocity.z = THREE.MathUtils.lerp(this.velocity.z, targetVelZ, 1 - Math.exp(-accelRate * dt));
+      if (!moving && this.velocity.lengthSq() < 0.0005) {
+        this.velocity.set(0, 0, 0);
+      }
+      delta = this._delta.copy(this.velocity).multiplyScalar(dt);
+    } else {
+      delta = this._delta.copy(dir).multiplyScalar(moving ? speed * dt : 0);
+    }
 
     const before = this._before.copy(this.position);
     if (collisions) {
@@ -135,7 +152,7 @@ export class Player {
       this.root.rotation.y += diff * Math.min(1, 12 * dt);
     }
 
-    this.state = !moving ? 'idle' : (running ? 'run' : 'walk');
+    this.state = (this.speed < 0.25) ? 'idle' : (running ? 'run' : 'walk');
 
     // Animación del personaje (velocidad en metros del modelo, no del mundo)
     this.character.update(dt, {

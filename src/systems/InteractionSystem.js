@@ -90,6 +90,7 @@ export class InteractionSystem {
         if (t.kind === 'shop') nearestType = 'shop';
         else if (t.kind === 'cambuche') nearestType = 'cambuche';
         else if (t.kind === 'recycler') nearestType = 'sell';
+        else if (t.kind === 'dog') nearestType = 'dog';
         else if (typeof t.harvest === 'function') nearestType = 'pickup';
         else if (typeof t.steal === 'function') nearestType = 'car';
         else if (typeof t.sellSubstances === 'function') nearestType = 'dealer';
@@ -133,6 +134,9 @@ export class InteractionSystem {
 
     // === Interacción principal (E) ===
     if (input.consumePress('KeyE') && nearest) {
+      if (typeof document !== 'undefined' && document.pointerLockElement) {
+        try { document.exitPointerLock(); } catch {}
+      }
       switch (nearestType) {
         case 'pickup':
           this._harvestTrash(nearest, false);
@@ -148,6 +152,9 @@ export class InteractionSystem {
           break;
         case 'car':
           this._stealCar(nearest);
+          break;
+        case 'dog':
+          this._interactDog(nearest);
           break;
         case 'dealer': {
           const hasSubstances = this.inventory.items.some((i) => ITEMS[i.id]?.substance);
@@ -176,6 +183,26 @@ export class InteractionSystem {
     if (input.consumePress('KeyF')) {
       const ok = this.toggleBoost();
       if (!ok) this.audio?.play('empty');
+    }
+  }
+
+  _interactDog(dog) {
+    if (!dog) return;
+    const foodItem = this.inventory.items.find(i => ['pan', 'lataComida', 'carne', 'hueso'].includes(i.id));
+
+    if (!dog.isFriend && foodItem) {
+      this.inventory.remove(foodItem.id, 1);
+      dog.befriend();
+      this.stats.saludMental = Math.min(100, this.stats.saludMental + 15);
+      window.dispatchEvent(new CustomEvent('toast', {
+        detail: { text: `🐕 ¡Le diste ${ITEMS[foodItem.id]?.name ?? 'comida'} a El Chato! Ahora te acompaña.`, type: 'rare' }
+      }));
+    } else {
+      dog.pet();
+      this.stats.saludMental = Math.min(100, this.stats.saludMental + 5);
+      window.dispatchEvent(new CustomEvent('toast', {
+        detail: { text: '🐕 Acariciaste a El Chato (+5 salud mental).', type: 'info' }
+      }));
     }
   }
 
