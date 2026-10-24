@@ -10,6 +10,7 @@ export class Car {
     this.used = false;
     this.cooldown = 0;
     this.traffic = traffic;
+    this.controller=traffic?'traffic':'parked';
     this.visualMode = visualMode;
     this._visualFactory = visualFactory;
     this._visualToken = 0;
@@ -145,6 +146,8 @@ export class Car {
       this.marker.rotation.z += dt * 0.5;
     }
   }
+
+  setSteering(angle,signal=0){this.steerAngle=angle;this.turnSignal=signal;this.vehicle.setSteering?.(angle,signal);}
 
   animateDrive(distance, braking) {
     this._travelled=(this._travelled??0)+distance;

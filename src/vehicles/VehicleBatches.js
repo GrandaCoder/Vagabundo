@@ -37,7 +37,7 @@ export class VehicleBatches {
       this.ensureMirrors(visual);
       if(distance<70*70)for(const mirror of visual.mirrorGroups??[])if(mirror.visible){mirror.children.filter(m=>m.isMesh).forEach((source,j)=>{const batch=this.mirrors[j];source.updateWorldMatrix(true,false);batch.setMatrixAt(batch.count++,source.matrixWorld);});}
       target.setMatrixAt(i,mesh.matrixWorld);const g=target.geometry.attributes,c=state.paint.value;
-      g.paintColor.setXYZ(i,c.r,c.g,c.b);g.carState.setXYZW(i,state.braking.value,0,0,0);g.wheelAngle.setX(i,state.wheelAngle.value);g.carNight.setX(i,state.night.value);
+      g.paintColor.setXYZ(i,c.r,c.g,c.b);g.carState.setXYZW(i,state.braking.value,visual.turnSignal>0?1:0,visual.turnSignal<0?1:0,0);g.wheelAngle.setX(i,state.wheelAngle.value);g.carNight.setX(i,state.night.value);
     }
     for(const mesh of this.mirrors??[])mesh.instanceMatrix.needsUpdate=true;
     for(const type of this.types.values())for(const mesh of [type.near,type.far]){mesh.instanceMatrix.needsUpdate=true;for(const key of ['paintColor','carState','wheelAngle','carNight'])mesh.geometry.attributes[key].needsUpdate=true;}

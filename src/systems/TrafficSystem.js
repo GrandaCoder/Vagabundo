@@ -1,3 +1,5 @@
+import {idmAcceleration,weightedMove} from '../vehicles/SlopDynamics.js';
+import {BogotaRoadNetwork} from '../vehicles/BogotaRoadNetwork.js';
 import * as THREE from 'three';
 import { Car } from '../entities/Car.js';
 import { signalState } from '../world/bogota/TrafficSignals.js';
@@ -14,6 +16,7 @@ export class TrafficSystem {
     this.vehicles = [];
     this.random = random;
     this.routes = routes.alternatives ?? routes;
+    this.network=new BogotaRoadNetwork(this.routes);
     this._position = new THREE.Vector3();
     this._direction = new THREE.Vector3();
     this._probePosition = new THREE.Vector3();
@@ -67,34 +70,32 @@ export class TrafficSystem {
   setParkedCars(cars) { this.parkedCars = cars.map(car => ({ car })); }
 
   _chooseRoute(vehicle) {
-    if (vehicle.crossingNode) return false;
+    if ((vehicle.crossingNode&&!vehicle.replanWaiting)||vehicle.laneChange) return false;
     if (this.routes.length < 2) return false;
-    const position = this._position, direction = this._direction;
-    vehicle.route.sample(vehicle.distance, position, direction);
-    if (Math.min(Math.abs(direction.x), Math.abs(direction.z)) > 1e-6) return false;
-    const options = [];
-    const margin = vehicle.car.length / 2 + 1;
-    for (const route of this.routes) {
-      if (route === vehicle.route || route.key === vehicle.route.key || vehicle.recentRoutes.includes(route.key)) continue;
-      let start = 0;
-      for (const segment of route.segments) {
-        if (!segment.radius && Math.abs(segment.dx - direction.x) < 1e-6 && Math.abs(segment.dz - direction.z) < 1e-6) {
-          const dx = position.x - segment.x, dz = position.z - segment.z;
-          const along = dx * segment.dx + dz * segment.dz;
-          const across = dx * -segment.dz + dz * segment.dx;
-          if (Math.abs(across) < 1e-5 && along > margin && along < segment.length - margin) options.push({ route, distance: start + along });
-        }
-        start += segment.length;
-      }
-    }
-    if (!options.length) return false;
-    const selected = options[Math.min(options.length - 1, Math.floor(this.random() * options.length))];
+    this.network??=new BogotaRoadNetwork(this.routes);
+    const options=this.network.continuations(vehicle).filter(o=>!vehicle.recentRoutes.includes(o.route.key));
+    if(!options.length)return false;
+    const selected=weightedMove(options,o=>o.straight?3:1,this.random);
     vehicle.route = selected.route;
     vehicle.distance = selected.distance;
     vehicle.recentRoutes.push(selected.route.key);
     if (vehicle.recentRoutes.length > 3) vehicle.recentRoutes.shift();
     vehicle.routeChanges++;
     return true;
+  }
+
+  _tryLaneChange(vehicle){
+    if(vehicle.laneChange||vehicle.crossingNode||vehicle.speed>vehicle.cruiseSpeed*.7)return false;
+    for(const option of this.network?.laneChanges(vehicle)??[]){
+      const target=new THREE.Vector3(),direction=new THREE.Vector3();option.route.sample(option.distance,target,direction);
+      const safe=[...this.vehicles,...(this.parkedCars??[]),...(this.busVehicles??[])].every(other=>{
+        if(other===vehicle||Math.abs(other.car.position.y-target.y)>2)return true;
+        const delta=other.car.position.clone().sub(target),along=delta.dot(direction),side=delta.x*-direction.z+delta.z*direction.x;
+        return Math.abs(side)>vehicle.car.width+1||Math.abs(along)>Math.max(15,vehicle.speed*2,(other.speed??0)*2);
+      });
+      if(!safe)continue;
+      vehicle.laneChange={...option,travel:0,time:0};return true;
+    }return false;
   }
 
   _carInPath(other, car) {
@@ -171,7 +172,7 @@ export class TrafficSystem {
       // Los que ya cruzan despejan primero. La cola solo da prioridad entre
       // trayectorias que se cortan: sentidos opuestos y convoyes pueden avanzar juntos.
       const waiting = [];
-      const ordered = [...state.queue].sort((a, b) => Number(this._overlapsNode(b.car, node)) - Number(this._overlapsNode(a.car, node)));
+      const ordered = [...state.queue].sort((a, b) => Number(this._overlapsNode(b.car, node)) - Number(this._overlapsNode(a.car, node)) || (b.waitAge??0)-(a.waitAge??0));
       for (const vehicle of ordered) {
         if (state.owners.has(vehicle)) continue;
         const plan = state.plans.get(vehicle), entered = this._overlapsNode(vehicle.car, node);
@@ -236,11 +237,13 @@ export class TrafficSystem {
       vehicle.hardClearance = hardClearance;
       return Math.min(hardClearance, vehicle.playerClearance);
     };
-    let clearance = Infinity;
+    let clearance = Infinity;vehicle.leaderSpeed=0;vehicle.leaderGap=Infinity;
     for (const other of this._routeVehicles.get(route) ?? []) {
       if (other === vehicle || other.route !== route) continue;
       const gap = (other.distance - distance + route.length) % route.length;
-      clearance = Math.min(clearance, Math.max(0, gap - (car.length + other.car.length) / 2 - GAP));
+      const bumperGap=Math.max(0,gap-(car.length+other.car.length)/2);
+      if(bumperGap<vehicle.leaderGap){vehicle.leaderGap=bumperGap;vehicle.leaderSpeed=other.speed;}
+      clearance = Math.min(clearance, Math.max(0, bumperGap-GAP));
     }
     // Mira también alrededor de los giros; no solo en línea recta frente al carro.
     const lookAhead = Math.max(7, speed * speed / (2 * (vehicle.braking ?? BRAKING)) + speed * .8 + 2);
@@ -337,10 +340,17 @@ export class TrafficSystem {
     if (dt <= 0) return;
     this._coordinateIntersections();
     for (const vehicle of this.vehicles) {
+      vehicle.waitAge=vehicle.speed<.05?(vehicle.waitAge??0)+Math.min(dt,.5):0;
+      if(vehicle.waitAge>18&&vehicle.crossingNode&&!this._overlapsNode(vehicle.car,vehicle.crossingNode)){
+        vehicle.replanWaiting=true;
+        if(this._chooseRoute(vehicle))for(const state of this.signals?.reservations?.values()??[]){state.plans.delete(vehicle);state.owners.delete(vehicle);}
+        vehicle.replanWaiting=false;vehicle.waitAge=0;
+      }
       vehicle.routeTimer -= Math.min(dt, .5);
       if (vehicle.routeTimer <= 0) {
         const changed = this._chooseRoute(vehicle);
         vehicle.routeTimer = changed ? 6 + this.random() * 8 : 1 + this.random() * 2;
+        if(!changed)this._tryLaneChange(vehicle);
       }
     }
     // Subpasos acotados: un cuadro lento no puede saltarse a otro vehículo o peatón.
@@ -370,17 +380,20 @@ export class TrafficSystem {
             if (segment.radius) {
               const ahead = ((start - vehicle.distance) % vehicle.route.length + vehicle.route.length) % vehicle.route.length;
               const inCurve = vehicle.distance >= start && vehicle.distance < start + segment.length;
-              const turnSpeed = Math.sqrt(segment.radius * 1.8);
+              const turnSpeed = Math.sqrt(segment.radius * 3.5);
               desiredSpeed = Math.min(desiredSpeed, Math.sqrt(turnSpeed ** 2 + 2 * braking * (inCurve ? 0 : ahead)));
             }
             start += segment.length;
           }
-          if (clearance < .05 && vehicle.speed < .1) vehicle.stopped = true;
+          if ((clearance < .5 || desiredSpeed < .05) && vehicle.speed < .1) vehicle.stopped = true;
           if (vehicle.stopped && clearance > .5) {
             vehicle.resumeDelay = vehicle.reactionTime; vehicle.stopped = false;
           }
           if (vehicle.resumeDelay > 0) { vehicle.resumeDelay -= stepTime; desiredSpeed = 0; }
-          const targetAcceleration = THREE.MathUtils.clamp((desiredSpeed - vehicle.speed) / .65, -braking, vehicle.accelerationLimit ?? ACCELERATION);
+          const leaderGap=vehicle.leaderGap??Infinity;
+          const obstacleGap=Number.isFinite(brakingClearance)?brakingClearance+GAP:Infinity;
+          const following=leaderGap<=obstacleGap;
+          const targetAcceleration = desiredSpeed===0&&vehicle.speed<.01 ? -braking : THREE.MathUtils.clamp(idmAcceleration(vehicle.speed,Math.max(.1,desiredSpeed),following?leaderGap:obstacleGap,following?vehicle.leaderSpeed:0,{a:vehicle.accelerationLimit??ACCELERATION,b:braking,s0:following?GAP:0,T:following?1.1:0}),-braking,vehicle.accelerationLimit??ACCELERATION);
           vehicle.acceleration = THREE.MathUtils.clamp(targetAcceleration, vehicle.acceleration - 3 * stepTime, vehicle.acceleration + 3 * stepTime);
           const candidateSpeed = THREE.MathUtils.clamp(vehicle.speed + vehicle.acceleration * stepTime, 0, vehicle.cruiseSpeed);
           const speed = desiredSpeed === 0 && candidateSpeed < .01 ? 0 : candidateSpeed;
@@ -400,9 +413,20 @@ export class TrafficSystem {
         vehicle.speed = vehicle.nextSpeed;
         this._checkPlayerImpact(vehicle, player, startDistance, travel, onPlayerHit);
         vehicle.route.sample(vehicle.distance, this._position, this._direction);
+        if(vehicle.laneChange){
+          const change=vehicle.laneChange;change.travel+=travel;change.time+=stepTime;
+          const t=Math.min(1,change.time/3),blend=t*t*t*(10+t*(-15+6*t));
+          const target=new THREE.Vector3(),direction=new THREE.Vector3();change.route.sample(change.distance+change.travel,target,direction);
+          this._position.lerp(target,blend);
+          const lateral=30*t*t*(1-t)*(1-t)/3*3.2*change.side;
+          this._direction.add(new THREE.Vector3(-this._direction.z,0,this._direction.x).multiplyScalar(lateral/Math.max(2,vehicle.speed))).normalize();
+          if(t===1){vehicle.route=change.route;vehicle.distance=(change.distance+change.travel)%change.route.length;vehicle.laneChange=null;}
+        }
         vehicle.car.position.copy(this._position);
         vehicle.car.group.rotation.y = Math.atan2(-this._direction.z, this._direction.x);
-        vehicle.car.animateDrive(vehicle.speed * stepTime, vehicle.speed < vehicle.cruiseSpeed * 0.7);
+        const edge=this.network?.locate(vehicle.route,vehicle.distance),radius=edge?.segment.radius;
+        vehicle.car.setSteering?.(radius?Math.atan(2.6/radius):0,vehicle.laneChange?.side??(radius?1:0));
+        vehicle.car.animateDrive(vehicle.speed * stepTime, vehicle.acceleration < -.2);
       }
       remaining -= stepTime;
     }

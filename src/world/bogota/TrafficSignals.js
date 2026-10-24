@@ -3,7 +3,6 @@ import {uniform,texture,uv,color,attribute,step,max,min,float,mix} from 'three/t
 import { createImportedModel } from '../../utils/ImportedModels.js';
 import { CARACAS } from './StreetLayout.js';
 import { CITY_CARRERAS as CARRERAS, CITY_CALLES as CALLES } from './CityLayout.js';
-import { BUS_DETOUR } from './Colpatria.js';
 
 const SEM_HEIGHT = 4.3;
 
@@ -41,7 +40,7 @@ export class TrafficSignals {
     for (const [za, zb] of CALLES) for (const [xa, xb] of vertical) {
       const node = { x0: xa * 2 - 1, x1: xb * 2 + 1, z0: za * 2 - 1, z1: zb * 2 + 1 };
       // El desvío comparte la fase de la troncal y reserva el cruce completo.
-      if (node.x0 < 78.5 && node.x1 > 78.5 && node.z0 > BUS_DETOUR.z0 && node.z1 < BUS_DETOUR.z1) node.x1 = Math.min(node.x1 + BUS_DETOUR.offset, 125);
+      // El rodeo ahora va sobre el viaducto: no reservar cruces vecinos de la calle inferior.
       this.nodes.push(node);
       this.poles.push(
         { x: node.x0 - .5, z: node.z1 + .5, hx: 1, hz: 0, axis: 0 },

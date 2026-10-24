@@ -21,6 +21,7 @@ export function createSlopVehicle({variant='sedan',seed=0,length=4.3,width=1.76,
   const visual={group,wheels:[],tailMat:null,variant,material,
     updateMotion(distance,braking){state.wheelAngle.value=(state.wheelAngle.value+distance/(spec.wheelRadius*group.scale.y))%(Math.PI*2);state.braking.value=braking?1:0;},
     setNight(night){state.night.value=night?1:0;},
+    setSteering(angle,signal){visual.steerAngle=angle;visual.turnSignal=signal;},
     dispose(){if(disposed)return;disposed=true;group.removeFromParent();material.dispose();}
   };
   if(scene){
