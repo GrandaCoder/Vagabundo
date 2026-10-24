@@ -5,6 +5,9 @@ import { LoadingScreen } from './ui/LoadingScreen.js';
 import { startControlsHelp } from './ui/ControlsHelp.js';
 import { openDeveloperNote } from './ui/DeveloperNote.js';
 
+// Desactivada temporalmente; cambiar a true para volver a mostrarla al iniciar.
+const SHOW_DEVELOPER_NOTE = false;
+
 const loading = new LoadingScreen();
 try {
   await loading.stage('Preparando el juego…', 0);
@@ -12,5 +15,5 @@ try {
   const game = new Game(document.getElementById('game-canvas'));
   await game.start(loading);
   startControlsHelp();
-  openDeveloperNote(game);
+  if (SHOW_DEVELOPER_NOTE) openDeveloperNote(game);
 } catch (error) { loading.error(error); }
