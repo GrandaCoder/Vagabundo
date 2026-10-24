@@ -42,8 +42,8 @@ test('las ruedas, luces nocturnas y frenado tienen estado independiente sin luce
   assert.notEqual(state.wheelAngle.value,0);assert.equal(state.braking.value,1);assert.equal(state.night.value,1);
   assert.equal(other.wheelAngle.value,0);assert.equal(other.braking.value,0);assert.equal(other.night.value,0);
   let lights=0;a.group.traverse(o=>{if(o.isLight)lights++;});assert.equal(lights,0);
-  const shader={uniforms:{},vertexShader:'#include <common>\n#include <beginnormal_vertex>\n#include <begin_vertex>',fragmentShader:'#include <common>\n#include <color_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <emissivemap_fragment>'};
-  a.material.onBeforeCompile(shader);assert.match(shader.vertexShader,/slopRotate/);assert.match(shader.fragmentShader,/plateUV/);assert.ok(!shader.fragmentShader.includes('--'));assert.match(shader.fragmentShader,/-slopWheel/);assert.equal(shader.uniforms.slopBrake,state.braking);
+  assert.equal(a.material.isMeshStandardNodeMaterial,true);assert.ok(a.material.positionNode);assert.ok(a.material.colorNode);assert.ok(a.material.emissiveNode);
+  assert.equal(a.material.userData.carState.value.x,1);
   a.dispose();b.dispose();
 });
 

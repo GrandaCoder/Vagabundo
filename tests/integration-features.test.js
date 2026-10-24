@@ -34,7 +34,7 @@ test('los perfiles respetan su límite de resolución incluso después de la ada
     for (let i = 0; i < 4000; i++) renderer.adaptResolution(10);
     assert.ok(renderer.instance.ratio <= cap);
     assert.equal(renderer.instance.shadowMap.enabled, quality !== 'baja');
-    assert.equal(localStorage.getItem('bazuko.graphics_quality'), quality);
+    assert.equal(localStorage.getItem('bazuko.webgpu.graphics_quality'), quality);
   }
 });
 

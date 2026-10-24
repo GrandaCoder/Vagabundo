@@ -1,4 +1,5 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
+import { createWebGPURenderer,initializeWebGPU,WEBGPU_QUALITY_KEY } from './WebGPU.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { PlayerSilhouette } from './PlayerSilhouette.js';
 import { AdaptiveResolution } from './AdaptiveResolution.js';
@@ -8,7 +9,7 @@ import { GRAPHICS_PROFILES, effectiveQuality } from './GraphicsQuality.js';
 
 export class Renderer {
   constructor(canvas) {
-    this.instance = new THREE.WebGLRenderer({
+    this.instance = createWebGPURenderer({
       canvas,
       antialias: true,
       powerPreference: 'high-performance'
@@ -39,7 +40,7 @@ export class Renderer {
     this.instance.setPixelRatio(this.resolution.ratio);
     this.instance.shadowMap.enabled = this.effectiveQuality !== 'baja';
     this.instance.shadowMap.needsUpdate = true;
-    try { localStorage.setItem('bazuko.graphics_quality', this.quality); } catch { /* sin almacenamiento */ }
+    try { localStorage.setItem(WEBGPU_QUALITY_KEY, this.quality); } catch { /* sin almacenamiento */ }
   }
 
   get effectiveQuality() { return effectiveQuality(this.quality ?? 'alta', this.resolution?.pressure ?? 0); }
@@ -47,7 +48,9 @@ export class Renderer {
   /** Mapa de entorno neutro: da reflejos (charcos, vidrios) y luz rebotada a los materiales PBR */
   createEnvironment() {
     const pmrem = new THREE.PMREMGenerator(this.instance);
-    const tex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    const room=new RoomEnvironment();
+    const target=pmrem.fromScene(room, 0.04);
+    const tex=target.texture;this.environment=target;room.dispose();
     pmrem.dispose();
     return tex;
   }
@@ -78,23 +81,19 @@ export class Renderer {
     finally { models.children = []; }
   }
 
+  async initialize() {
+    return this._initialization ??= initializeWebGPU(this.instance).then(()=>{
+      this.instance.onDeviceLost=info=>this.onDeviceLost?.(info);
+      return this;
+    });
+  }
+
   async waitForGPU() {
-    const gl = this.instance.getContext();
-    if (gl.isContextLost()) throw new Error('Se perdió el contexto gráfico.');
-    const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-    if (!fence) throw new Error('No se pudo comprobar la preparación gráfica.');
-    gl.flush();
-    const deadline = performance.now() + 30000;
-    try {
-      while (true) {
-        const result = gl.clientWaitSync(fence, 0, 0);
-        if (result === gl.ALREADY_SIGNALED || result === gl.CONDITION_SATISFIED) return;
-        if (result === gl.WAIT_FAILED || gl.isContextLost() || performance.now() > deadline) {
-          throw new Error('No se pudo completar la preparación gráfica.');
-        }
-        await paintLoadingFrame();
-      }
-    } finally { gl.deleteSync(fence); }
+    await this.instance.backend.device.queue.onSubmittedWorkDone();
+  }
+
+  dispose() {
+    this.pipeline?.dispose();this.environment?.dispose();this.instance.dispose();
   }
 
   render(scene, camera, playerRoot = null, shadowLights = [], showSilhouette = true) {

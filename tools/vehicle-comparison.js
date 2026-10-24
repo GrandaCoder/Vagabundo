@@ -1,7 +1,8 @@
-import * as THREE from 'three';
+import {createWebGPURenderer,initializeWebGPU} from '/src/core/WebGPU.js';
+import * as THREE from 'three/webgpu';
 import {Car} from '/src/entities/Car.js';
 import {switchVehicleVisuals} from '/src/vehicles/switchVehicleVisuals.js';
-const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(1);renderer.shadowMap.enabled=true;renderer.toneMapping=THREE.ACESFilmicToneMapping;document.body.append(renderer.domElement);
+const renderer=createWebGPURenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(1);renderer.shadowMap.enabled=true;renderer.toneMapping=THREE.ACESFilmicToneMapping;document.body.append(renderer.domElement);await initializeWebGPU(renderer);
 const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,150);
 const ambient=new THREE.HemisphereLight('#c9e6ff','#5b5144',2.4);scene.add(ambient);const sun=new THREE.DirectionalLight('#fff0d5',3.2);sun.position.set(8,15,4);sun.castShadow=true;scene.add(sun);
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({color:'#303338',roughness:.9}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);

@@ -69,7 +69,7 @@ export class Game {
     this.vehicleVisualMode = 'slop';
     this.renderer = new Renderer(canvas);
     this.sceneMgr = new SceneManager();
-    this.sceneMgr.scene.environment = this.renderer.createEnvironment();
+
     this.cameraRig = new CameraRig(this.sceneMgr.scene, canvas);
     this.clock = new Clock();
     this.input = new Input();
@@ -114,8 +114,8 @@ export class Game {
     this.menu = new Menu();
     this.minimap = new Minimap();
     this.weather = new WeatherSystem(this.sceneMgr.scene);
-    let quality = 'baja';
-    try { quality = localStorage.getItem('bazuko.graphics_quality') || quality; } catch { /* sin almacenamiento */ }
+    let quality = 'alta';
+    try { quality = localStorage.getItem('bazuko.webgpu.graphics_quality') || quality; } catch { /* sin almacenamiento */ }
     this.setGraphicsQuality(quality, false);
     this.hud.audioBtn?.setAttribute('aria-label', this.audio.isMuted() ? 'Activar sonido' : 'Silenciar sonido');
     if (this.hud.audioBtn) this.hud.audioBtn.textContent = this.audio.isMuted() ? '🔇' : '🔊';
@@ -177,6 +177,13 @@ export class Game {
   }
 
   async _initialize(loading) {
+    await loading.stage('Iniciando WebGPU…', .2);
+    await this.renderer.initialize();
+    this.renderer.onDeviceLost=()=>{
+      this._gpuLost=true;this._running=false;this._loading=true;this.audio.setPaused(true);
+      this.menu.open({title:'Se perdió la conexión con la GPU',sub:'Recarga para continuar. Tu guardado no se modificó.',render:()=>({body:el('p',{text:'El dispositivo gráfico dejó de responder.'}),foot:[button('Recargar',{onClick:()=>location.reload()})]})});
+    };
+    this.sceneMgr.scene.environment=this.renderer.createEnvironment();
     await loading.stage('Construyendo la ciudad…', 1);
     this.world.loadDistrict('Bogota', this.collisions);
     this._spawnEntities();
@@ -520,6 +527,7 @@ export class Game {
   }
 
   _save() {
+    if(this._gpuLost)return;
     this.save.save({
       stats: this.stats.serialize(),
       clock: this.clock.serialize(),

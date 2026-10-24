@@ -29,3 +29,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+The vehicle TSL material graph in src/vehicles/SlopMaterial.js is also adapted from js/actor-models.js at the revision above. Foreign liveries were removed, local plate and TAXI labels were added, and wheel/braking/night state was connected to BAZUKO entities.

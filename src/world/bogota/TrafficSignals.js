@@ -1,4 +1,5 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
+import {uniform,texture,uv,color,attribute,step,max,min,float,mix} from 'three/tsl';
 import { createImportedModel } from '../../utils/ImportedModels.js';
 import { CARACAS } from './StreetLayout.js';
 import { CITY_CARRERAS as CARRERAS, CITY_CALLES as CALLES } from './CityLayout.js';
@@ -8,33 +9,16 @@ const SEM_HEIGHT = 4.3;
 
 /** Ilumina las zonas de lente pintadas en el GLB, sobre su geometría real. */
 export function createSignalMaterial(source, states) {
-  const material = source.clone();
-  material.metalnessMap = null; material.roughnessMap = null; material.normalMap = null;
-  material.metalness = .1; material.roughness = .8;
-  material.customProgramCacheKey = () => 'traffic-lenses-v1';
-  material.onBeforeCompile = shader => {
-    shader.uniforms.trafficStates = states;
-    shader.vertexShader = 'attribute float trafficAxis;\nvarying float vTrafficAxis;\n' + shader.vertexShader;
-    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', 'vTrafficAxis = trafficAxis;\n#include <begin_vertex>');
-    shader.fragmentShader = 'uniform vec2 trafficStates;\nvarying float vTrafficAxis;\n' + shader.fragmentShader;
-    shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
-      #include <map_fragment>
-      vec3 trafficLensColor = diffuseColor.rgb;
-      float tr = trafficLensColor.r, tg = trafficLensColor.g, tb = trafficLensColor.b;
-      float redLens = step(0.12, tr) * step(tg * 1.8, tr) * step(tb * 1.8, tr);
-      float greenLens = step(0.12, tg) * step(tr * 1.8, tg) * step(tb * 1.8, tg);
-      float amberLens = step(0.12, tr) * step(0.12, tg) * step(tb * 2.0, tg)
-        * step(tr * 0.4, tg) * step(tg * 0.65, tr) * (1.0 - redLens) * (1.0 - greenLens);
-      float trafficState = vTrafficAxis < 0.5 ? trafficStates.x : trafficStates.y;
-      float trafficLensOn = trafficState < 0.5 ? greenLens : trafficState < 1.5 ? amberLens : redLens;
-      float trafficLensMask = min(1.0, redLens + amberLens + greenLens);
-      diffuseColor.rgb *= 1.0 - 0.94 * trafficLensMask * (1.0 - trafficLensOn);
-    `);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <emissivemap_fragment>', `
-      #include <emissivemap_fragment>
-      totalEmissiveRadiance += trafficLensColor * trafficLensOn * 1.2;
-    `);
-  };
+  const material=new THREE.MeshStandardNodeMaterial({map:source.map,color:source.color,roughness:.8,metalness:.1});
+  const c=source.map?texture(source.map,uv()).rgb.mul(color(source.color)):color(source.color);
+  const red=step(.12,c.r).mul(step(c.g.mul(1.8),c.r)).mul(step(c.b.mul(1.8),c.r));
+  const green=step(.12,c.g).mul(step(c.r.mul(1.8),c.g)).mul(step(c.b.mul(1.8),c.g));
+  const amber=step(.12,c.r).mul(step(.12,c.g)).mul(step(c.b.mul(2),c.g)).mul(step(c.r.mul(.4),c.g)).mul(step(c.g.mul(.65),c.r)).mul(float(1).sub(red)).mul(float(1).sub(green));
+  const state=uniform(states.value),axis=attribute('trafficAxis','float');
+  const selected=mix(state.x,state.y,step(.5,axis));
+  const on=mix(mix(green,amber,step(.5,selected)),red,step(1.5,selected));
+  material.colorNode=c.mul(float(1).sub(min(1,red.add(green).add(amber)).mul(float(1).sub(on)).mul(.94)));
+  material.emissiveNode=c.mul(on).mul(1.2);material.userData.trafficStates=state;
   return material;
 }
 
