@@ -43,3 +43,23 @@ test('openPauseMenu abre el menú con controles de audio, estado y opciones ráp
   assert.ok(rendered.foot);
   assert.equal(rendered.foot.length, 1);
 });
+
+test('el selector temporal se bloquea al preparar y conserva la elección si falla',async()=>{
+  let config,resolve,reject;const pending=new Promise((yes,no)=>{resolve=yes;reject=no;});
+  const originalCreate=document.createElement;
+  document.createElement=tag=>{const node=originalCreate(tag);node.listeners={};node.addEventListener=(name,fn)=>{node.listeners[name]=fn;};return node;};
+  const game={stats:{},clock:{hour:12,day:1},vehicleVisualMode:'slop',setVehicleVisualMode:()=>pending,menu:{open(c){config=c;}}};
+  openPauseMenu(game);const {body}=config.render();
+  const find=node=>node.attributes?.['aria-label']==='Vehículos'?node:(node.children??[]).filter(n=>typeof n==='object').map(find).find(Boolean);
+  const select=find(body);assert.ok(select);select.value='actual';
+  const originalError=console.error;console.error=()=>{};
+  try{const change=select.listeners.change();assert.equal(select.disabled,true);reject(new Error('fallo de carga'));await change;assert.equal(select.disabled,false);assert.equal(select.value,'slop');}finally{console.error=originalError;}
+});
+
+test('reabrir pausa durante una preparación recupera el selector al terminar',async()=>{
+  let config,resolve;const pending=new Promise(yes=>resolve=yes);
+  const game={stats:{},clock:{hour:12,day:1},vehicleVisualMode:'slop',vehicleVisualChanging:true,_vehicleVisualChange:pending,setVehicleVisualMode(){},menu:{open(c){config=c;}}};
+  openPauseMenu(game);const {body}=config.render();
+  const find=node=>node.attributes?.['aria-label']==='Vehículos'?node:(node.children??[]).filter(n=>typeof n==='object').map(find).find(Boolean);
+  const select=find(body);assert.equal(select.attributes.disabled,'');game.vehicleVisualMode='actual';resolve();await pending;await Promise.resolve();await Promise.resolve();assert.equal(select.disabled,false);assert.equal(select.value,'actual');
+});

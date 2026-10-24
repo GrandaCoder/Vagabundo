@@ -104,3 +104,7 @@ LoadingArtwork.js administra parejas numeradas según loading-artwork.json. Las 
 ## Variedad urbana
 
 UrbanBuildings.js planifica sustituciones deterministas sobre tiles building exclusivamente. Conservar el mismo plan al construir las fachadas y las colisiones. Las huellas se incorporan a covered antes de generar casas y relleno; en _buildCollisions se excluyen esos tiles de las cajas genéricas de 8 metros y se añade una caja de altura real por solar. No cambiar el mapa ni ocupar ruinas, calles, parques, edificios especiales o reservas del viaducto. Los cinco diseños usan createBuildingShell y BuildingVisibility, con fachadas repetibles compartidas y sin luces nuevas. Las torres de 30 pisos miden 96 metros, menos que Colpatria.
+
+## Vehículos experimentales
+
+En `pruebas-slop-newyork`, `src/vehicles/` contiene geometría adaptada de Slop New York y materiales WebGL para Three.js 0.186.1. `Car.setVisualMode('actual'|'slop')` cambia solo la representación de forma asíncrona. Conservar los retrovisores de la entidad, la liberación de candidatos y el banco compartido. El selector de pausa es temporal y de sesión. Ver `docs/adaptacion-slop-newyork.md`, `THIRD_PARTY_NOTICES.md` y el comparador de desarrollo `/tools/vehicle-comparison.html`.

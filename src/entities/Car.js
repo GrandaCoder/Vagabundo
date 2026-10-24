@@ -2,14 +2,17 @@
 import * as THREE from 'three';
 import { COLORS, CAR_COOLDOWN } from '../utils/constants.js';
 import { makeVehicle } from '../world/bogota/vehicles.js';
-import { createImportedModel, disposeImportedInstance } from '../utils/ImportedModels.js';
+import { createVehicleVisual } from '../vehicles/VehicleVisuals.js';
 
 export class Car {
-  constructor(scene, position, rotation = 0, { traffic = false } = {}) {
+  constructor(scene, position, rotation = 0, { traffic = false, visualMode = 'slop', visualFactory = createVehicleVisual } = {}) {
     this.scene = scene;
     this.used = false;
     this.cooldown = 0;
     this.traffic = traffic;
+    this.visualMode = visualMode;
+    this._visualFactory = visualFactory;
+    this._visualToken = 0;
 
     this.group = new THREE.Group();
     this.group.position.copy(position);
@@ -19,7 +22,8 @@ export class Car {
     // Carro realista (portado de rebusque): particular o taxi amarillo, frente hacia +X local
     const kind = Math.random() < 0.3 ? 'taxi' : 'carro';
     this.modelKind = kind === 'taxi' ? 'car2' : 'car1';
-    const v = makeVehicle(kind, Math.floor(Math.random() * 8), { beams: false });
+    this.visualSeed = Math.floor(Math.random() * 8);
+    const v = makeVehicle(kind, this.visualSeed, { beams: false });
     this.vehicle = v;
     this.length = v.length;
     this.width = v.width;
@@ -60,15 +64,40 @@ export class Car {
   get position() { return this.group.position; }
 
   preloadModel() {
-    return this._modelPromise ??= createImportedModel(this.modelKind).then(model => {
-      if (this._disposed) { disposeImportedInstance(model); return; }
-      this.group.remove(this.vehicle.group);
-      this.vehicle.dispose();
-      this.importedModel = model;
-      this.group.add(model);
-      // Las ruedas del GLB están integradas en una sola malla texturizada.
-      this.vehicle = { group: model, wheels: [], tailMat: null, dispose() { disposeImportedInstance(model); } };
-    });
+    return this._modelPromise ??= this.setVisualMode(this.visualMode);
+  }
+
+  async prepareVisualMode(mode) {
+    if(!['actual','slop'].includes(mode))throw new Error('Representación de vehículo no válida');
+    if(this._disposed)return {commit:()=>false,release(){}};
+    const token=++this._visualToken;
+    if(this.vehicle.mode===mode)return {commit:()=>true,release(){}};
+    const next=await this._visualFactory(mode,{variant:this.modelKind==='car2'?'taxi':'sedan',seed:this.visualSeed,length:this.length,width:this.width});
+    next.mode=mode;
+    let settled=false;
+    const release=()=>{if(!settled){settled=true;next.dispose();}};
+    return {release,commit:()=>{
+      if(settled)return false;
+      if(this._disposed||token!==this._visualToken){release();return false;}
+      next.setNight?.(this._night);
+      next.updateMotion?.(this._travelled??0,this._braking??false);
+      this.group.add(next.group);
+      const previous=this.vehicle;
+      this.vehicle=next;this.visualMode=mode;
+      this.importedModel=mode==='actual'?next.group:undefined;
+      this.group.remove(previous.group);previous.dispose();
+      settled=true;return true;
+    }};
+  }
+
+  async setVisualMode(mode) {
+    const prepared=await this.prepareVisualMode(mode);
+    return prepared.commit();
+  }
+
+  setNight(night) {
+    if(this._night===!!night)return;
+    this._night=!!night;this.vehicle.setNight?.(this._night);
   }
 
   /**
@@ -110,15 +139,19 @@ export class Car {
   }
 
   animateDrive(distance, braking) {
+    this._travelled=(this._travelled??0)+distance;
+    this.vehicle.updateMotion?.(distance,braking);
+    const wasBraking=this._braking; this._braking=braking;
     for (const wheel of this.vehicle.wheels) wheel.rotation.z -= distance / 0.33;
-    if (this.vehicle.tailMat && braking !== this._braking) {
+    if (this.vehicle.tailMat && braking !== wasBraking) {
       this.vehicle.tailMat.color.set('#ff1a12').multiplyScalar(braking ? 3 : 1.4);
-      this._braking = braking;
     }
   }
 
   dispose() {
+    if(this._disposed)return;
     this._disposed = true;
+    this._visualToken++;
     this.scene.remove(this.group);
     this.group.remove(this.vehicle.group);
     this.vehicle.dispose();

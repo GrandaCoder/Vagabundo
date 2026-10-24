@@ -1,3 +1,4 @@
+import { switchVehicleVisuals } from '../vehicles/switchVehicleVisuals.js';
 // src/core/Game.js
 import * as THREE from 'three';
 import { Renderer } from './Renderer.js';
@@ -65,6 +66,7 @@ import {
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
+    this.vehicleVisualMode = 'slop';
     this.renderer = new Renderer(canvas);
     this.sceneMgr = new SceneManager();
     this.sceneMgr.scene.environment = this.renderer.createEnvironment();
@@ -848,6 +850,8 @@ export class Game {
 
   _renderFrame(now, active) {
     const quality = this.renderer.effectiveQuality;
+    for(const car of this.cars??[])car.setNight?.(this.clock.isNight);
+    for(const vehicle of this.traffic?.vehicles??[])vehicle.car.setNight?.(this.clock.isNight);
     if (this._effectiveQuality !== quality) {
       this._effectiveQuality = quality;
       this.sceneMgr.setQuality(quality);
@@ -889,6 +893,18 @@ export class Game {
     }
     if (this._dogPOI) Object.assign(this._dogPOI, { x: this.dog.position.x, z: this.dog.position.z });
     return this._poiCache;
+  }
+
+  setVehicleVisualMode(mode) {
+    if(this.vehicleVisualChanging)return this._vehicleVisualChange;
+    this.vehicleVisualChanging=true;
+    this._vehicleVisualChange=(async()=>{try {
+      const cars=[...new Set([...(this.cars??[]),...(this.traffic?.vehicles??[]).map(v=>v.car)])];
+      await switchVehicleVisuals(cars,mode);
+      this.vehicleVisualMode=mode;
+      return true;
+    } finally {this.vehicleVisualChanging=false;}})();
+    return this._vehicleVisualChange;
   }
 
   setGraphicsQuality(level, notify = true) {

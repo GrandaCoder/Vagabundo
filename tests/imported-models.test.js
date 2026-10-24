@@ -71,7 +71,7 @@ test('carros comparten el GLB, conservan rumbo y robo, y eliminar uno conserva e
   const scene = new THREE.Scene();
   const cars = [new Car(scene, new THREE.Vector3(5, .1, 6), .7), new Car(scene, new THREE.Vector3(12, 0, 6))];
   cars.forEach(car => { car.modelKind = 'car1'; });
-  await Promise.all(cars.map(car => car.preloadModel()));
+  await Promise.all(cars.map(car => car.setVisualMode('actual')));
   assert.equal(loads.get('car1.opt.glb'), 1);
   const first = cars[0].importedModel.children[0].children[0].children[0];
   const second = cars[1].importedModel.children[0].children[0].children[0];
