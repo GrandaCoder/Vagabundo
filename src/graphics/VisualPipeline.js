@@ -7,11 +7,13 @@ export class VisualPipeline {
   constructor(renderer,scene,camera,quality,overlay){
     this.renderer=renderer;this.scenePass=pass(scene,camera);this.quality=quality;
     let reflections=vec4(0);
-    if(quality==='alta'){
+    {
       const fade=smoothstep(220,100,positionView.z.negate());
       const targets=mrt({output,normal:normalView,metalRough:vec2(roughness.lessThan(.75).select(metalness.mul(fade),0),roughness)});
       targets.setBlendMode('normal',new THREE.BlendMode(THREE.MaterialBlending));targets.setBlendMode('metalRough',new THREE.BlendMode(THREE.MaterialBlending));
       this.scenePass.setMRT(targets);
+    }
+    if(quality==='alta'){
       const properties=this.scenePass.getTextureNode('metalRough');
       this.ssr=ssr(this.scenePass.getTextureNode('output'),this.scenePass.getTextureNode('depth'),this.scenePass.getTextureNode('normal'),{metalnessNode:properties.r,roughnessNode:properties.g,camera});
       this.ssr.resolutionScale=.5;this.ssr.blurQuality=1;this.ssr.maxDistance.value=24;this.ssr.thickness.value=.4;this.ssr.quality.value=.25;this.ssr.binaryRefine=true;this.ssr.intensity.value=.45;this.ssr.screenEdgeFadeBlack=true;

@@ -270,6 +270,7 @@ export class Game {
     } finally { if (rain) rain.visible = this.weather.isRaining; }
     await loading.stage('Preparando el primer fotograma…', 4.8);
     const warmupStarted=performance.now();
+    await this.renderer.warmup?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root);
     // Estas pasadas preparan sombras, geometría y silueta sin simular ni medir FPS.
     for (let frame = 0; frame < 3; frame++) {
       this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
@@ -866,7 +867,7 @@ export class Game {
 
   getPerformanceReport() {
     return {
-      cpu: this.profiler.report(), frames: this.performanceHUD.metrics.recentStats(),
+      diagnostics:this.renderer.diagnostics?.events, cpu: this.profiler.report(), frames: this.performanceHUD.metrics.recentStats(),
       graphics: { selected: this.renderer.quality, effective: this.renderer.effectiveQuality,
         pixelRatio: this.renderer.instance.getPixelRatio(), ...this.renderer.instance.info.render }
     };

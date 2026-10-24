@@ -24,9 +24,17 @@ export function collectShaderWarmupJobs(roots){
     const attributes=Object.entries(geometry.attributes).sort(([a],[b])=>a.localeCompare(b)).map(([key,a])=>`${key}:${a.itemSize}:${a.normalized}:${!!a.isInstancedBufferAttribute}:${a.array.constructor.name}`).join('|');
     const morphs=Object.entries(geometry.morphAttributes).map(([name,list])=>`${name}:${list.length}`).join('|');
     const key=materials.map(materialShaderKey).join(';')+attributes+`:${!!object.isSkinnedMesh}:${object.skeleton?.bones.length??0}:${!!object.isInstancedMesh}:${object.instanceMatrix?.isStorageInstancedBufferAttribute??false}:${!!object.receiveShadow}:${morphs}:${geometry.index?.array.constructor.name}`;
-    if(!jobs.has(key))jobs.set(key,object);
+    if(!jobs.has(key))jobs.set(key,[]);
+    if(!jobs.get(key).includes(object))jobs.get(key).push(object);
   });
   return {jobs:[...jobs.values()],objects};
+}
+
+/** Slop compiles every binding in a family, not only its first object. */
+export async function withoutFrustumCulling(roots, run) {
+  const saved=new Map();
+  for(const root of roots)root.traverse(o=>{if(!saved.has(o)){saved.set(o,o.frustumCulled);o.frustumCulled=false;}});
+  try{return await run();}finally{for(const [o,value] of saved)o.frustumCulled=value;}
 }
 export async function compileShaderJobs(jobs,compile,{concurrency=4,onProgress=()=>{},yieldTask=()=>new Promise(resolve=>setTimeout(resolve,0))}={}){
   let next=0,done=0,failure;
