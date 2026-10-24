@@ -30,8 +30,10 @@ export class PerformanceHUD {
       `Últimos ${recent.frames} cuadros · p95 ${recent.p95.toFixed(1)} ms · p99 ${recent.p99.toFixed(1)} ms`,
       `1% bajos ${recent.low1Percent.toFixed(1)} FPS · Tirones >100 ms ${recent.over100ms}`,
       `X ${position.x.toFixed(2)}  Y ${position.y.toFixed(2)}  Z ${position.z.toFixed(2)}`,
-      `Dibujo ${info.calls} · Triángulos ${info.triangles.toLocaleString('es')}`,
-      `Resolución ${renderer.instance.getPixelRatio().toFixed(2)}×`,
+      `Dibujo ${info.drawCalls??info.calls} · Triángulos ${info.triangles.toLocaleString('es')}`,
+      `Resolución ${renderer.instance.getPixelRatio().toFixed(2)}× · WebGPU`,
+      ...(renderer.startupStats?.totalMs!==undefined?[`Carga ${(renderer.startupStats.totalMs/1000).toFixed(2)} s · ${renderer.startupStats.shaderFamilies??0} familias TSL`]:[]),
+      ...(renderer.instance.info.memory?.total?[`Memoria GPU registrada ${(renderer.instance.info.memory.total/1048576).toFixed(1)} MiB · texturas ${((renderer.instance.info.memory.texturesSize??0)/1048576).toFixed(1)} MiB`]:[]),
       ...(renderer.effectiveQuality ? [`Calidad efectiva ${renderer.effectiveQuality}`] : []),
       ...(renderer.culling ? [`Grupos en cámara ${renderer.culling.stats.visible}/${renderer.culling.stats.total} · Descartados ${renderer.culling.stats.culled}`] : []),
       ...(lighting ? [`Luces dinámicas ${lighting.pool.length} · Halos ${lighting.halos.mesh.count}`] : [])

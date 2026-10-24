@@ -1,3 +1,8 @@
+import {prepareSceneTextures} from './TextureBudget.js';
+import {collectShaderWarmupJobs,compileShaderJobs} from './ShaderWarmup.js';
+import {syncVehicleBatches,disposeVehicleBatches} from '../vehicles/VehicleBatches.js';
+import {ClusteredLighting} from 'three/addons/lighting/ClusteredLighting.js';
+import {VisualPipeline} from '../graphics/VisualPipeline.js';
 import * as THREE from 'three/webgpu';
 import { createWebGPURenderer,initializeWebGPU,WEBGPU_QUALITY_KEY } from './WebGPU.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -29,18 +34,18 @@ export class Renderer {
     // El contador incluye las tres pasadas, no solo la última del personaje.
     this.instance.info.autoReset = false;
 
-    window.addEventListener('resize', () => this._onResize());
-    document.addEventListener('visibilitychange', () => this.resolution.resetWindow());
+    this._resizeListener=()=>this._onResize();this._visibilityListener=()=>this.resolution.resetWindow();
+    window.addEventListener('resize',this._resizeListener);document.addEventListener('visibilitychange',this._visibilityListener);
   }
 
-  setQuality(level = 'alta') {
+  setQuality(level = 'alta', persist = true) {
     this.quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta';
     const limit = GRAPHICS_PROFILES[this.quality].pixelRatio;
     this.resolution.setLimit(Math.min(globalThis.window?.devicePixelRatio || 1, limit));
     this.instance.setPixelRatio(this.resolution.ratio);
     this.instance.shadowMap.enabled = this.effectiveQuality !== 'baja';
     this.instance.shadowMap.needsUpdate = true;
-    try { localStorage.setItem(WEBGPU_QUALITY_KEY, this.quality); } catch { /* sin almacenamiento */ }
+    try { if(persist)localStorage.setItem(WEBGPU_QUALITY_KEY, this.quality); } catch { /* sin almacenamiento */ }
   }
 
   get effectiveQuality() { return effectiveQuality(this.quality ?? 'alta', this.resolution?.pressure ?? 0); }
@@ -60,30 +65,71 @@ export class Renderer {
   }
 
   async prepare(scene, camera, extraModels = []) {
-    const textures = new Set();
-    for (const root of [scene, ...extraModels]) root.traverse(object => {
-      for (const material of [object.material].flat().filter(Boolean)) {
-        for (const value of Object.values(material)) {
-          if (value?.isTexture && !value.isRenderTargetTexture) textures.add(value);
-        }
-      }
-    });
-    let uploaded = 0;
+    const started=performance.now();
+    console.info('[WebGPU] Preparando recursos');
+    syncVehicleBatches(scene,camera);
+    const budget=await prepareSceneTextures([scene,...extraModels]);
+    const textures=budget.textures;this.textureStats={unique:textures.size,resized:budget.resized,reused:budget.reused,prepareMs:performance.now()-started};
+    console.info('[WebGPU] Texturas únicas',this.textureStats);
+    let uploaded = 0, lastYield = performance.now();
     for (const texture of textures) {
       this.instance.initTexture(texture);
-      if (++uploaded % 8 === 0) await paintLoadingFrame();
+      uploaded++;
+      if (performance.now()-lastYield>32){this.onPrepareProgress?.(`Texturas WebGPU: ${uploaded}/${textures.size}`);await paintLoadingFrame();lastYield=performance.now();}
     }
-    await this.instance.compileAsync(scene, camera);
+    this.textureStats.uploadMs=performance.now()-started-this.textureStats.prepareMs;
+    if(this.instance.backend?.isWebGPUBackend)return this._compileWebGPU(scene,camera,extraModels);
+    let target,targets;
+    if(this.instance.backend?.isWebGPUBackend){
+      this._ensurePipeline(scene,camera);target=this.instance.getRenderTarget();targets=this.instance.getMRT();this.instance.setRenderTarget(this.pipeline.scenePass.renderTarget);this.instance.setMRT(this.pipeline.scenePass.getMRT());
+    }
+    try{await this.instance.compileAsync(scene, camera);
     // Referencias temporales: no cambia los padres ni el LOD visible de cada NPC.
     const models = new THREE.Group();
     models.children = extraModels;
     try { await this.instance.compileAsync(models, camera, scene); }
     finally { models.children = []; }
+    }finally{if(this.instance.backend?.isWebGPUBackend){this.instance.setRenderTarget(target);this.instance.setMRT(targets);}}
+  }
+
+  async _compileWebGPU(scene,camera,extraModels){
+    const started=performance.now();
+    this._ensurePipeline(scene,camera);
+    const visible=scene.visible;scene.visible=false;
+    try{this.pipeline.render(this.hour??22);}finally{scene.visible=visible;}
+    const renderer=this.instance,target=renderer.getRenderTarget(),targets=renderer.getMRT(),culled=[];
+    const {jobs,objects}=collectShaderWarmupJobs([scene,...extraModels]);
+    this.startupStats={shaderFamilies:jobs.length,renderObjects:objects,textures:this.textureStats};
+    console.info('[WebGPU] Familias gráficas',this.startupStats);
+    this.onPrepareProgress?.(`Shaders TSL: 0/${jobs.length} familias`);
+    renderer.setRenderTarget(this.pipeline.scenePass.renderTarget);renderer.setMRT(this.pipeline.scenePass.getMRT());
+    try{await compileShaderJobs(jobs,async object=>{
+      culled.push([object,object.frustumCulled]);object.frustumCulled=false;await renderer.compileAsync(object,camera,scene);
+    },{concurrency:4,onProgress:(done,total)=>this.onPrepareProgress?.(`Shaders TSL: ${done}/${total} familias`)});}
+    finally{for(const [object,value] of culled)object.frustumCulled=value;renderer.setRenderTarget(target);renderer.setMRT(targets);}
+    this.startupStats.compileMs=performance.now()-started;
+  }
+
+  prepareDynamic(root,scene,camera,decorate=()=>{}){
+    const prepare=async()=>{
+      if(this._disposed)return;
+      const budget=await prepareSceneTextures([root]);decorate(root);
+      for(const texture of budget.textures)this.instance.initTexture(texture);
+      this._ensurePipeline(scene,camera);
+      const target=this.instance.getRenderTarget(),targets=this.instance.getMRT();let pending;
+      try{
+        this.instance.setRenderTarget(this.pipeline.scenePass.renderTarget);this.instance.setMRT(this.pipeline.scenePass.getMRT());
+        pending=this.instance.compileAsync(root,camera,scene);
+      }finally{this.instance.setRenderTarget(target);this.instance.setMRT(targets);}
+      await pending;
+    };
+    const pending=(this._dynamicQueue??Promise.resolve()).then(prepare);this._dynamicQueue=pending.catch(()=>{});return pending;
   }
 
   async initialize() {
     return this._initialization ??= initializeWebGPU(this.instance).then(()=>{
       this.instance.onDeviceLost=info=>this.onDeviceLost?.(info);
+      this.instance.lighting=new ClusteredLighting(256,32,28,48);
       return this;
     });
   }
@@ -93,15 +139,32 @@ export class Renderer {
   }
 
   dispose() {
+    this._disposed=true;
+    window.removeEventListener('resize',this._resizeListener);document.removeEventListener('visibilitychange',this._visibilityListener);this.silhouette.material.dispose();
+    if(this._pipelineScene)disposeVehicleBatches(this._pipelineScene);
     this.pipeline?.dispose();this.environment?.dispose();this.instance.dispose();
   }
 
+  _ensurePipeline(scene,camera){
+    if(!this.pipeline||this.pipeline.quality!==this.effectiveQuality||this._pipelineScene!==scene||this._pipelineCamera!==camera){
+      this.pipeline?.dispose();this._pipelineScene=scene;this._pipelineCamera=camera;
+      this.pipeline=new VisualPipeline(this.instance,scene,camera,this.effectiveQuality,()=>{
+        if(this._overlayRoot&&this._overlayEnabled)this.silhouette.render(this.instance,scene,camera,this._overlayRoot,this.overlayLights);
+      });
+    }
+  }
+
   render(scene, camera, playerRoot = null, shadowLights = [], showSilhouette = true) {
+    syncVehicleBatches(scene,camera);
     this.instance.info.reset();
     this.culling.apply(camera, this.instance.shadowMap.enabled ? shadowLights : []);
     try {
-      this.instance.render(scene, camera);
-      if (playerRoot && showSilhouette && GRAPHICS_PROFILES[this.effectiveQuality].silhouette) {
+      if(this.instance.backend?.isWebGPUBackend){
+      this._ensurePipeline(scene,camera);
+      this._overlayRoot=playerRoot;this._overlayEnabled=showSilhouette&&GRAPHICS_PROFILES[this.effectiveQuality].silhouette;
+      this.pipeline.render(this.hour??22);
+      } else {this.instance.render(scene,camera);}
+      if (!this.pipeline && playerRoot && showSilhouette && GRAPHICS_PROFILES[this.effectiveQuality].silhouette) {
         this.silhouette.render(this.instance, scene, camera, playerRoot, this.overlayLights);
       }
     } finally {

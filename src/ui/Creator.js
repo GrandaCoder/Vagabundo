@@ -1,3 +1,4 @@
+import {prepareSceneTextures} from '../core/TextureBudget.js';
 import {createWebGPURenderer,initializeWebGPU} from '../core/WebGPU.js';
 // src/ui/Creator.js — portado de rebusque; la vista previa y las opciones son del personaje realista
 import * as THREE from 'three/webgpu';
@@ -75,7 +76,8 @@ export function createCreator({ audio }) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.02, 6, 48), new THREE.MeshBasicMaterial({ color: '#f6c400' }));
     ring.rotation.x = Math.PI / 2;
     scene.add(ring);
-    await createRealisticCharacter(look).then((c) => {
+    await createRealisticCharacter(look).then(async(c) => {
+      await prepareSceneTextures([c.group]);
       char = c;
       char.group.scale.setScalar(1);
       scene.add(char.group);

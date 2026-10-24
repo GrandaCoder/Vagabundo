@@ -232,3 +232,7 @@ La distribución es determinista. Sus colisiones llegan a la altura de cada edif
 ## Experimento de vehículos
 
 La rama `pruebas-slop-newyork` incorpora sedán y taxi procedurales adaptados a WebGL. En pausa, el selector **Vehículos: actuales / nuevos** permite compararlos en la misma partida. [Implementación, capturas y mediciones](docs/adaptacion-slop-newyork.md). Procedencia y licencia en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Migración WebGPU en la rama experimental
+
+`pruebas-slop-newyork` usa WebGPU y TSL, con iluminación agrupada, sombras en cascada y efectos escalonados por calidad. Conserva Bogotá y sus mecánicas. Requiere un equipo y navegador con WebGPU; no tiene respaldo WebGL. [Arquitectura, corrección de la carga y validación](docs/migracion-webgpu.md).

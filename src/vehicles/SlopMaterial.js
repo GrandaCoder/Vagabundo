@@ -116,8 +116,8 @@ function carPlateTexture() {
 export function createSlopMaterial(spec, fixedColorHex = null) {
 
 
-  const night=uniform(0);
-  const wheelAngle=uniform(0);
+  const night=fixedColorHex!==null?uniform(0):attribute('carNight','float');
+  const wheelAngle=fixedColorHex!==null?uniform(0):attribute('wheelAngle','float');
   const L = carLayout(spec);
   const cab = spec.cabin;
   const fixed = fixedColorHex !== null;
@@ -377,7 +377,7 @@ export function createSlopMaterial(spec, fixedColorHex = null) {
   const tail = color(0xff0a12).mul(redLens.mul(tailShade).mul(brake.mul(2.1).add(nightHeadlamp.mul(0.4))));
   const stop = color(0xff0a12).mul(chmsl.mul(brake).mul(2.1));
   const turn = color(0xff9a14).mul(max(turnFront, turnRear).mul(blink).mul(2.2));
-  const sign = color(0xffe28a).mul(signFace.mul(one.sub(signGlyph.mul(0.9))).mul(1.65));
+  const sign=signLabel.mul(signFace).mul(night.mul(.5).add(.15));
 
   const mat = new THREE.MeshStandardNodeMaterial();
   if (fixed) mat.userData.carState = stateUniform;
@@ -388,7 +388,8 @@ export function createSlopMaterial(spec, fixedColorHex = null) {
   const wheel=step(1.5,partId).mul(step(partId,3.5));
   const az=a.z.sub(step(0,a.z).mul(2).sub(1).mul(spec.wheelZ)),ay=a.y.sub(spec.wheelRadius);
   const rotated=vec3(a.x,ay.mul(cos(angle)).sub(az.mul(sin(angle))).add(spec.wheelRadius),ay.mul(sin(angle)).add(az.mul(cos(angle))).add(a.z.sub(az)));
-  mat.positionNode=mix(a,rotated,wheel);
+  // Las instancias ya transforman positionLocal; no sobrescribir esa transformación.
+  mat.positionNode=fixed?mix(a,rotated,wheel):null;
   mat.colorNode = col;
   mat.roughnessNode = rough;
   mat.metalnessNode = metal;

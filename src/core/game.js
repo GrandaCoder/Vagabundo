@@ -1,3 +1,4 @@
+import {SurfaceMaterials} from '../graphics/SurfaceMaterials.js';
 import { switchVehicleVisuals } from '../vehicles/switchVehicleVisuals.js';
 // src/core/Game.js
 import * as THREE from 'three';
@@ -66,6 +67,7 @@ import {
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
+    this.startupStarted=performance.now();
     this.vehicleVisualMode = 'slop';
     this.renderer = new Renderer(canvas);
     this.sceneMgr = new SceneManager();
@@ -110,6 +112,7 @@ export class Game {
     this.performanceHUD = new PerformanceHUD();
     this.profiler = new FrameProfiler();
     this.localLights = new LocalLights(this.sceneMgr.scene);
+    this.localLights.setQuality('alta');
     this.renderer.overlayLights = [this.sceneMgr.ambient, this.sceneMgr.sun, ...this.localLights.pool];
     this.menu = new Menu();
     this.minimap = new Minimap();
@@ -183,12 +186,18 @@ export class Game {
       this._gpuLost=true;this._running=false;this._loading=true;this.audio.setPaused(true);
       this.menu.open({title:'Se perdió la conexión con la GPU',sub:'Recarga para continuar. Tu guardado no se modificó.',render:()=>({body:el('p',{text:'El dispositivo gráfico dejó de responder.'}),foot:[button('Recargar',{onClick:()=>location.reload()})]})});
     };
+    globalThis.window?.addEventListener('bazuko-gpu-lost',this.renderer.onDeviceLost);
     this.sceneMgr.scene.environment=this.renderer.createEnvironment();
+    this.sceneMgr.initializeAtmosphere?.(this.renderer.instance);
     await loading.stage('Construyendo la ciudad…', 1);
     this.world.loadDistrict('Bogota', this.collisions);
     this._spawnEntities();
 
     const district = this.world.active;
+    for(const npc of district?.npcs??[])npc.prepareFull=async character=>{
+      if(this._loading)return;
+      await this.renderer.prepareDynamic(character.group,this.sceneMgr.scene,this.cameraRig.camera,root=>this.surfaceMaterials?.apply(root));
+    };
     this._loadIfSave();
     // Cada entrada comienza de noche y con lluvia, también al retomar un guardado.
     this.clock.hour = 22;
@@ -216,22 +225,21 @@ export class Game {
     await loading.stage('Cargando personajes y sonidos…', 2);
     let modelo = null;
     try { modelo = localStorage.getItem('bazuko.modelo'); } catch { /* sin almacenamiento */ }
-    await withLoadTimeout(Promise.all([
-      modelo !== 'procedural' ? this.player.setModel('realista') : Promise.resolve(),
-      loadInBatches(district?.npcs ?? [], npc => npc.preload(), (done, total) =>
-        loading.stage(`Cargando personajes… ${done}/${total}`, 2 + done / total)),
-      this.audio.ready
-    ]), 'La carga de personajes tardó demasiado.');
-
-    await loading.stage('Cargando carros, TransMilenio y cambuche…', 3.2);
+    // Recursos independientes en paralelo; cada lote limita su propia concurrencia.
+    const assetsStarted=performance.now();
     const importedEntities = [
       ...(this.cars ?? []),
       ...(this.traffic?.vehicles ?? []).map(vehicle => vehicle.car),
       ...(district?.busServices ?? [district?.busService]), this.cambuche, ...(this.pickups ?? [])
     ].filter(Boolean);
-    await withLoadTimeout(loadInBatches(importedEntities, entity => entity.preloadModel()), 'La carga de vehículos y refugio tardó demasiado.');
-    await loading.stage('Preparando estación, lámparas y semáforos…', 3.7);
-    await withLoadTimeout(district?.preloadDetails?.() ?? Promise.resolve(), 'La carga del mobiliario urbano tardó demasiado.');
+    await withLoadTimeout(Promise.all([
+      modelo !== 'procedural' ? this.player.setModel('realista') : Promise.resolve(),
+      loadInBatches(district?.npcs ?? [], npc => npc.preload({full:!npc.position||npc.position.distanceTo(this.player.position)<18})),
+      loadInBatches(importedEntities, entity => entity.preloadModel()),
+      district?.preloadDetails?.() ?? Promise.resolve(),
+      this.audio.ready
+    ]), 'La carga de recursos de la ciudad tardó demasiado.');
+    const assetsMs=performance.now()-assetsStarted;
     if (this.traffic) this.traffic.signals = district?.signals;
     this.traffic?.setBus?.(district?.busServices ?? district?.busService);
     if (this.cambuche) this.cambuche.group.position.y = district?.getGroundHeightUnder?.(this.cambuche.group)
@@ -248,20 +256,28 @@ export class Game {
     this.dealer?.setNight(this._wasNight);
     this.world.update(0, this.player.position, this.cameraRig.camera);
     this.localLights.update(0, this.player.position, (x, z) => district?.getGroundHeight?.(x, z) ?? 0, this.cameraRig.camera);
+    this.surfaceMaterials=new SurfaceMaterials();
+    const surfaceKinds=new Map(Object.entries(district?.groundMaterials??{}).map(([kind,material])=>[material,kind]));
+    this.surfaceMaterials.apply(this.sceneMgr.scene,surfaceKinds);
+    for(const npc of district?.npcs??[])for(const root of [npc.lodChar?.group,npc.fullChar?.group])if(root)this.surfaceMaterials.apply(root);
     await loading.stage('Preparando texturas, luces y shaders…', 4);
     const extraModels = (district?.npcs ?? []).flatMap(npc => [npc.lodChar?.group, npc.fullChar?.group]).filter(Boolean);
     const rain = this.weather?.rainParticles;
     if (rain) rain.visible = true;
+    this.renderer.onPrepareProgress=text=>{if(loading.status)loading.status.textContent=text;};
     try {
       await withLoadTimeout(this.renderer.prepare(this.sceneMgr.scene, this.cameraRig.camera, extraModels), 'La preparación gráfica tardó demasiado.');
     } finally { if (rain) rain.visible = this.weather.isRaining; }
     await loading.stage('Preparando el primer fotograma…', 4.8);
+    const warmupStarted=performance.now();
     // Estas pasadas preparan sombras, geometría y silueta sin simular ni medir FPS.
     for (let frame = 0; frame < 3; frame++) {
       this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
       await paintLoadingFrame();
     }
     await this.renderer.waitForGPU();
+    this.renderer.startupStats={...this.renderer.startupStats,assetsMs,warmupMs:performance.now()-warmupStarted,totalMs:performance.now()-(this.startupStarted??performance.now())};
+    console.info('[WebGPU] Carga completa '+JSON.stringify(this.renderer.startupStats));
     await loading.stage('Todo listo', 5);
     this.performanceHUD.metrics.reset();
     this.performanceHUD.nextPaint = 0;
@@ -299,7 +315,7 @@ export class Game {
     this.look = normalizeLook({ ...look, v: 2 });
     const ready = this.player.setLook(this.look);
     this.interaction.originId = this.look.origen;
-    return ready;
+    return Promise.resolve(ready).then(()=>this.surfaceMaterials?.apply(this.player.root));
   }
 
   /** Tecla M: alterna personaje realista / procedural (liviano) y lo recuerda */
@@ -858,6 +874,10 @@ export class Game {
 
   _renderFrame(now, active) {
     const quality = this.renderer.effectiveQuality;
+    this.renderer.hour=this.clock.hour;this.sceneMgr.wetness=this.weather?.wetness??0;
+    this.sceneMgr.atmosphere?.update(this.clock.hour,this.sceneMgr.wetness);
+    this.localLights.setQuality?.(quality);
+    if(this._overlayLightCount!==this.localLights.pool.length){this._overlayLightCount=this.localLights.pool.length;this.renderer.overlayLights=[this.sceneMgr.ambient,this.sceneMgr.sun,...this.localLights.pool,...(this.localLights.spotPool??[])];}
     for(const car of this.cars??[])car.setNight?.(this.clock.isNight);
     for(const vehicle of this.traffic?.vehicles??[])vehicle.car.setNight?.(this.clock.isNight);
     if (this._effectiveQuality !== quality) {

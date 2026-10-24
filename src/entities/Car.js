@@ -30,6 +30,13 @@ export class Car {
     v.group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.group.add(v.group);
 
+    // Faros físicos: el gestor global selecciona sus proxies según distancia y calidad.
+    this.headlights=[];
+    for(const side of [-1,1]){
+      const light=new THREE.SpotLight('#fff3d6',0,30,.2,.85,2);light.position.set(this.length/2-.03,.65,side*.6);light.target.position.set(12,-.35,side*.65);light.castShadow=false;
+      this.group.add(light,light.target);this.headlights.push(light);
+    }
+
     // Retrovisores (lo que se roba): a los lados, en la base del parabrisas
     const mirrorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.4 });
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fb4c4, roughness: 0.05, metalness: 0.8 });
@@ -72,7 +79,7 @@ export class Car {
     if(this._disposed)return {commit:()=>false,release(){}};
     const token=++this._visualToken;
     if(this.vehicle.mode===mode)return {commit:()=>true,release(){}};
-    const next=await this._visualFactory(mode,{variant:this.modelKind==='car2'?'taxi':'sedan',seed:this.visualSeed,length:this.length,width:this.width});
+    const next=await this._visualFactory(mode,{variant:this.modelKind==='car2'?'taxi':'sedan',seed:this.visualSeed,length:this.length,width:this.width,scene:this.scene,mirrors:this.mirrors});
     next.mode=mode;
     let settled=false;
     const release=()=>{if(!settled){settled=true;next.dispose();}};
@@ -85,7 +92,7 @@ export class Car {
       const previous=this.vehicle;
       this.vehicle=next;this.visualMode=mode;
       this.importedModel=mode==='actual'?next.group:undefined;
-      this.group.remove(previous.group);previous.dispose();
+      this.group.remove(previous.group);previous.dispose();next.activate?.();
       settled=true;return true;
     }};
   }
@@ -98,6 +105,7 @@ export class Car {
   setNight(night) {
     if(this._night===!!night)return;
     this._night=!!night;this.vehicle.setNight?.(this._night);
+    for(const light of this.headlights)light.intensity=this._night?650:0;
   }
 
   /**
@@ -153,6 +161,7 @@ export class Car {
     this._disposed = true;
     this._visualToken++;
     this.scene.remove(this.group);
+    for(const light of this.headlights)light.dispose();
     this.group.remove(this.vehicle.group);
     this.vehicle.dispose();
     const geometries = new Set(), materials = new Set();

@@ -108,3 +108,7 @@ UrbanBuildings.js planifica sustituciones deterministas sobre tiles building exc
 ## Vehículos experimentales
 
 En `pruebas-slop-newyork`, `src/vehicles/` contiene geometría adaptada de Slop New York y materiales WebGL para Three.js 0.186.1. `Car.setVisualMode('actual'|'slop')` cambia solo la representación de forma asíncrona. Conservar los retrovisores de la entidad, la liberación de candidatos y el banco compartido. El selector de pausa es temporal y de sesión. Ver `docs/adaptacion-slop-newyork.md`, `THIRD_PARTY_NOTICES.md` y el comparador de desarrollo `/tools/vehicle-comparison.html`.
+
+## Preparación gráfica WebGPU
+
+En la rama experimental WebGPU la calidad inicial es alta y su preferencia usa `bazuko.webgpu.graphics_quality`. Consultar `docs/migracion-webgpu.md`. Compartir los grafos TSL por familia: no crear un grafo nuevo por cada material de una pared ni usar UUID como identidad de programa en la preparación. La opacidad individual debe seguir funcionando. `ShaderWarmup` distingue características gráficas y mantiene concurrencia limitada; sus pruebas incluyen 6.000 paredes equivalentes. `TextureBudget` comparte recursos externos compatibles y limita su resolución de uso sin modificar originales. El arranque solo exige modelos completos de NPC cercanos; preparar el detalle lejano antes de mostrarlo.
