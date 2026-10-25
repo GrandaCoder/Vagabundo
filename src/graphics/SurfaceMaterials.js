@@ -19,6 +19,8 @@ export class SurfaceMaterials {
     if(this.cache.has(source))return this.cache.get(source);
     if(source.userData.proceduralFacade)kind='facade';
     const material=new THREE.MeshStandardNodeMaterial();material.copy(source);
+    // NodeMaterial.copy does not transfer the alpha-test threshold from classic materials.
+    material.alphaTest=source.alphaTest;
     if(source.userData.visibilityFade){material.alphaHash=true;material.transparent=false;material.depthWrite=true;material.userData.ditherFade=true;source.userData.ditherFade=true;}
     // Preserve live references used by weather, night windows and cutaway walls.
     material.color=source.color;material.emissive=source.emissive;

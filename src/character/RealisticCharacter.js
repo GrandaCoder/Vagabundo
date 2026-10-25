@@ -102,6 +102,8 @@ function setupMaterial(mesh, kind) {
   mesh.frustumCulled = false; // las mallas con skin se recortan mal al animar
   if (kind === 'pelo' || HAIR_LIKE.test(name)) {
     m.transparent = false;
+    // Imported BLEND hair disables depth writes. Once cut out, it must occlude the scalp.
+    m.depthWrite = true;
     m.alphaTest = 0.08;
     m.side = THREE.DoubleSide;
   } else if (SOFT_ALPHA.test(name)) {
