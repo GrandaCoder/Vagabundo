@@ -1,4 +1,5 @@
 import {createDrivingVisual} from '../vehicles/DrivingVisual.js';
+import {vehicleBatches} from '../vehicles/VehicleBatches.js';
 // src/entities/Car.js
 import * as THREE from 'three';
 import { COLORS, CAR_COOLDOWN } from '../utils/constants.js';
@@ -69,6 +70,8 @@ export class Car {
     this.marker.position.y = 0.05;
     this.marker.visible = !traffic;
     this.group.add(this.marker);
+    // Los estacionados dibujan su aro en el lote del banco de vehículos, como el tráfico su carrocería.
+    if (!traffic && scene.isScene) this._releaseMarker = vehicleBatches(scene).addMarker(this.marker);
   }
 
   get position() { return this.group.position; }
@@ -200,6 +203,7 @@ export class Car {
   dispose() {
     if(this._disposed)return;
     this._disposed = true;
+    this._releaseMarker?.();
     this.drivingVisual?.dispose();
     this._visualToken++;
     this.scene.remove(this.group);

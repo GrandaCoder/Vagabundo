@@ -27,6 +27,17 @@ export class VehicleBatches {
     const type=this.type(variant,mesh.geometry),entry={visual,mesh,type};this.entries.add(entry);mesh.visible=false;
     return ()=>{this.entries.delete(entry);};
   }
+  // Aro de robo de cada estacionado: su `visible` sigue siendo el estado del juego (robo,
+  // enfriamiento, conducción); ninguna cámara lo dibuja suelto, el banco lo dibuja en un lote.
+  addMarker(marker){
+    (this.markers??=new Set()).add(marker);marker.layers.disableAll();
+    return ()=>{this.markers?.delete(marker);marker.layers.enable(0);};
+  }
+  ensureMarkers(source){
+    if(this.markerMesh)return this.markerMesh;
+    const mesh=new THREE.InstancedMesh(source.geometry.clone(),source.material.clone(),CAPACITY);mesh.count=0;mesh.name='Marcas de robo agrupadas';mesh.frustumCulled=false;mesh.renderOrder=source.renderOrder;
+    mesh.instanceMatrix=new THREE.StorageInstancedBufferAttribute(mesh.instanceMatrix.array,16);mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);this.root.add(mesh);return this.markerMesh=mesh;
+  }
   ensureMirrors(visual){
     const source=visual.mirrorGroups?.[0];if(!source||this.mirrors)return;
     this.mirrors=source.children.filter(m=>m.isMesh).map(source=>{
@@ -35,7 +46,7 @@ export class VehicleBatches {
   }
   sync(camera){
     for(const type of this.types.values()){type.near.count=0;type.far.count=0;for(const wheel of type.wheels)wheel.mesh.count=0;}
-    camera?.getWorldPosition(this.position);
+    camera?.getWorldPosition(this.position);this._p??=new THREE.Vector3();
     for(const mesh of this.mirrors??[])mesh.count=0;
     for(const {visual,mesh,type} of this.entries){
       if(!visual.group.parent||visual.suspended)continue;let visible=true;for(let p=visual.group;p;p=p.parent)if(!p.visible){visible=false;break;}if(!visible)continue;
@@ -55,10 +66,19 @@ export class VehicleBatches {
       const g=target.geometry.attributes,c=state.paint.value;
       g.paintColor.setXYZ(i,c.r,c.g,c.b);g.carState.setXYZW(i,state.braking.value,visual.turnSignal>0?1:0,visual.turnSignal<0?1:0,0);g.wheelAngle.setX(i,state.wheelAngle.value);g.carNight.setX(i,state.night.value);
     }
+    if(this.markers?.size){
+      const batch=this.ensureMarkers(this.markers.values().next().value);batch.count=0;
+      for(const marker of this.markers){
+        let visible=!!marker.parent;for(let p=marker;p&&visible;p=p.parent)visible=p.visible;if(!visible)continue;
+        marker.updateWorldMatrix(true,false);if(camera&&this.position.distanceToSquared(this._p.setFromMatrixPosition(marker.matrixWorld))>280*280)continue;
+        batch.setMatrixAt(batch.count++,marker.matrixWorld);
+      }
+      batch.instanceMatrix.needsUpdate=true;
+    }
     for(const mesh of this.mirrors??[])mesh.instanceMatrix.needsUpdate=true;
     for(const type of this.types.values())for(const mesh of [type.near,type.far]){for(const wheel of type.wheels)wheel.mesh.instanceMatrix.needsUpdate=true;mesh.instanceMatrix.needsUpdate=true;for(const key of ['paintColor','carState','wheelAngle','carNight'])mesh.geometry.attributes[key].needsUpdate=true;}
   }
-  dispose(){if(this._disposed)return;this._disposed=true;this.root.removeFromParent();for(const type of this.types.values()){type.near.dispose();type.far.dispose();type.near.geometry.dispose();type.far.geometry.dispose();type.material.dispose();for(const wheel of type.wheels){wheel.mesh.dispose();wheel.mesh.geometry.dispose();}for(const m of type.wheelMaterials)m.dispose();}for(const mesh of this.mirrors??[]){mesh.dispose();mesh.geometry.dispose();mesh.material.dispose();}this.types.clear();this.entries.clear();banks.delete(this.scene);}
+  dispose(){if(this._disposed)return;this._disposed=true;this.root.removeFromParent();for(const type of this.types.values()){type.near.dispose();type.far.dispose();type.near.geometry.dispose();type.far.geometry.dispose();type.material.dispose();for(const wheel of type.wheels){wheel.mesh.dispose();wheel.mesh.geometry.dispose();}for(const m of type.wheelMaterials)m.dispose();}for(const mesh of [...(this.mirrors??[]),this.markerMesh].filter(Boolean)){mesh.dispose();mesh.geometry.dispose();mesh.material.dispose();}for(const marker of this.markers??[])marker.layers.enable(0);this.markers?.clear();this.types.clear();this.entries.clear();banks.delete(this.scene);}
 }
 export function vehicleBatches(scene){let bank=banks.get(scene);if(!bank){bank=new VehicleBatches(scene);banks.set(scene,bank);}return bank;}
 export function syncVehicleBatches(scene,camera){banks.get(scene)?.sync(camera);}

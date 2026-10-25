@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import * as textures from '../src/world/bogota/textures.js';
 import {createSlopVehicle} from '../src/vehicles/SlopVehicle.js';
 import {BODY_SPECS,buildCarGeometry} from '../src/vehicles/SlopGeometry.js';
+import {vehicleBatches,disposeVehicleBatches} from '../src/vehicles/VehicleBatches.js';
 import {switchVehicleVisuals} from '../src/vehicles/switchVehicleVisuals.js';
 mock.module('../src/world/bogota/textures.js',{namedExports:{...textures,radialSprite:()=>new THREE.Texture()}});
 const {Car}=await import('../src/entities/Car.js');
@@ -86,4 +87,18 @@ test('el tráfico mantiene ruta, velocidad y colisiones al cargar las carrocerí
   assert.ok(states.some(s=>!s.car.position.equals(s.position)));
   assert.ok(states.some(s=>s.car.vehicle.material.userData.vehicleState.wheelAngle.value!==0));
   traffic.dispose();
+});
+
+test('los aros de robo de los estacionados se dibujan en un lote que sigue robo, enfriamiento y conducción',()=>{
+ const scene=new THREE.Scene(),cars=[new Car(scene,new THREE.Vector3(5,0,5)),new Car(scene,new THREE.Vector3(12,0,5))],traffic=new Car(scene,new THREE.Vector3(20,0,5),0,{traffic:true});
+ const bank=vehicleBatches(scene),camera=new THREE.PerspectiveCamera();
+ assert.ok(cars.every(car=>car.marker.visible&&car.marker.layers.mask===0),'el aro sigue visible como estado, pero ninguna cámara lo dibuja suelto');
+ assert.equal(traffic.marker.layers.mask,1,'el tráfico no registra aro');
+ bank.sync(camera);assert.equal(bank.markerMesh.count,2);
+ const matrix=new THREE.Matrix4();bank.markerMesh.getMatrixAt(1,matrix);assert.equal(matrix.elements[12],12);
+ cars[0].steal(0);bank.sync(camera);assert.equal(bank.markerMesh.count,1,'robado: sin aro');
+ cars[0].update(1e3);bank.sync(camera);assert.equal(bank.markerMesh.count,2,'tras el enfriamiento vuelve');
+ cars[1].setControlled?.(true);bank.sync(camera);assert.equal(bank.markerMesh.count,1,'conduciendo: sin aro');
+ const marker=cars[0].marker;cars[0].dispose();assert.equal(marker.layers.mask,1);assert.equal(bank.markers.size,1);
+ for(const car of [cars[1],traffic])car.dispose();disposeVehicleBatches(scene);
 });
