@@ -21,7 +21,9 @@ export class Renderer {
     this.instance = createWebGPURenderer({
       canvas,
       antialias: true,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      // Solo con ?perf: consultas de tiempo de GPU para repartir el cuadro entre CPU y GPU.
+      trackTimestamp: globalThis.location?.search?.includes('perf') === true
     });
     this.resolution = new AdaptiveResolution(window.devicePixelRatio);
     this.instance.setPixelRatio(this.resolution.ratio);
