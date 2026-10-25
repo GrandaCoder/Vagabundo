@@ -37,6 +37,8 @@ import { LAKE_PARK, onLakeBridge, bridgeHeight, buildLakeWater } from '../bogota
 import { PigeonFlock } from '../../entities/PigeonFlock.js';
 import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper } from '../bogota/StaticGeometry.js';
 import { buildShadowProxies } from '../../graphics/ShadowProxies.js';
+import { instanceModelByCells } from '../../graphics/InstancedChunks.js';
+import { createImportedModel } from '../../utils/ImportedModels.js';
 import { CITY_WIDTH, CITY_HEIGHT, CITY_AREA_MULTIPLIER, CITY_CARRERAS as CARRERAS,
   CITY_CALLES as CALLES, ORIGINAL_CITY_WIDTH, ORIGINAL_CITY_HEIGHT, EXTENSION_PARKS,
   expandCity } from '../bogota/CityLayout.js';
@@ -1003,12 +1005,25 @@ export class Bogota {
   // ---------- ciclo ----------
 
   async preloadDetails() {
+    const lamps = this.props.map(prop => prop.instance).filter(instance => instance instanceof Farol);
     await Promise.all([
       this.signals.preloadModel(),
-      ...this.props.map(prop => prop.instance.preloadModel?.())
+      this._instanceStreetLamps(lamps),
+      ...this.props.filter(prop => !lamps.includes(prop.instance)).map(prop => prop.instance.preloadModel?.())
     ]);
     // Actualizar los límites después de cargar el mobiliario.
     this.group.updateWorldMatrix(true, true);
+  }
+
+  /** Un modelo de farol compartido, dibujado por celdas (instancias de scene-culling.js de Slop). */
+  async _instanceStreetLamps(lamps) {
+    if (!lamps.length) return;
+    const model = await createImportedModel('lampara');
+    this.group.updateMatrixWorld(true);
+    for (const lamp of lamps) lamp.useInstancedModel();
+    this.streetLamps = instanceModelByCells(model, lamps.map(lamp => lamp.group.matrixWorld.clone()), { name: 'Faroles por celdas' });
+    this.streetLampStats = { lamps: lamps.length, draws: this.streetLamps.children.length };
+    this.group.add(this.streetLamps);
   }
 
   update(dt, playerPos, camera, trafficVehicles = []) {
