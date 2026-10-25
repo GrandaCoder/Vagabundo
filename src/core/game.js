@@ -50,6 +50,7 @@ import { LocalLights } from './LocalLights.js';
 import { GRAPHICS_PROFILES } from './GraphicsQuality.js';
 import { FrameProfiler } from './FrameProfiler.js';
 import { loadInBatches, withLoadTimeout } from './Startup.js';
+import { NPC_LOD, npcShaderCoverage } from '../entities/Npc.js';
 import { paintLoadingFrame } from '../ui/LoadingScreen.js';
 import { el, button } from '../ui/dom.js';
 import { Menu } from '../ui/Menu.js';
@@ -239,7 +240,7 @@ export class Game {
     ].filter(Boolean);
     await withLoadTimeout(Promise.all([
       modelo !== 'procedural' ? this.player.setModel('realista') : Promise.resolve(),
-      loadInBatches(district?.npcs ?? [], npc => npc.preload({full:!npc.position||npc.position.distanceTo(this.player.position)<18})),
+      this._preloadNpcs(district?.npcs ?? []),
       loadInBatches(importedEntities, entity => entity.preloadModel()),
       district?.preloadDetails?.() ?? Promise.resolve(),
       this.audio.ready
@@ -301,6 +302,15 @@ export class Game {
     loading.finish();
     this.audio.startAmbient();
     requestAnimationFrame(this._loop);
+  }
+
+  /** Detalle completo para los NPC cercanos y para un NPC por cada variante de shader. */
+  async _preloadNpcs(npcs) {
+    const near=npc=>!npc.position||npc.position.distanceTo(this.player.position)<NPC_LOD.prefetch;
+    await loadInBatches(npcs,npc=>npc.preload({full:near(npc)}));
+    const coverage=npcShaderCoverage(npcs.filter(npc=>!near(npc)),npcs.filter(near));
+    this.npcPreloadStats={near:npcs.filter(near).length,coverage:coverage.length};
+    await loadInBatches(coverage,npc=>npc.preload());
   }
 
   /** Primera vez: abre el creador antes de jugar */

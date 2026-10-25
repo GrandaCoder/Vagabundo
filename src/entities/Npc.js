@@ -41,6 +41,33 @@ export async function randomStreetLook({ gastada = false } = {}) {
   return look;
 }
 
+/** Piezas del modelo completo que generan shaders distintos (cuerpo, pelo, barba, ropa, calzado). */
+export function npcShaderVariants(look) {
+  const r = look?.real;
+  if (!r) return [];
+  return [`cuerpo:${r.sexo}:${r.edad}`, ...['pelo', 'barba', 'ropa', 'calzado'].filter(k => r[k] && r[k] !== 'ninguna').map(k => `${k}:${r.sexo}:${r[k]}`)];
+}
+
+/**
+ * Elige pocos NPC cuyos modelos completos cubran todas las variantes aún no preparadas.
+ * Compilarlos durante la carga evita que el primer NPC de cada tipo compile al aparecer.
+ */
+export function npcShaderCoverage(candidates, prepared = []) {
+  const covered = new Set(prepared.flatMap(npc => npcShaderVariants(npc.look)));
+  const pending = candidates.map(npc => ({ npc, variants: npcShaderVariants(npc.look) }));
+  const chosen = [];
+  for (;;) {
+    let best = null, gain = 0;
+    for (const entry of pending) {
+      const g = entry.variants.filter(v => !covered.has(v)).length;
+      if (g > gain) { best = entry; gain = g; }
+    }
+    if (!best) return chosen;
+    chosen.push(best.npc);
+    for (const v of best.variants) covered.add(v);
+  }
+}
+
 export class Npc {
   /**
    * @param {THREE.Scene} scene
