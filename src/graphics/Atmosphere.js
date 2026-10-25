@@ -38,9 +38,10 @@ export class Atmosphere {
     if(this.bucket!==bucket){this.bucket=bucket;this.bake();}
   }
   bake(){
+    const started=performance.now();
     const position=this.sky.position.clone();this.sky.position.set(0,0,0);this.sky.showSunDisc.value=0;this.envScene.add(this.sky);
     try{this.target=this.pmrem.fromScene(this.envScene,0,.1,100,{renderTarget:this.target});this.scene.environment=this.target.texture;}
-    finally{this.sky.showSunDisc.value=1;this.scene.add(this.sky);this.sky.position.copy(position);}
+    finally{this.sky.showSunDisc.value=1;this.scene.add(this.sky);this.sky.position.copy(position);this.lastBakeMs=performance.now()-started;this.bakeCount=(this.bakeCount??0)+1;}
   }
   setQuality(level){this.quality=level;this.sun.castShadow=level!=='baja'&&(this.day??0)>.05;const size=level==='alta'?2048:1024;if(this.sun.shadow.mapSize.x!==size){this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.sun.shadow.mapSize.set(size,size);this.sun.shadow.needsUpdate=true;}}
   followTarget(position){this.sky.position.copy(position);}

@@ -262,6 +262,11 @@ export class AudioSystem {
     } else if (this._ambientStarted) this.sounds.ambient.play(this._ambientId);
   }
 
+  honkPlayer(){
+    const now=performance.now();if(now-(this._playerHornAt??-Infinity)<650||this._paused)return;
+    this._playerHornAt=now;const sound=this.vehicleSounds.horn1,id=sound.play('honk');sound.volume(this.muted?0:.55,id);
+  }
+
   updateWorld(dt, position, _camera, vehicles, bus) {
     this._listenerPosition = position;
     this.setPaused(false);

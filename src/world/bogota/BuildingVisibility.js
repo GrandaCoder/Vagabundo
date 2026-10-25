@@ -115,6 +115,7 @@ export class BuildingVisibility {
           if (!clones.has(key)) {
             const copy = material.clone();
             copy.side = side;
+            copy.userData.visibilityFade=true;
             copy.userData.staticBatchKey = key;
             if (!this.closedMaterials.has(key)) {
               const closed = material.clone();
@@ -190,6 +191,7 @@ export class BuildingVisibility {
     part.opacity = opacity;
     part.object.visible = opacity > 0;
     for (const material of part.materials) {
+      if(material.userData.ditherFade){material.opacity=opacity;continue;}
       const transparent = opacity < 1;
       if (material.transparent !== transparent) { material.transparent = transparent; material.needsUpdate = true; }
       material.opacity = opacity;

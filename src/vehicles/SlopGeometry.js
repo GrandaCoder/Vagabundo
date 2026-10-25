@@ -847,4 +847,4 @@ function buildCarProxyGeometry(spec) {
 
 // NYPD roof light bar (red on the -x half, blue on the +x half) for a body spec's roof, lit by createLightbarMaterial
 
-export { CAR_PARTS, BODY_SPECS, carLayout, buildCarGeometry, buildCarProxyGeometry };
+export { CAR_PARTS, BODY_SPECS, carLayout, buildCarGeometry, buildCarProxyGeometry, buildWheelParts };

@@ -16,6 +16,7 @@ export class SurfaceMaterials {
     if(!source||source.isNodeMaterial||!source.isMeshStandardMaterial)return source;
     if(this.cache.has(source))return this.cache.get(source);
     const material=new THREE.MeshStandardNodeMaterial();material.copy(source);
+    if(source.userData.visibilityFade){material.alphaHash=true;material.transparent=false;material.depthWrite=true;material.userData.ditherFade=true;source.userData.ditherFade=true;}
     // Preserve live references used by weather, night windows and cutaway walls.
     material.color=source.color;material.emissive=source.emissive;
     material.name=`${source.name||kind} · TSL Bogotá`;

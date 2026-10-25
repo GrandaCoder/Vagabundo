@@ -1,3 +1,4 @@
+import {PlayerDriving} from '../vehicles/PlayerDriving.js';
 import {SurfaceMaterials} from '../graphics/SurfaceMaterials.js';
 import { switchVehicleVisuals } from '../vehicles/switchVehicleVisuals.js';
 // src/core/Game.js
@@ -158,6 +159,8 @@ export class Game {
     this.dealer = null;
     this.craftingStation = null;
     this.dog = null;
+    this.driving=new PlayerDriving({player:this.player,cars:()=>this.cars,collisions:this.collisions,district:()=>this.world.active,audio:this.audio,notify:text=>window.dispatchEvent(new CustomEvent('toast',{detail:{text,type:'info'}}))});
+    this.drivingHUD=el('div',{id:'driving-controls'});document.body.appendChild(this.drivingHUD);
 
     // Estado
     this.look = null;       // apariencia + nombre + origen (creador)
@@ -183,6 +186,7 @@ export class Game {
     await loading.stage('Iniciando WebGPU…', .2);
     await this.renderer.initialize();
     this.renderer.onDeviceLost=()=>{
+      this.driving?.cancel();
       this._gpuLost=true;this._running=false;this._loading=true;this.audio.setPaused(true);
       this.menu.open({title:'Se perdió la conexión con la GPU',sub:'Recarga para continuar. Tu guardado no se modificó.',render:()=>({body:el('p',{text:'El dispositivo gráfico dejó de responder.'}),foot:[button('Recargar',{onClick:()=>location.reload()})]})});
     };
@@ -191,6 +195,7 @@ export class Game {
     this.sceneMgr.initializeAtmosphere?.(this.renderer.instance);
     await loading.stage('Construyendo la ciudad…', 1);
     this.world.loadDistrict('Bogota', this.collisions);
+    this.driving?.cancel();
     this._spawnEntities();
 
     const district = this.world.active;
@@ -249,8 +254,10 @@ export class Game {
 
     if (this.cameraRig.mode === 'third-person') this.player.root.rotation.y = this.cameraRig.yaw + Math.PI;
     this.cameraRig.follow(this.player.position, 0, this.collisions);
+    this.sceneMgr.wetness=this.weather?.wetness??0;
     this.sceneMgr.setTimeOfDay(this.clock.hour);
     this.sceneMgr.followTarget(this.player.position);
+    this.profiler?.mark('entorno');
     this._wasNight = this.clock.isNight;
     district?.setNightMode?.(this._wasNight);
     this.dealer?.setNight(this._wasNight);
@@ -261,7 +268,8 @@ export class Game {
     this.surfaceMaterials.apply(this.sceneMgr.scene,surfaceKinds);
     for(const npc of district?.npcs??[])for(const root of [npc.lodChar?.group,npc.fullChar?.group])if(root)this.surfaceMaterials.apply(root);
     await loading.stage('Preparando texturas, luces y shaders…', 4);
-    const extraModels = (district?.npcs ?? []).flatMap(npc => [npc.lodChar?.group, npc.fullChar?.group]).filter(Boolean);
+    const extraModels = [...(district?.npcs ?? []).flatMap(npc => [npc.lodChar?.group, npc.fullChar?.group]),...(this.cars??[]).map(car=>car.drivingVisual?.group)].filter(Boolean);
+    for(const root of extraModels)this.surfaceMaterials.apply(root);
     const rain = this.weather?.rainParticles;
     if (rain) rain.visible = true;
     this.renderer.onPrepareProgress=text=>{if(loading.status)loading.status.textContent=text;};
@@ -331,7 +339,7 @@ export class Game {
 
   _toggleCamera() {
     if (!this.cameraRig.canControl()) return;
-    const mode = this.cameraRig.toggle(this.player.root.rotation.y);
+    const mode = this.cameraRig.toggle(this.driving?.car?this.driving.car.group.rotation.y+Math.PI/2:this.player.root.rotation.y);
     this.cameraRig.follow(this.player.position, 0, this.collisions);
     this.hud.setCameraMode(mode);
   }
@@ -637,6 +645,7 @@ export class Game {
     if (this.stats.salud > 0) return false;
     if (this.player.isRagdollActive) return false;
 
+    this.driving?.cancel();
     this._deathPending = true;
     this.deathCount++;
     this.input.keys = {};
@@ -733,12 +742,17 @@ export class Game {
     // Deja ver el lanzamiento y la caída antes de abrir la recuperación fatal.
     if (this.stats.salud <= 0 && this.player.isRagdollActive) {
       this._syncVehicleColliders();
-      this.player.update(dt, this.cameraRig.camera, this.collisions);
+      if(this.input.consumePress('KeyF')&&this.driving){
+      const changed=this.driving.car?this.driving.exit():this.driving.enter();
+      if(changed){this.cameraRig.driving=!!this.driving.car;this.cameraRig._snap=true;if(this.driving.car){this.cameraRig.yaw=this.driving.car.group.rotation.y-Math.PI/2;this.interaction.currentTarget=null;this.interaction._endBoost?.();}}
+    }
+    if(this.driving?.car)this.driving.update(dt,this.input,this.world.active?.npcs??[]);
+    else this.player.update(dt, this.cameraRig.camera, this.collisions);
       this.world.update(dt, this.player.position, this.cameraRig.camera, this.traffic?.vehicles ?? []);
       this.traffic?.update(dt, { pedestrians: this.world.active?.trafficPedestrians ?? this.world.active?.npcs ?? [] });
       this.cameraRig.follow(this.player.position, dt, this.collisions);
       this.audio.updateSteps(false, false);
-      this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, this.traffic?.vehicles ?? [], this.world.active?.busServices ?? this.world.active?.busService);
+      this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this.traffic?.vehicles ?? []),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed)}]:[])], this.world.active?.busServices ?? this.world.active?.busService);
       this.audio.setRaining(!!this.weather?.isRaining);
       this._handleDeath();
       this._renderFrame(now, false); this.input.endFrame();
@@ -753,8 +767,10 @@ export class Game {
     this.time.update(dt, this.clock);
 
     // 2. Día/noche: cielo nublado de Bogotá y sol que sigue al jugador (sombras nítidas)
+    this.sceneMgr.wetness=this.weather?.wetness??0;
     this.sceneMgr.setTimeOfDay(this.clock.hour);
     this.sceneMgr.followTarget(this.player.position);
+    this.profiler?.mark('entorno');
     const isNight = this.clock.isNight;
     if (this._wasNight !== isNight) {
       this._wasNight = isNight;
@@ -768,8 +784,13 @@ export class Game {
     this.cameraRig.prepareMovement();
     const previousX = this.player.position.x, previousZ = this.player.position.z;
     this._syncVehicleColliders();
-    this.player.update(dt, this.cameraRig.camera, this.collisions);
-    if (!this.player.isStunned) {
+    if(this.input.consumePress('KeyF')&&this.driving){
+      const changed=this.driving.car?this.driving.exit():this.driving.enter();
+      if(changed){this.cameraRig.driving=!!this.driving.car;this.cameraRig._snap=true;if(this.driving.car){this.cameraRig.yaw=this.driving.car.group.rotation.y-Math.PI/2;this.interaction.currentTarget=null;this.interaction._endBoost?.();}}
+    }
+    if(this.driving?.car)this.driving.update(dt,this.input,this.world.active?.npcs??[]);
+    else this.player.update(dt, this.cameraRig.camera, this.collisions);
+    if (!this.player.isStunned&&!this.driving?.car) {
       const district = this.world.active;
       const ground = district?.getMovementGroundHeight?.(this.player.position.x, this.player.position.z, this.player.position.y)
         ?? district?.getGroundHeight?.(this.player.position.x, this.player.position.z);
@@ -799,11 +820,11 @@ export class Game {
     this.diseases.update(dt);
 
     // 7. Interacción (basura, autos, recicladora, tienda, cambuche, dealer)
-    if (!this.player.isStunned) this.interaction.update(dt, this.input, this.clock);
+    if (!this.player.isStunned&&!this.driving?.car) this.interaction.update(dt, this.input, this.clock);
     if (this._handleDeath()) return;
 
     // 7b. Mecánica de popó y lanzamiento a peatones
-    if (!this.player.isStunned && this.input.consumePress('KeyX')) {
+    if (!this.player.isStunned && !this.driving?.car && this.input.consumePress('KeyX')) {
       const hasPoop = this.inventory.count('popo') > 0;
       if (hasPoop) {
         this.poopSystem.throwPoop(this.player, this.cameraRig);
@@ -811,7 +832,7 @@ export class Game {
         this.poopSystem.poop(this.player);
       }
     }
-    if (!this.player.isStunned && this.input.consumePress('KeyZ')) {
+    if (!this.player.isStunned && !this.driving?.car && this.input.consumePress('KeyZ')) {
       this.poopSystem.poop(this.player);
     }
     this.poopSystem.update(dt);
@@ -841,9 +862,9 @@ export class Game {
 
     // 10. Audio
     const moving = !this.player.isStunned && Math.hypot(this.player.position.x - previousX, this.player.position.z - previousZ) > .001;
-    this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, this.traffic?.vehicles ?? [], this.world.active?.busServices ?? this.world.active?.busService);
+    this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this.traffic?.vehicles ?? []),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed)}]:[])], this.world.active?.busServices ?? this.world.active?.busService);
     this.audio.setRaining(!!this.weather?.isRaining);
-    this.audio.updateSteps(moving, this.input.isRunning);
+    this.audio.updateSteps(moving&&!this.driving?.car, this.input.isRunning);
     this.audio.updateBoost(this.interaction.boostActive);
     this.profiler?.mark('entidadesClimaAudio');
 
@@ -859,6 +880,7 @@ export class Game {
       this.diseases, this.talents, this.crafting, dt
     );
 
+    if(this.drivingHUD){const car=this.driving?.car;this.drivingHUD.textContent=car?`${Math.round(Math.abs(this.driving.speed)*3.6)} km/h · W/S acelerar y frenar · A/D girar · Shift impulso · B claxon · F salir · V cámara`:(this.driving?.nearest()?'[F] Conducir carro estacionado':'');}
     // 15. Fin de frame
     this.input.endFrame();
     this.profiler?.mark('interfaz');
@@ -867,16 +889,18 @@ export class Game {
 
   getPerformanceReport() {
     return {
-      diagnostics:this.renderer.diagnostics?.events, cpu: this.profiler.report(), frames: this.performanceHUD.metrics.recentStats(),
+      environment:{bakeMs:this.sceneMgr.atmosphere?.lastBakeMs,bakes:this.sceneMgr.atmosphere?.bakeCount},diagnostics:this.renderer.diagnostics?.events, cpu: this.profiler.report(), frames: this.performanceHUD.metrics.recentStats(),
       graphics: { selected: this.renderer.quality, effective: this.renderer.effectiveQuality,
         pixelRatio: this.renderer.instance.getPixelRatio(), ...this.renderer.instance.info.render }
     };
   }
 
   _renderFrame(now, active) {
+    if(this.renderer.compilingDynamic)return;
+    this.cameraRig.driving=!!this.driving?.car;
     const quality = this.renderer.effectiveQuality;
     this.renderer.hour=this.clock.hour;this.sceneMgr.wetness=this.weather?.wetness??0;
-    this.sceneMgr.atmosphere?.update(this.clock.hour,this.sceneMgr.wetness);
+
     this.localLights.setQuality?.(quality);
     if(this._overlayLightCount!==this.localLights.pool.length){this._overlayLightCount=this.localLights.pool.length;this.renderer.overlayLights=[this.sceneMgr.ambient,this.sceneMgr.sun,...this.localLights.pool,...(this.localLights.spotPool??[])];}
     for(const car of this.cars??[])car.setNight?.(this.clock.isNight);
@@ -926,6 +950,7 @@ export class Game {
 
   setVehicleVisualMode(mode) {
     if(this.vehicleVisualChanging)return this._vehicleVisualChange;
+    if(this.driving?.car){window.dispatchEvent(new CustomEvent('toast',{detail:{text:'Sal del carro antes de cambiar su representación.',type:'info'}}));return;}
     this.vehicleVisualChanging=true;
     this._vehicleVisualChange=(async()=>{try {
       const cars=[...new Set([...(this.cars??[]),...(this.traffic?.vehicles??[]).map(v=>v.car)])];

@@ -1,3 +1,4 @@
+import {createDrivingVisual} from '../vehicles/DrivingVisual.js';
 // src/entities/Car.js
 import * as THREE from 'three';
 import { COLORS, CAR_COOLDOWN } from '../utils/constants.js';
@@ -72,7 +73,7 @@ export class Car {
   get position() { return this.group.position; }
 
   preloadModel() {
-    return this._modelPromise ??= this.setVisualMode(this.visualMode);
+    return this._modelPromise ??= this.setVisualMode(this.visualMode).then(()=>{if(!this.traffic&&!this._disposed)this.prepareDrivingVisual();});
   }
 
   async prepareVisualMode(mode) {
@@ -147,11 +148,21 @@ export class Car {
     }
   }
 
+  prepareDrivingVisual(){if(!this.drivingVisual){this.drivingVisual=createDrivingVisual(this);this.group.add(this.drivingVisual.group);}return this.drivingVisual;}
+  setControlled(enabled){
+    this.marker.visible=!enabled&&!this.traffic&&!this.used;
+    this.vehicle.suspended=enabled;this.vehicle.group.visible=!enabled;
+    if(this.drivingVisual)this.drivingVisual.group.visible=enabled;
+    for(const mirror of this.mirrors)for(const child of mirror.children)child.visible=enabled||this.visualMode!=='slop';
+    if(!enabled&&this.drivingVisual){this.drivingVisual.update(0,0,0,0);}
+  }
+
   setSteering(angle,signal=0){this.steerAngle=angle;this.turnSignal=signal;this.vehicle.setSteering?.(angle,signal);}
 
   animateDrive(distance, braking) {
     this._travelled=(this._travelled??0)+distance;
     this.vehicle.updateMotion?.(distance,braking);
+    if(this.drivingVisual){const state=this.drivingVisual.material.userData.vehicleState;state.braking.value=braking?1:0;state.night.value=this._night?1:0;}
     const wasBraking=this._braking; this._braking=braking;
     for (const wheel of this.vehicle.wheels) wheel.rotation.z -= distance / 0.33;
     if (this.vehicle.tailMat && braking !== wasBraking) {
@@ -162,6 +173,7 @@ export class Car {
   dispose() {
     if(this._disposed)return;
     this._disposed = true;
+    this.drivingVisual?.dispose();
     this._visualToken++;
     this.scene.remove(this.group);
     for(const light of this.headlights)light.dispose();

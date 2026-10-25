@@ -31,7 +31,7 @@ export class VehicleBatches {
     camera?.getWorldPosition(this.position);
     for(const mesh of this.mirrors??[])mesh.count=0;
     for(const {visual,mesh,type} of this.entries){
-      if(!visual.group.parent)continue;let visible=true;for(let p=visual.group;p;p=p.parent)if(!p.visible){visible=false;break;}if(!visible)continue;
+      if(!visual.group.parent||visual.suspended)continue;let visible=true;for(let p=visual.group;p;p=p.parent)if(!p.visible){visible=false;break;}if(!visible)continue;
       mesh.updateWorldMatrix(true,false);const distance=this.position.distanceToSquared(mesh.getWorldPosition(this._p??=new THREE.Vector3()));if(camera&&distance>280*280)continue;
       const target=camera&&distance>85*85?type.far:type.near,i=target.count++,state=visual.material.userData.vehicleState;
       this.ensureMirrors(visual);

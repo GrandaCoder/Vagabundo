@@ -118,12 +118,15 @@ export class Renderer {
       const budget=await prepareSceneTextures([root]);decorate(root);
       for(const texture of budget.textures)this.instance.initTexture(texture);
       this._ensurePipeline(scene,camera);
-      const target=this.instance.getRenderTarget(),targets=this.instance.getMRT();let pending;
+      const target=this.instance.getRenderTarget(),targets=this.instance.getMRT(),started=performance.now();
+      this.compilingDynamic=true;
       try{
         this.instance.setRenderTarget(this.pipeline.scenePass.renderTarget);this.instance.setMRT(this.pipeline.scenePass.getMRT());
-        pending=withoutFrustumCulling([root],()=>this.instance.compileAsync(root,camera,scene));
-      }finally{this.instance.setRenderTarget(target);this.instance.setMRT(targets);}
-      await pending;
+        await withoutFrustumCulling([root],()=>this.instance.compileAsync(root,camera,scene));
+      }finally{
+        this.instance.setRenderTarget(target);this.instance.setMRT(targets);this.compilingDynamic=false;
+        this.diagnostics?.record('dynamic-compile',performance.now()-started);
+      }
     };
     const pending=(this._dynamicQueue??Promise.resolve()).then(prepare);this._dynamicQueue=pending.catch(()=>{});return pending;
   }
@@ -156,7 +159,7 @@ export class Renderer {
     }
     if(!this._pipelines.has(quality))this._pipelines.set(quality,new VisualPipeline(this.instance,scene,camera,quality,()=>{
       if(this._overlayRoot&&this._overlayEnabled)this.silhouette.render(this.instance,scene,camera,this._overlayRoot,this.overlayLights);
-    }));
+    },this._pipelines.values().next().value?.scenePass));
     this.pipeline=this._pipelines.get(quality);
   }
 
@@ -177,6 +180,7 @@ export class Renderer {
   }
 
   render(scene, camera, playerRoot = null, shadowLights = [], showSilhouette = true) {
+    if(this.compilingDynamic)return;
     const renderStarted=performance.now(),programs=this.diagnostics?.programs??0;
     syncVehicleBatches(scene,camera);
     this.instance.info.reset();

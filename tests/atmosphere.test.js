@@ -20,3 +20,7 @@ test('las sombras solares se desactivan de noche y regresan de dia segun calidad
  Atmosphere.prototype.update.call(fake,12,0);assert.equal(fake.sun.castShadow,true);
  fake.quality='baja';Atmosphere.prototype.update.call(fake,12,0);assert.equal(fake.sun.castShadow,false);
 });
+
+test('seguir al jugador solo mueve el cielo, sin rehacer el entorno',()=>{
+ const fake={sky:{position:new THREE.Vector3()}};Atmosphere.prototype.followTarget.call(fake,new THREE.Vector3(2,0,3));assert.equal(fake.sky.position.x,2);assert.equal(fake.bakeCount,undefined);
+});
