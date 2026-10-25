@@ -3,7 +3,9 @@ export function tagAssetTextures(gltf){
   const parser=gltf.parser;if(!parser)return gltf;
   gltf.scene.traverse(object=>{for(const material of [object.material].flat().filter(Boolean))for(const value of Object.values(material)){
     if(!value?.isTexture)continue;
-    const association=parser.associations.get(value),definition=parser.json.textures?.[association?.textures],image=parser.json.images?.[definition?.source];
+    const association=parser.associations.get(value),definition=parser.json.textures?.[association?.textures];
+    const source=definition?.extensions?.EXT_texture_webp?.source??definition?.extensions?.EXT_texture_avif?.source??definition?.extensions?.KHR_texture_basisu?.source??definition?.source;
+    const image=parser.json.images?.[source];
     if(image?.uri&&!image.uri.startsWith('data:'))value.userData.assetUrl=new URL((parser.options.path??'')+image.uri,'http://bazuko.invalid').pathname;
   }});return gltf;
 }
