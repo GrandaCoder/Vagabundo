@@ -1,4 +1,4 @@
-// Adapted from Slop New York 1b54e165: controllers.js and traffic.js (MIT).
+// Adapted from Slop New York 09361be1 controllers.js; traffic helpers retain 1b54e165 (MIT).
 export const CAR_DRIVE=Object.freeze({speed:11.75,boostSpeed:18,reverseSpeed:5.25,acceleration:4.5,boostAcceleration:5.25,powerSpeed:6.25,rolling:.18,drag:.0012,coast:.6,brake:9});
 export function driveSpeed(speed,throttle,boost,dt,drive=CAR_DRIVE){
  const braking=speed*throttle<0,magnitude=Math.abs(speed);

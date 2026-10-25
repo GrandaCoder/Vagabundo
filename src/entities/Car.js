@@ -25,8 +25,8 @@ export class Car {
 
     // Carro realista (portado de rebusque): particular o taxi amarillo, frente hacia +X local
     const kind = Math.random() < 0.3 ? 'taxi' : 'carro';
-    this.variant = variant ?? (kind === 'taxi' ? 'taxi' : 'sedan');
-    this.modelKind = this.variant === 'taxi' ? 'car2' : 'car1';
+    this._variant = variant;
+    this.modelKind = (variant ?? (kind === 'taxi' ? 'taxi' : 'sedan')) === 'taxi' ? 'car2' : 'car1';
     this.visualSeed = Math.floor(Math.random() * 8);
     const v = makeVehicle(kind, this.visualSeed, { beams: false });
     this.vehicle = v;
@@ -79,6 +79,7 @@ export class Car {
   }
 
   get position() { return this.group.position; }
+  get variant() { return this._variant ?? (this.modelKind === 'car2' ? 'taxi' : 'sedan'); }
 
   preloadModel() {
     return this._modelPromise ??= this.setVisualMode(this.visualMode).then(()=>{if(!this.traffic&&!this._disposed)this.prepareDrivingVisual();});

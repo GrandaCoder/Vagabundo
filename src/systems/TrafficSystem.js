@@ -1,4 +1,4 @@
-import {CAR_DRIVER,LOOKAHEAD,acceleration as slopAcceleration,laneSafe,laneAcceleration,canStopBefore} from '../vehicles/SlopTrafficAI.js';
+import {CAR_DRIVER,BUS_DRIVER,LOOKAHEAD,acceleration as slopAcceleration,laneSafe,laneAcceleration,canStopBefore} from '../vehicles/SlopTrafficAI.js';
 import {TrafficCollisionWorld} from '../vehicles/TrafficCollisionWorld.js';
 import {weightedMove} from '../vehicles/SlopDynamics.js';
 import {BogotaRoadNetwork} from '../vehicles/BogotaRoadNetwork.js';
@@ -38,9 +38,10 @@ export class TrafficSystem {
         const distance = (i + 0.4) * route.length / count;
         route.sample(distance, this._position, this._direction);
         const car = new Car(scene, this._position, Math.atan2(-this._direction.z, this._direction.x), { traffic: true, variant:trafficVariant(random) });
-        const cruiseSpeed = 10 + random() * 4;
+        const cruiseSpeed = car.variant==='bus'?8+random()*2:10 + random() * 4;
+        const driver=car.variant==='bus'?BUS_DRIVER:CAR_DRIVER;
         this.vehicles.push({ car, route, distance, speed: 0, cruiseSpeed, nextDistance: distance, nextSpeed: 0,
-          driver:{...CAR_DRIVER},v0:cruiseSpeed,acceleration: 0, accelerationLimit:CAR_DRIVER.a, braking:9,
+          driver:{...driver},v0:cruiseSpeed,acceleration: 0, accelerationLimit:driver.a, braking:9,
           reactionTime:0,resumeDelay:0,stopped:false,
           routeTimer: 3 + random() * 5, recentRoutes: [route.key], routeChanges: 0 });
       }

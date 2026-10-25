@@ -11,6 +11,13 @@ export class SlopMotorAudio {
   const ctx=this._context();if(!ctx)return;
   const entries=[...vehicles,...[buses].flat().filter(Boolean).map(car=>({car,speed:car.speed??0,variant:'bus'}))];
   const near=entries.filter(v=>v.car.position.distanceTo(listener)<55).sort((a,b)=>a.car.position.distanceToSquared(listener)-b.car.position.distanceToSquared(listener)).slice(0,8);
+  const occupied=near.find(v=>v.car.controller==='player');
+  if(occupied){
+   if(!this.wind){const source=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),output=ctx.createGain();source.buffer=this.resources.noise;source.loop=true;filter.type='lowpass';source.connect(filter).connect(output).connect(this.howler.masterGain);output.gain.value=0;source.start();this.wind={source,filter,output};}
+   // Speed/exposure levels adapted from 09361be1 audio-events.js, without flying or stereo panners.
+   const motion=Math.min(1,Math.abs(occupied.speed)/55),quiet=occupied.car._night ? .7 : 1;
+   this.wind.output.gain.setTargetAtTime((.010*.35+motion*.012)*quiet,ctx.currentTime,.6);this.wind.filter.frequency.setTargetAtTime(1550+motion*700,ctx.currentTime,.8);
+  }else this._stopWind();
   const keep=new Set(near.map(v=>v.car));for(const [car,state] of this.voices)if(!keep.has(car)){state.voice.dispose();state.output.disconnect();this.voices.delete(car);}
   for(const entry of near){const car=entry.car;let state=this.voices.get(car);
    if(!state){const output=ctx.createGain();output.gain.value=0;output.connect(this.howler.masterGain);const kind=entry.variant==='bus'||car.variant==='bus'?'bus':car.variant==='suv'?'suv':'sedan';state={output,voice:createMotorVoice(ctx,this.resources,kind,output)};this.voices.set(car,state);}
@@ -21,5 +28,6 @@ export class SlopMotorAudio {
  honk(car,volume=.45){const ctx=this._context();if(!ctx||this.paused)return;const output=ctx.createGain(),source=ctx.createBufferSource();source.buffer=this.horn??=synthHorn(ctx,.55,17);output.gain.value=volume;source.connect(output);output.connect(this.howler.masterGain);this.horns.add(source);source.onended=()=>{source.disconnect();output.disconnect();this.horns.delete(source);};source.start();
  }
  setPaused(value){this.paused=value;if(value)this.clear();}
- clear(){for(const state of this.voices.values()){state.voice.dispose();state.output.disconnect();}this.voices.clear();for(const source of [...this.horns]){source.stop();source.onended?.();}this.horns.clear();}
+ _stopWind(){if(this.wind){this.wind.source.stop();this.wind.source.disconnect();this.wind.filter.disconnect();this.wind.output.disconnect();this.wind=null;}}
+ clear(){this._stopWind();for(const state of this.voices.values()){state.voice.dispose();state.output.disconnect();}this.voices.clear();for(const source of [...this.horns]){source.stop();source.onended?.();}this.horns.clear();}
 }
