@@ -492,8 +492,8 @@ export class Bogota {
     this.urbanBuildings = planUrbanBuildings(map);
     const urbanPalette = {
       facades: URBAN_DESIGNS.map((design,i)=>{
-        const tex=TX.facade({seed:170+i,width:6,floors:3,pxPerM:32,shopFront:false,style:i===0?'ladrillo':'concreto',wallColor:['#975c40','#b6b3a8','#c3b8a5','#857c70','#687d81'][i]});
-        return new THREE.MeshStandardMaterial({map:repeatAll(tex.map),emissiveMap:repeatAll(tex.emissiveMap),emissive:'#ffffff',emissiveIntensity:0,bumpMap:repeatAll(tex.bumpMap),bumpScale:.16,roughness:i===4?.55:.9});
+        const material=new THREE.MeshStandardMaterial({color:['#975c40','#b6b3a8','#c3b8a5','#857c70','#687d81'][i],roughness:.85});
+        material.userData.proceduralFacade=true;return material;
       }),
       roof:roofMat,interior:this._interiorMat,
       concrete:new THREE.MeshStandardMaterial({color:'#686962',roughness:.95}),
