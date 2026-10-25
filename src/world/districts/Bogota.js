@@ -35,7 +35,7 @@ import { VIADUCT, buildColpatriaViaduct, viaductHeight, viaductSurface } from '.
 import { TERMINAL, inTerminal, terminalGroundHeight, buildTransitTerminal } from '../bogota/TransitTerminal.js';
 import { LAKE_PARK, onLakeBridge, bridgeHeight, buildLakeWater } from '../bogota/LakePark.js';
 import { PigeonFlock } from '../../entities/PigeonFlock.js';
-import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors } from '../bogota/StaticGeometry.js';
+import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper } from '../bogota/StaticGeometry.js';
 import { CITY_WIDTH, CITY_HEIGHT, CITY_AREA_MULTIPLIER, CITY_CARRERAS as CARRERAS,
   CITY_CALLES as CALLES, ORIGINAL_CITY_WIDTH, ORIGINAL_CITY_HEIGHT, EXTENSION_PARKS,
   expandCity } from '../bogota/CityLayout.js';
@@ -916,20 +916,34 @@ export class Bogota {
    * Junta en una sola malla todo lo estático que comparte material (postes de balcón, dulces,
    * gajos de paraguas, bolsas…): pasa de miles de llamadas de dibujo a unos cientos.
    */
+  /** Materiales que se cambian en partida (noche, humedad, cortes, props con estado): nunca se unifican. */
+  _liveMaterials() {
+    const live = new Set([...(this.facadeMats ?? []), ...(this.towerLights ?? []),
+      ...Object.values(this.groundMaterials ?? {}), ...(this.buildingVisibility?.closedMaterials?.values() ?? [])]);
+    const collect = o => { for (const m of [o.material].flat()) if (m) live.add(m); };
+    for (const { instance } of this.props) (instance.group ?? instance.root ?? instance.mesh)?.traverse?.(collect);
+    // Cualquier material que también use algo que no se fusiona (animado, farol, partes de edificio).
+    const skipped = o => { if (o.userData.update || o.userData.noMerge) { o.traverse(collect); return; } for (const c of o.children) skipped(c); };
+    for (const c of this.group.children) skipped(c);
+    return live;
+  }
+
   _mergeStatic() {
     this.group.updateMatrixWorld(true);
     const buckets = new Map();
     const replacedGeometries = new Set();
+    const materials = new MaterialDeduper(this._liveMaterials());
     const visit = (o) => {
       if (o.userData.update || o.userData.noMerge) return; // animados y faroles quedan aparte
       if (o.isMesh && !Array.isArray(o.material) && !o.isSkinnedMesh) {
         if (!o.geometry.attributes.uv || !o.geometry.attributes.normal) return;
+        const material = materials.resolve(o.material);
         // Conserva los índices: expandir cajas y planos duplicaba sus vértices.
-        const key = `${o.material.uuid}|${o.castShadow}|${o.receiveShadow}|${!!o.geometry.index}|${geometryChunk(o.geometry, o.matrixWorld)}`;
+        const key = `${material.uuid}|${o.castShadow}|${o.receiveShadow}|${!!o.geometry.index}|${geometryChunk(o.geometry, o.matrixWorld)}`;
         const g = o.geometry.clone();
         for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
         g.applyMatrix4(o.matrixWorld);
-        const bucket = buckets.get(key) ?? { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, list: [], sources: [] };
+        const bucket = buckets.get(key) ?? { mat: material, cast: o.castShadow, recv: o.receiveShadow, list: [], sources: [] };
         buckets.set(key, bucket);
         bucket.list.push(g);
         bucket.sources.push(o);
@@ -956,6 +970,7 @@ export class Bogota {
     // Una geometría compartida por objetos animados sigue en uso.
     this.group.traverse((o) => replacedGeometries.delete(o.geometry));
     for (const geometry of replacedGeometries) geometry.dispose();
+    this.mergeStats = { buckets: buckets.size, unifiedMaterials: materials.replaced.size, disposedMaterials: materials.disposeUnused(this.group) };
   }
 
   // ---------- ciclo ----------
