@@ -11,6 +11,8 @@ const { Car } = await import('../src/entities/Car.js');
 const { Cambuche } = await import('../src/entities/Cambuche.js');
 const { BusService } = await import('../src/world/bogota/BusService.js');
 const { TrafficSignals } = await import('../src/world/bogota/TrafficSignals.js');
+const { Pickup } = await import('../src/entities/Pickup.js');
+const { instanceBatches, disposeInstanceBatches } = await import('../src/graphics/InstanceBatches.js');
 
 // Lee posiciones e índices reales del GLB; las imágenes no requieren decodificador de navegador.
 function geometryFromAsset(file) {
@@ -153,4 +155,38 @@ test('las lentes del semáforo se iluminan sobre el GLB, sin discos flotantes ni
   assert.ok(Number.isFinite(bounds.min.x));
   assert.ok(bounds.max.y > 4);
   signals.dispose();
+});
+
+test('bolsas y contenedores se dibujan en lotes que siguen recogida, reaparición y reubicación', async () => {
+  const scene = new THREE.Scene();
+  const bags = [new Pickup(scene, new THREE.Vector3(1, 0, 1)), new Pickup(scene, new THREE.Vector3(9, 0, 4))];
+  const bin = new Pickup(scene, new THREE.Vector3(20, 0, 2), { modelKind: 'contenedor', cooldown: 5 });
+  await Promise.all([...bags, bin].map(p => p.preloadModel()));
+  const batches = instanceBatches(scene);
+  batches.sync();
+  const lot = mesh => [...batches.groups.values()].find(g => g.members.has(mesh)).mesh;
+  const bagModel = bags[0].mesh.getObjectByProperty('isMesh', true), binModel = bin.mesh.getObjectByProperty('isMesh', true);
+  assert.equal(lot(bagModel), lot(bags[1].mesh.getObjectByProperty('isMesh', true)), 'las bolsas comparten un lote');
+  assert.notEqual(lot(bagModel), lot(binModel));
+  assert.equal(lot(bagModel).count, 2);assert.equal(lot(binModel).count, 1);assert.equal(lot(bags[0].marker).count, 3);
+  assert.equal(lot(bagModel).castShadow, true);
+  assert.ok([bagModel, binModel, bags[0].marker].every(o => o.layers.mask === 0 && o.visible), 'el estado visible se conserva; solo el lote se dibuja');
+  const matrix = new THREE.Matrix4();lot(binModel).getMatrixAt(0, matrix);
+  binModel.updateWorldMatrix(true, false);assert.ok(matrix.elements.every((v, i) => Math.abs(v - binModel.matrixWorld.elements[i]) < 1e-5));
+
+  assert.ok(bin.harvest());batches.sync();
+  assert.equal(lot(binModel).count, 0, 'recogido: desaparece del lote');assert.equal(lot(bags[0].marker).count, 2);
+  bin.onRespawn = pickup => pickup.relocate(new THREE.Vector3(40, 0, 8));
+  bin.update(6);batches.sync();
+  assert.equal(lot(binModel).count, 1, 'reaparece');lot(binModel).getMatrixAt(0, matrix);
+  binModel.updateWorldMatrix(true, false);
+  assert.ok(Math.abs(matrix.elements[12] - binModel.matrixWorld.elements[12]) < 1e-5 && Math.abs(bin.position.x - 40) < 1e-9, 'en su nuevo sitio');
+
+  bags[1].group.visible = false;batches.sync();
+  assert.equal(lot(bagModel).count, 1, 'lo descartado por el frustum no entra en el lote');bags[1].group.visible = true;
+
+  bags[0].dispose();batches.sync();
+  assert.equal(bagModel.layers.mask, 1);assert.equal(lot(bags[1].mesh.getObjectByProperty('isMesh', true)).count, 1);
+  bags[1].dispose();bin.dispose();disposeInstanceBatches(scene);
+  assert.equal(batches.root.parent, null);
 });

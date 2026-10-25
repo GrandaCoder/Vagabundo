@@ -2,6 +2,7 @@ import {GraphicsDiagnostics} from './GraphicsDiagnostics.js';
 import {prepareSceneTextures} from './TextureBudget.js';
 import {collectShaderWarmupJobs,compileShaderJobs,withoutFrustumCulling} from './ShaderWarmup.js';
 import {syncVehicleBatches,disposeVehicleBatches} from '../vehicles/VehicleBatches.js';
+import {syncInstanceBatches,disposeInstanceBatches} from '../graphics/InstanceBatches.js';
 import {StableClusteredLighting} from '../graphics/StableClusteredLighting.js';
 import {VisualPipeline} from '../graphics/VisualPipeline.js';
 import * as THREE from 'three/webgpu';
@@ -71,7 +72,7 @@ export class Renderer {
   async prepare(scene, camera, extraModels = []) {
     const started=performance.now();
     console.info('[WebGPU] Preparando recursos');
-    syncVehicleBatches(scene,camera);
+    syncVehicleBatches(scene,camera);syncInstanceBatches(scene);
     const budget=await prepareSceneTextures([scene,...extraModels]);
     const textures=budget.textures;this.textureStats={unique:textures.size,resized:budget.resized,reused:budget.reused,prepareMs:performance.now()-started};
     console.info('[WebGPU] Texturas únicas',this.textureStats);
@@ -151,7 +152,7 @@ export class Renderer {
   dispose() {
     this._disposed=true;this.diagnostics?.dispose();
     window.removeEventListener('resize',this._resizeListener);document.removeEventListener('visibilitychange',this._visibilityListener);this.silhouette.material.dispose();
-    if(this._pipelineScene)disposeVehicleBatches(this._pipelineScene);
+    if(this._pipelineScene){disposeVehicleBatches(this._pipelineScene);disposeInstanceBatches(this._pipelineScene);}
     for(const pipeline of this._pipelines?.values()??[])pipeline.dispose();this._pipelines?.clear();this.environment?.dispose();this.instance.dispose();
   }
 
@@ -207,6 +208,8 @@ export class Renderer {
     syncVehicleBatches(scene,camera);
     this.instance.info.reset();
     this.culling.apply(camera, shadowLights);
+    // Después del descarte: los recogibles fuera de vista y sombra no entran en su lote.
+    syncInstanceBatches(scene);
     try {
       if(this.instance.backend?.isWebGPUBackend){
       this._ensurePipeline(scene,camera);
