@@ -35,6 +35,14 @@ test('si el calentamiento falla, vuelve a la calidad elegida', async () => {
   assert.equal(applied.at(-1), 'media');
 });
 
+test('prepara solo las calidades solicitadas y la adaptacion no activa una sin preparar',async()=>{
+ const {renderer,drawn}=fakeRenderer();renderer.quality='alta';
+ await renderer.warmup(new THREE.Scene(),new THREE.PerspectiveCamera(),new THREE.Group(),{qualities:['alta','baja','alta']});
+ assert.deepEqual(drawn,['alta','baja']);assert.deepEqual([...renderer.readyQualities],['alta','baja']);
+ renderer.resolution.pressure=1;assert.equal(renderer.effectiveQuality,'baja');
+ renderer.readyQualities.add('media');assert.equal(renderer.effectiveQuality,'media');
+});
+
 test('la verificación informa el trabajo que quedó pendiente después del calentamiento', async () => {
   const { renderer } = fakeRenderer();
   renderer.render = () => { renderer.diagnostics.programs += 2; renderer.diagnostics.discarded += 1; };

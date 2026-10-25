@@ -748,6 +748,8 @@ export class Game {
     const now = performance.now();
     const dt = Math.min((now - this._lastTime) / 1000, 0.1);
     this._lastTime = now;
+    // Quality preparation owns the render targets until it restores the selected configuration.
+    if(this.qualityChanging){this.audio?.setPaused(true);this.input.endFrame();return;}
 
     this.radio?.setPaused(!!(this.isSleeping || globalThis.document?.hidden || (this.paused && !this._radioModalOpen)));
     if (this.isSleeping || this.paused || globalThis.document?.hidden) {
@@ -771,7 +773,7 @@ export class Game {
       this.traffic?.update(dt, { pedestrians: this.world.active?.trafficPedestrians ?? this.world.active?.npcs ?? [] });
       this.cameraRig.follow(this.player.position, dt, this.collisions);
       this.audio.updateSteps(false, false);
-      this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this.traffic?.vehicles ?? []),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed)}]:[])], this.world.active?.busServices ?? this.world.active?.busService);
+      this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this.traffic?.vehicles ?? []),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed),acceleration:this.driving.acceleration}]:[])], this.world.active?.busServices ?? this.world.active?.busService);
       this.audio.setRaining(!!this.weather?.isRaining);
       this._handleDeath();
       this._renderFrame(now, false); this.input.endFrame();
@@ -883,7 +885,7 @@ export class Game {
 
     // 10. Audio
     const moving = !this.player.isStunned && Math.hypot(this.player.position.x - previousX, this.player.position.z - previousZ) > .001;
-    this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this.traffic?.vehicles ?? []),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed)}]:[])], this.world.active?.busServices ?? this.world.active?.busService);
+    this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this.traffic?.vehicles ?? []),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed),acceleration:this.driving.acceleration}]:[])], this.world.active?.busServices ?? this.world.active?.busService);
     this.audio.setRaining(!!this.weather?.isRaining);
     this.audio.updateSteps(moving&&!this.driving?.car, this.input.isRunning);
     this.audio.updateBoost(this.interaction.boostActive);
@@ -1047,7 +1049,7 @@ export class Game {
         onProgress(`Preparando calidad ${quality}…`);
         if(this._running&&this.renderer.warmup&&!this.renderer.readyQualities?.has(quality)){
           const mode=this.cameraRig.mode;
-          try {await this.renderer.warmup(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,{applyQuality:q=>this._applyQualityState(q),views:this._cameraWarmupViews(mode),qualities:[quality]});}
+          try {await this.renderer.prepareQuality(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,{applyQuality:q=>this._applyQualityState(q),views:this._cameraWarmupViews(mode),qualities:[quality]});}
           finally {this._setCameraView(mode);}
         }
         this.setGraphicsQuality(quality, false, false);

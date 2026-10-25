@@ -112,9 +112,15 @@ export class Renderer {
     console.info('[WebGPU] Familias gráficas',this.startupStats);
     this.onPrepareProgress?.(`Shaders TSL: 0/${jobs.length} familias`);
     renderer.setRenderTarget(this.pipeline.scenePass.renderTarget);renderer.setMRT(this.pipeline.scenePass.getMRT());
+    let lastYield=performance.now();
     try{await compileShaderJobs(jobs,async family=>{
-      for(const object of family){culled.push([object,object.frustumCulled]);object.frustumCulled=false;await new Promise(r=>setTimeout(r,0));await renderer.compileAsync(object,camera,scene);}
-    },{concurrency:4,onProgress:(done,total)=>this.onPrepareProgress?.(`Shaders TSL: ${done}/${total} familias`)});}
+      for(const object of family){
+        culled.push([object,object.frustumCulled]);object.frustumCulled=false;
+        // Yield by elapsed CPU budget, not once per binding (thousands of clamped timers).
+        if(performance.now()-lastYield>8){lastYield=performance.now();await new Promise(r=>setTimeout(r,0));}
+        await renderer.compileAsync(object,camera,scene);
+      }
+    },{concurrency:8,onProgress:(done,total)=>this.onPrepareProgress?.(`Shaders TSL: ${done}/${total} familias`)});}
     finally{for(const [object,value] of culled)object.frustumCulled=value;renderer.setRenderTarget(target);renderer.setMRT(targets);}
     this.startupStats.compileMs=performance.now()-started;
   }
@@ -155,6 +161,14 @@ export class Renderer {
 
   async waitForGPU() {
     await this.instance.backend.device.queue.onSubmittedWorkDone();
+  }
+
+  prepareQuality(scene,camera,playerRoot,options){
+    const pending=(this._dynamicQueue??Promise.resolve()).then(()=>{
+      if(this._disposed)throw new Error('El renderizador ya se liberó');
+      return this.warmup(scene,camera,playerRoot,options);
+    });
+    this._dynamicQueue=pending.catch(()=>{});return pending;
   }
 
   dispose() {
