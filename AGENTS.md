@@ -52,7 +52,7 @@ Para las pruebas de navegador, instalar Chromium con `npx playwright install chr
 - El juego y la medición de FPS comienzan después de cargar modelos, materiales y GPU. Menús, inventario, creador y pestaña oculta suspenden la simulación correspondiente.
 - La muerte requiere recuperación explícita; no teletransportar automáticamente al jugador. Dejar terminar una caída mortal antes de mostrar su pantalla.
 - El frenado de los carros es gradual. Mantener las prioridades de los cruces, rutas aleatorias y carril exclusivo del bus. Los vehículos usan cajas simples de colisión, no sus triángulos.
-- Motores y claxones usan reproducción normal con voces por vehículo. Los alcances se calculan con volumen, sin panners: alarma hasta 41 metros, frases de obstrucción hasta 8 metros y frases de robo a carros en circulación hasta 12 metros.
+- Motores y claxones usan reproducción normal con voces por vehículo. Los alcances se calculan con volumen, sin panners: alarma hasta 41 metros, frases de obstrucción hasta 8 metros y frases de robo a carros en circulación hasta 12 metros. `CityAcoustics` (de Slop New York) baja el volumen de esas voces cuando un edificio queda entre la fuente y el jugador, sin cambiar los alcances; usa las cajas estáticas del movimiento.
 - Los carros en circulación permiten robar espejos con E; los estacionados activan alarma. Mantener el enfriamiento entre robos y evitar duplicar voces por fotograma.
 - El Chato conserva su amistad al guardar. Come pan o atún; las caricias tienen enfriamiento. Respetar su navegación y las colisiones existentes.
 - Hay diez palomas en cada uno de los tres parques. Huyen del jugador o NPC a menos de 3,5 metros. Conservar instancias compartidas, filtro de personas cercanas y suspensión a distancia.

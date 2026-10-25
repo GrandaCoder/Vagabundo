@@ -76,6 +76,19 @@ export function installPerfProbe(game, target = globalThis) {
     /** Perfil de luz temporal ('midday', 'night'…; null vuelve al reloj). No se guarda. */
     timeProfile: (id = null) => game.sceneMgr.setTimeProfile(id),
     get scene() { return game.sceneMgr.scene; },
+    /** Obstrucción de cada vehículo a menos de 55 m y coste de trazarlos todos (dos pasadas: la segunda ya optimizada). */
+    acoustics: () => {
+      const acoustics = game.audio.acoustics, p = game.player.position, ears = { x: p.x, y: p.y + 1.6, z: p.z };
+      const sources = [...(game.traffic?.vehicles ?? []).map(v => v.car), ...(game.world.active?.busServices ?? []), ...game.cars]
+        .filter(s => s.position.distanceTo(p) < 55);
+      let audible, traceMs;
+      for (let pass = 0; pass < 2; pass++) {
+        const started = performance.now();
+        audible = sources.map(s => ({ distance: Math.round(s.position.distanceTo(p)), obstruction: Math.round(acoustics.obstruction(s.position, ears, 1) * 100) / 100 }));
+        traceMs = +(performance.now() - started).toFixed(3);
+      }
+      return { traceMs, audible };
+    },
     /** Prepara el detalle completo del NPC más cercano que aún no lo tiene, como al acercarse en partida. */
     npcDetail: async () => {
       const position = game.player.position;

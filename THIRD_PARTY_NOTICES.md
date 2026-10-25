@@ -46,6 +46,7 @@ The following adaptations use the same pinned revision
 - `src/vehicles/SlopCollisionPhysics.js`: oriented SAT, player/traffic impulses, chain impacts, steering, lateral recovery and suspension/yaw coefficients from `js/traffic.js`; wall response from `js/controllers.js`.
 - `src/vehicles/CollisionSparks.js`: collision spark distribution and bounded particle pool from `js/traffic.js`, rendered with WebGPU node materials.
 - `src/vehicles/SlopCrashAudio.js`: body, metal and debris synthesis from `js/audio-events.js`; contact debounce and severity layering adapted from `js/audio-system.js` and `js/audio-events.js`.
+- `src/systems/CityAcoustics.js`: segment-through-box thickness, three-ray aperture and exponential obstruction from `js/audio-acoustics.js`; direct gain through buildings from `js/audio-system.js`. BAZUKO queries its movement spatial index per trace, sums the thickness of its 2 m block strips and applies the result as volume only.
 
 BAZUKO's adapters retain its Car entities, dimensions, +X local front, road network,
 bridge heights, traffic lights, TransMilenio service and gameplay. They connect these

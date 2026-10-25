@@ -48,7 +48,8 @@ export class VehicleAudio {
     return state[key];
   }
 
-  update(dt, position, vehicles = [], bus = null) {
+  /** `gain(car)` es la atenuación por edificios entre el vehículo y el jugador (1 si no hay). */
+  update(dt, position, vehicles = [], bus = null, gain = () => 1) {
     const present = new Set(vehicles.map(vehicle => vehicle.car));
     const buses = [bus].flat().filter(Boolean);
     for (const vehicle of buses) present.add(vehicle);
@@ -79,14 +80,14 @@ export class VehicleAudio {
       if (!nearby.has(entry.car)) { this._stop(state); continue; }
       const idle = this._loop(state, 'idle', this.sounds[entry.bus ? 'busIdle' : 'carIdle']);
       const drive = this._loop(state, 'drive', this.sounds[entry.bus ? 'busDrive' : 'carDrive']);
-      const mix = Math.min(1, Math.max(0, entry.source.speed) / 2.5);
+      const mix = Math.min(1, Math.max(0, entry.source.speed) / 2.5), heard = gain(entry.car);
       const smoothing = 1 - Math.exp(-dt * 7);
       state.idleVolume += ((1 - mix) * (entry.bus ? .38 : .34) - state.idleVolume) * smoothing;
       state.driveVolume += (mix * (entry.bus ? .42 : .40) - state.driveVolume) * smoothing;
       for (const [voice, volume, rate] of [[idle, state.idleVolume, state.pitch],
         [drive, state.driveVolume, state.pitch * (.85 + Math.min(entry.source.speed, 5) * .065)]]) {
         if (!voice) continue;
-        voice.sound.volume(volume, voice.id);
+        voice.sound.volume(volume * heard, voice.id);
         voice.sound.rate(rate, voice.id);
       }
       if (state.blockedFor >= state.patience && state.cooldown === 0) {
@@ -95,7 +96,7 @@ export class VehicleAudio {
           if (state.horn) state.horn.sound.stop(state.horn.id);
           const id = sound.play('honk');
           state.horn = { sound, id };
-          sound.volume(.48, id);
+          sound.volume(.48 * heard, id);
           sound.rate(state.pitch, id);
           if (!entry.bus && entry.voiceDistance < 8 && this.driverSounds.length) {
             const index = Math.min(this.driverSounds.length - 1, Math.floor(this.random() * this.driverSounds.length));
@@ -111,7 +112,7 @@ export class VehicleAudio {
       if (state.remark) {
         const { sound, id } = state.remark;
         if (!sound.playing(id)) state.remark = null;
-        else sound.volume(.7 * Math.max(0, Math.min(1, (8 - entry.voiceDistance) / 6)), id);
+        else sound.volume(.7 * Math.max(0, Math.min(1, (8 - entry.voiceDistance) / 6)) * heard, id);
       }
     }
   }

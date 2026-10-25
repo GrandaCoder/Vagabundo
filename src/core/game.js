@@ -33,6 +33,7 @@ import { TrafficSystem } from '../systems/TrafficSystem.js';
 import { distributeShelterLoot, spreadPickupPositions } from '../systems/ShelterLoot.js';
 import { InventorySystem } from '../systems/InventorySystem.js';
 import { AudioSystem } from '../systems/AudioSystem.js';
+import { CityAcoustics } from '../systems/CityAcoustics.js';
 import { InteractionSystem } from '../systems/InteractionSystem.js';
 import { DiseaseSystem } from '../systems/DiseaseSystem.js';
 import { TalentSystem } from '../systems/TalentSystem.js';
@@ -83,6 +84,8 @@ export class Game {
     this.collisions = new CollisionSystem();
     this.inventory = new InventorySystem();
     this.audio = new AudioSystem();
+    // Los edificios tapan motores, claxon, alarmas y voces con las mismas cajas del movimiento.
+    this.audio.setAcoustics(new CityAcoustics(this.collisions));
     this.stats = new StatsSystem();
     this.time = new TimeSystem();
     this.save = new SaveSystem();
