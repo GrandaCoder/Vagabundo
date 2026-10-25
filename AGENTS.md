@@ -75,7 +75,7 @@ Las animaciones ActionForge se adaptan en `src/character/actionforge.js`; el ban
 
 ## Parque, viaducto y edificios
 
-LakePark.js define el parque al sur desde Z 222. El agua no es transitable. ColpatriaViaduct.js construye el único tablero desde Z 15,43 hasta Z 318; BridgeElevation.js comparte la cota de 7,82 metros. La rampa norte llega a esa cota en Z 39 y la sur comienza en Z 280. No generar otro tablero sobre el lago ni separadores planos debajo. Las consultas de movimiento distinguen la calle inferior del puente y respetan los colliders layered.
+LakePark.js define el parque al sur desde Z 222. El agua no es transitable. Los árboles de los parques son procedurales (TreeField.js y TreeMaterial.js, adaptados de trees.js de Slop New York): urapán, eucalipto y caucho sabanero, instanciados por celdas de 64 m con tres niveles de detalle; se plantan con _plantTree, sin colisión, como los anteriores. ColpatriaViaduct.js construye el único tablero desde Z 15,43 hasta Z 318; BridgeElevation.js comparte la cota de 7,82 metros. La rampa norte llega a esa cota en Z 39 y la sur comienza en Z 280. No generar otro tablero sobre el lago ni separadores planos debajo. Las consultas de movimiento distinguen la calle inferior del puente y respetan los colliders layered.
 
 El puente conserva 14 metros de ancho real en rectas y curvas; la llegada norte mantiene eje X 75 y bordes X 68–82. bridgeCenter define el eje y bridgeNormal su perpendicular. Generar ambos bordes desplazando 7 metros sobre esa normal; no medir el ancho sobre X ni ensanchar secciones según la envolvente del bus. El concreto se extruye verticalmente 6 cm bajo el asfalto, con las mismas UV globales de las calles. viaductSurface debe coincidir con los triángulos dibujados.
 

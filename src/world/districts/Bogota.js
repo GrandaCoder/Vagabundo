@@ -38,6 +38,7 @@ import { PigeonFlock } from '../../entities/PigeonFlock.js';
 import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper } from '../bogota/StaticGeometry.js';
 import { buildShadowProxies } from '../../graphics/ShadowProxies.js';
 import { instanceModelByCells } from '../../graphics/InstancedChunks.js';
+import { createTreeField, TREE_SPECIES_INDEX } from '../bogota/TreeField.js';
 import { createImportedModel } from '../../utils/ImportedModels.js';
 import { CITY_WIDTH, CITY_HEIGHT, CITY_AREA_MULTIPLIER, CITY_CARRERAS as CARRERAS,
   CITY_CALLES as CALLES, ORIGINAL_CITY_WIDTH, ORIGINAL_CITY_HEIGHT, EXTENSION_PARKS,
@@ -209,6 +210,10 @@ export class Bogota {
       ...createRenderSectors(closedView)
     ];
     this._buildShadowProxies(closedView);
+    // Árboles procedurales instanciados por celdas (trees.js de Slop): fuera de la fusión y de los sustitutos,
+    // porque su follaje se recorta y se mueve con el viento.
+    this.treeField = createTreeField(scene, this.treeSites ?? []);
+    this.group.add(this.treeField.group);
     scene.add(this.group);
     freezeStaticTransforms(this.group, new Set(this.busServices.map(bus => bus.group)));
     this.signals = new TrafficSignals();
@@ -693,6 +698,11 @@ export class Bogota {
 
   }
 
+  /** Escala por especie para los parques pequeños del centro: copas de unos 5,5 a 7 m. */
+  _plantTree(x, z, species, scale = { urapan: .68, eucalipto: .7, caucho: .6 }[species]) {
+    (this.treeSites ??= []).push({ x, y: this.getGroundHeight(x, z), z, scale, species: TREE_SPECIES_INDEX[species] });
+  }
+
   _add(obj, x, z, rotY = 0) {
     obj.position.set(x, obj.position.y, z);
     obj.rotation.y = rotY;
@@ -827,7 +837,7 @@ export class Bogota {
       const x = rand(29.5, 38.5), z = rand(33.5, 45.5);
       if (Math.abs(x - 33.5) < 1.6 || Math.abs(z - 39) < 1.2) continue;
       if (Math.hypot(WX(x) - SHELTER_LOCATION.x, WZ(z) - SHELTER_LOCATION.z) < 6) continue;
-      this._add(P.tree(rand(0.9, 1.3)), WX(x), WZ(z));
+      this._plantTree(WX(x), WZ(z), i % 3 === 2 ? 'caucho' : 'urapan');
     }
     for (const [x, z, r] of [[32, 37, Math.PI / 2], [35, 41, -Math.PI / 2], [31, 39.8, 0], [36.5, 38.2, Math.PI]]) {
       if (Math.hypot(WX(x) - SHELTER_LOCATION.x, WZ(z) - SHELTER_LOCATION.z) < 5) continue;
@@ -842,7 +852,7 @@ export class Bogota {
   _buildExtensions() {
     for (const park of EXTENSION_PARKS) {
       for (let z=park.z0+1;z<park.z1;z+=4) for (let x=park.x0+1;x<park.x1;x+=4) {
-        if (this.map[z][x] === 'grass') this._add(P.tree(rand(0.9,1.3)), W(x), W(z));
+        if (this.map[z][x] === 'grass') this._plantTree(W(x), W(z), (x + z) % 3 ? 'urapan' : 'caucho');
       }
       const pathZ=Math.floor((park.z0+park.z1)/2);
       for (const x of [park.x0+2,park.x1-2]) {
@@ -859,7 +869,7 @@ export class Bogota {
     // Arbolado espaciado; solo crece en césped, nunca dentro del lago o sobre el puente.
     for (let z = 230; z < 314; z += 12) for (let x = 14; x < 230; x += 12) {
       if (this.map[Math.round(z / T)]?.[Math.round(x / T)] !== 'grass' || onLakeBridge(x, z)) continue;
-      this._add(P.tree(1 + ((x + z) % 3) * .12), x, z);
+      this._plantTree(x, z, (x + z) % 36 < 12 ? 'eucalipto' : (x + z) % 36 < 24 ? 'urapan' : 'caucho');
     }
     for (const [x, z] of [[20, 226], [132, 236], [134, 288], [20, 310], [156, 310]]) {
       const bench = new Banca(new THREE.Vector3(x, this.getGroundHeight(x, z), z), 0);
@@ -1060,6 +1070,7 @@ export class Bogota {
     for (const prop of this.props) prop.instance.dispose?.();
     for (const bus of this.busServices ?? []) bus.dispose();
     this.buildingVisibility.dispose();
+    this.treeField?.dispose();
     this._facadeTextures.clear();
     this._facadeMaterials.clear();
     scene.remove(this.group);

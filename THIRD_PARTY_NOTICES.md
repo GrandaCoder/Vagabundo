@@ -36,6 +36,7 @@ Additional adapted modules at the same Slop New York revision: src/graphics/Atmo
 The time-of-day profiles (`golden`, `midday`, `blue-hour`, `night`) in `src/graphics/Atmosphere.js` are adapted from `js/lighting.js` and remain driven by BAZUKO's Bogotá clock.
 `src/graphics/ShadowProxies.js` adapts the cell-based shadow stand-ins of `js/scene-culling.js` (position-only casters merged per cell and face side on a layer only the sun cascades render), with 64 m cells for Bogotá's scale and building stand-ins built from BAZUKO's fading wall and roof parts.
 `src/graphics/InstancedChunks.js` adapts `chunkInstancedMesh` from the same file: copies of a repeated model (BAZUKO's street lamps) become one InstancedMesh per model mesh and 64 m cell, sharing geometry and material, culled per cell by the view and each cascade.
+`src/world/bogota/TreeField.js` adapts `js/trees.js` (seeded growth, leaf atlas with coverage-preserving mips, bark tubes and leaf cards, three levels of detail per cell) and `src/graphics/TreeMaterial.js` adapts `createTreeMaterial` and `FoliageLightingModel` from `js/tsl-materials.js`. The New York species (London plane, honey locust, American elm) are replaced by Bogotá species (urapán, eucalipto, caucho sabanero) with their own leaf sprays, growth rules, tints and barks; distances and cells follow BAZUKO's scale and the wind blows from the east-southeast.
 
 ## Slop New York — traffic, vehicle contacts and crash effects
 
