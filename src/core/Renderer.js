@@ -123,12 +123,16 @@ export class Renderer {
       this._ensurePipeline(scene,camera);
       const target=this.instance.getRenderTarget(),targets=this.instance.getMRT(),started=performance.now();
       this.compilingDynamic=true;
+      // compileAsync construye los nodos después de su primer await y lee getMRT() en ese momento:
+      // el destino MRT debe seguir puesto hasta que termine, o el shader sale con una sola salida
+      // y el pipeline (creado con el contexto MRT) falla. render() restaura el estado normal en
+      // los cuadros que caen en medio y vuelve a poner este al terminar.
+      this._compileState={target:this.pipeline.scenePass.renderTarget,mrt:this.pipeline.scenePass.getMRT(),restoreTarget:target,restoreMRT:targets};
       try{
-        this.instance.setRenderTarget(this.pipeline.scenePass.renderTarget);this.instance.setMRT(this.pipeline.scenePass.getMRT());
-        const compilation=withoutFrustumCulling([root],()=>this.instance.compileAsync(root,camera,scene));
-        this.instance.setRenderTarget(target);this.instance.setMRT(targets);
-        await compilation;
+        this.instance.setRenderTarget(this._compileState.target);this.instance.setMRT(this._compileState.mrt);
+        await withoutFrustumCulling([root],()=>this.instance.compileAsync(root,camera,scene));
       }finally{
+        this._compileState=null;
         this.instance.setRenderTarget(target);this.instance.setMRT(targets);this.compilingDynamic=false;
         this.diagnostics?.record('dynamic-compile',performance.now()-started);
       }
@@ -204,7 +208,8 @@ export class Renderer {
   }
 
   render(scene, camera, playerRoot = null, shadowLights = [], showSilhouette = true) {
-    const renderStarted=performance.now(),programs=this.diagnostics?.programs??0;
+    const renderStarted=performance.now(),programs=this.diagnostics?.programs??0,compiling=this._compileState;
+    if(compiling){this.instance.setRenderTarget(compiling.restoreTarget);this.instance.setMRT(compiling.restoreMRT);}
     syncVehicleBatches(scene,camera);
     this.instance.info.reset();
     this.culling.apply(camera, shadowLights);
@@ -221,6 +226,7 @@ export class Renderer {
       }
     } finally {
       this.culling.restore();
+      if(compiling&&this._compileState===compiling){this.instance.setRenderTarget(compiling.target);this.instance.setMRT(compiling.mrt);}
       const ms=performance.now()-renderStarted;
       if(this.diagnostics){this.diagnostics.maxRenderMs=Math.max(this.diagnostics.maxRenderMs,ms);if(ms>100)this.diagnostics.record('render',ms,{newPrograms:this.diagnostics.programs-programs,quality:this.effectiveQuality});}
     }

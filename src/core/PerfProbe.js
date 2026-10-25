@@ -75,7 +75,17 @@ export function installPerfProbe(game, target = globalThis) {
     breakdown: (top = 15) => drawBreakdown(game, top),
     /** Perfil de luz temporal ('midday', 'night'…; null vuelve al reloj). No se guarda. */
     timeProfile: (id = null) => game.sceneMgr.setTimeProfile(id),
-    get scene() { return game.sceneMgr.scene; }
+    get scene() { return game.sceneMgr.scene; },
+    /** Prepara el detalle completo del NPC más cercano que aún no lo tiene, como al acercarse en partida. */
+    npcDetail: async () => {
+      const position = game.player.position;
+      const npc = (game.world.active?.npcs ?? []).filter(n => !n.fullChar && !n._fullLoading)
+        .sort((a, b) => a.position.distanceTo(position) - b.position.distanceTo(position))[0];
+      if (!npc) return null;
+      const diagnostics = game.renderer.diagnostics, before = diagnostics.snapshot(), started = performance.now();
+      await npc._loadFull();
+      return { ms: Math.round(performance.now() - started), distance: Math.round(npc.position.distanceTo(position)), work: delta(diagnostics.snapshot(), before) };
+    }
   };
   target.__bazukoPerf = probe;
   return probe;
