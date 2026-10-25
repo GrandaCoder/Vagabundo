@@ -45,7 +45,7 @@ test('el ciclo de iluminación mantiene la calidad elegida y libera el mapa de s
   manager.sun.shadow.map = { dispose() { disposed++; } };
   manager.setQuality('media');
   assert.equal(disposed, 0);
-  manager.setShadowResolution('media');
+  manager.setShadowQuality('media');
   assert.equal(disposed, 1);
   assert.equal(manager.sun.shadow.map, null);
   assert.equal(manager.sun.shadow.mapSize.x, 1024);
@@ -53,11 +53,11 @@ test('el ciclo de iluminación mantiene la calidad elegida y libera el mapa de s
     manager.setTimeOfDay(hour);
     assert.ok(manager.scene.fog.far <= 160);
   }
-  manager.setQuality('baja'); manager.setTimeOfDay(12);
+  manager.setQuality('baja'); manager.setShadowQuality('baja'); manager.setTimeOfDay(12);
   assert.equal(manager.sun.castShadow, true);
   assert.equal(isShadowActive(manager.sun), false);
   assert.ok(manager.scene.fog.far <= 130);
-  manager.setQuality('alta'); manager.setShadowResolution('alta');
+  manager.setQuality('alta'); manager.setShadowQuality('alta');
   assert.equal(manager.sun.shadow.mapSize.x, 2048);
   assert.equal(isShadowActive(manager.sun), true);
   assert.ok(manager.scene.fog.far > 160);

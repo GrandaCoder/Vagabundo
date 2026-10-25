@@ -14,7 +14,7 @@ function fakeGame({ failGPU = false } = {}) {
   Object.assign(game, {
     _running: true,
     renderer: { quality: 'alta', setQuality(q, persist) { this.quality = q; calls.push(['renderer', q, persist]); }, render() { calls.push(['render']); }, waitForGPU: async () => { if (failGPU) throw new Error('device lost'); } },
-    sceneMgr: { scene: {}, sun: {}, setQuality: q => calls.push(['scene', q]), setShadowResolution: q => calls.push(['shadow', q]) },
+    sceneMgr: { scene: {}, sun: {}, setQuality: q => calls.push(['scene', q]), setShadowQuality: q => calls.push(['shadow', q]) },
     cameraRig: { camera: {}, setQuality() {} }, player: { root: {} }, world: { active: null }, weather: null
   });
   return { game, stored, calls };

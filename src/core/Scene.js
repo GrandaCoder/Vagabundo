@@ -56,7 +56,7 @@ export class SceneManager {
    */
   initializeAtmosphere(renderer){
     this.sun.removeFromParent();this.sun.target.removeFromParent();this.sun.dispose();
-    this.atmosphere=new Atmosphere(this.scene,renderer,this.ambient);this.sun=this.atmosphere.sun;this.atmosphere.setQuality(this.quality);this.atmosphere.setShadowResolution(this.shadowLevel??this.quality);
+    this.atmosphere=new Atmosphere(this.scene,renderer,this.ambient);this.sun=this.atmosphere.sun;this.atmosphere.setQuality(this.quality);this.atmosphere.setShadowQuality(this.shadowLevel??this.quality);
   }
 
   setTimeOfDay(hour) {
@@ -106,8 +106,6 @@ export class SceneManager {
     this.quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta';
     level = this.quality;
     if(this.atmosphere){this.atmosphere.setQuality(level);this.setTimeOfDay(this._hour??22);return;}
-    // Sombras pausadas en baja, sin cambiar castShadow (clave de todos los RenderObject).
-    setShadowActive(this.sun, level !== 'baja');
     if (level === 'baja') {
       if (this.scene.fog) {
         this.scene.fog.near = 40;
@@ -122,10 +120,15 @@ export class SceneManager {
     this.setTimeOfDay(this._hour ?? 6);
   }
 
-  /** Resolución del mapa de sombras de la calidad elegida; la presión de FPS no la cambia. */
-  setShadowResolution(level = 'alta') {
+  /**
+   * Sombras de la calidad elegida en el menú: resolución y, en baja, pausa (sin cambiar castShadow,
+   * clave de todos los RenderObject). La presión de FPS no las toca.
+   */
+  setShadowQuality(level = 'alta') {
     this.shadowLevel = level;
-    return this.atmosphere ? this.atmosphere.setShadowResolution(level) : setShadowResolution(this.sun, shadowResolutionFor(level));
+    if (this.atmosphere) return this.atmosphere.setShadowQuality(level);
+    setShadowActive(this.sun, level !== 'baja');
+    return setShadowResolution(this.sun, shadowResolutionFor(level));
   }
 
   _limitFog() {

@@ -1023,7 +1023,7 @@ export class Game {
     const quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta';
     this.renderer.setQuality(quality, persist);
     this.sceneMgr.setQuality(quality);
-    this.sceneMgr.setShadowResolution?.(quality);
+    this.sceneMgr.setShadowQuality?.(quality);
     this.cameraRig.setQuality?.(quality);
     this._effectiveQuality = null;
     this.world?.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);
