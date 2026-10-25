@@ -1,9 +1,10 @@
 import * as THREE from 'three/webgpu';
-import {texture,materialColor,materialRoughness,materialMetalness,positionWorld,positionView,normalView,vec3,vec4,float,mix,smoothstep,sin,time,mx_noise_float,faceDirection} from 'three/tsl';
+import {texture,materialColor,materialEmissive,materialRoughness,materialMetalness,positionWorld,positionView,normalView,vec3,vec4,float,mix,smoothstep,sin,time,mx_noise_float,faceDirection} from 'three/tsl';
 import {cityUniforms} from './GraphicsState.js';
 
 // Stable world-space microtexture: no geometry changes, random numbers or per-frame rebuilds.
 const grain=mx_noise_float(positionWorld.mul(12));
+const nightEmission=materialEmissive.mul(cityUniforms.lightsOn);
 function heightNormal(height,scale){
   const x=positionView.dFdx().normalize(),y=positionView.dFdy().normalize();
   const r1=y.cross(normalView),r2=normalView.cross(x),det=x.dot(r1).mul(faceDirection);
@@ -19,6 +20,8 @@ export class SurfaceMaterials {
     if(source.userData.visibilityFade){material.alphaHash=true;material.transparent=false;material.depthWrite=true;material.userData.ditherFade=true;source.userData.ditherFade=true;}
     // Preserve live references used by weather, night windows and cutaway walls.
     material.color=source.color;material.emissive=source.emissive;
+    // Static city lamps, windows and signs share the visual day/night switch.
+    material.emissiveNode=nightEmission;
     material.name=`${source.name||kind} · TSL Bogotá`;
     const graphKey=`${kind}:${!!source.emissiveMap}:${!!source.normalMap}:${!!source.bumpMap}`;
     const existing=this.graphs.get(graphKey);

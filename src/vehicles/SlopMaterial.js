@@ -377,7 +377,7 @@ export function createSlopMaterial(spec, fixedColorHex = null) {
   const tail = color(0xff0a12).mul(redLens.mul(tailShade).mul(brake.mul(2.1).add(nightHeadlamp.mul(0.4))));
   const stop = color(0xff0a12).mul(chmsl.mul(brake).mul(2.1));
   const turn = color(0xff9a14).mul(max(turnFront, turnRear).mul(blink).mul(2.2));
-  const sign=signLabel.mul(signFace).mul(night.mul(.5).add(.15));
+  const sign=signLabel.mul(signFace).mul(night.mul(.65));
 
   const mat = new THREE.MeshStandardNodeMaterial();
   if (fixed) mat.userData.carState = stateUniform;

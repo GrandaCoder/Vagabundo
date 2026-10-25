@@ -760,7 +760,8 @@ export class Bogota {
 
   /** Faroles, placas de nomenclatura, estación y bus de la troncal */
   _buildStreetProps(map) {
-    // faroles cada ~14 m en los andenes junto a la calzada
+    const lampPositions = [];
+    // Separación entre postes de al menos 30 m, también entre celdas vecinas y esquinas.
     for (let z = 2; z < map.length - 2; z += 7) {
       for (let x = 2; x < map[0].length - 2; x += 7) {
         let best = null;
@@ -770,7 +771,10 @@ export class Bogota {
           if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => map[tz + b]?.[tx + a] === 'road')) best = [tx, tz];
         }
         if (!best) continue;
-        const farol = new Farol(new THREE.Vector3(W(best[0]), SIDEWALK_Y, W(best[1])));
+        const position = new THREE.Vector3(W(best[0]), SIDEWALK_Y, W(best[1]));
+        if (lampPositions.some(other => other.distanceToSquared(position) < 30 * 30)) continue;
+        lampPositions.push(position);
+        const farol = new Farol(position);
         farol.group.userData.noMerge = true; // cambia de material de noche
         this.group.add(farol.group);
         this.props.push({ instance: farol });
@@ -1055,7 +1059,7 @@ export class Bogota {
   }
 
   setNightMode(isNight) {
-    for (const material of this.towerLights ?? []) material.emissiveIntensity = isNight ? 1.8 : .05;
+    for (const material of this.towerLights ?? []) material.emissiveIntensity = isNight ? 1.8 : 0;
     for (const p of this.props) p.instance.setNight?.(isNight);
     for (const m of this.facadeMats) m.emissiveIntensity = isNight ? 1.2 : 0;
     for (const material of this.buildingVisibility.closedMaterials.values()) {

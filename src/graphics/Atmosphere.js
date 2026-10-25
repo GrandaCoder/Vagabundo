@@ -51,7 +51,9 @@ export class Atmosphere {
   }
   update(hour,wetness=0,forceBake=false){
     const p=profileAt(hour,wetness);this.hour=hour;this.wetness=wetness;this.profile=p.id;this.profileLabel=p.label;
-    this.night.value=p.night;cityUniforms.night.value=p.night;cityUniforms.uInteriorGlow.value=.25+p.night;cityUniforms.wetness.value=wetness;cityUniforms.clouds.value=p.clouds;
+    const lightsOn = hour < 6 || hour >= 20;
+    cityUniforms.lightsOn.value = lightsOn ? 1 : 0;
+    this.night.value=p.night;cityUniforms.night.value=p.night;cityUniforms.uInteriorGlow.value=lightsOn ? 1.25 : 0;cityUniforms.wetness.value=wetness;cityUniforms.clouds.value=p.clouds;
     this.day=1-p.night;setShadowActive(this.sun,this.shadowsEnabled!==false&&p.night<.95);
     this.sun.intensity=p.sunIntensity;this.sun.color.copy(p.sunColor);
     const angle=(hour-6)/24*Math.PI*2;this.sun.position.set(Math.cos(angle)*.7,Math.max(.18,Math.sin(angle)),.45).normalize();this.sun.updateMatrixWorld();

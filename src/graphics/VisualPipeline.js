@@ -3,6 +3,7 @@ import * as THREE from 'three/webgpu';
 import {pass,mrt,output,normalView,positionView,metalness,roughness,vec2,smoothstep,vec4} from 'three/tsl';
 import {ssr} from 'three/addons/tsl/display/SSRNode.js';
 import {createPostProcessing} from './PostProcessing.js';
+import {GRAPHICS_PROFILES} from '../core/GraphicsQuality.js';
 export class VisualPipeline {
   constructor(renderer,scene,camera,quality,overlay,sharedScenePass=null){
     this.renderer=renderer;this.ownsScenePass=!sharedScenePass;this.scenePass=sharedScenePass??pass(scene,camera);this.quality=quality;
@@ -24,7 +25,9 @@ export class VisualPipeline {
     const update=this.scenePass.updateBefore.bind(this.scenePass);
     this.scenePass.updateBefore=frame=>{update(frame);if(!overlay)return;const target=renderer.getRenderTarget(),targets=renderer.getMRT();try{renderer.setRenderTarget(this.scenePass.renderTarget);renderer.setMRT(this.scenePass.getMRT());overlay();}finally{renderer.setRenderTarget(target);renderer.setMRT(targets);}};
     }
-    this.grade=createPostProcessing(renderer,this.scenePass.getTextureNode('output'),reflections,quality!=='baja');
+    // Preserve the sky/sun glow when adaptive quality drops; reduce its cost, not its intensity.
+    const profile=GRAPHICS_PROFILES[quality]??GRAPHICS_PROFILES.alta;
+    this.grade=createPostProcessing(renderer,this.scenePass.getTextureNode('output'),reflections,profile.bloom,profile.bloomResolution);
     this.pipeline=new THREE.RenderPipeline(renderer,this.grade.outputNode);
   }
   render(hour=12){this.grade.update(hour);this.pipeline.render();}

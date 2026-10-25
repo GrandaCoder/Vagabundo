@@ -263,11 +263,11 @@ export class Game {
     this.sceneMgr.setTimeOfDay(this.clock.hour);
     this.sceneMgr.followTarget(this.player.position);
     this.profiler?.mark('entorno');
-    this._wasNight = this.clock.isNight;
+    this._wasNight = this.sceneMgr.isVisualNight;
     district?.setNightMode?.(this._wasNight);
     this.dealer?.setNight(this._wasNight);
     this.world.update(0, this.player.position, this.cameraRig.camera);
-    this.localLights.update(0, this.player.position, (x, z) => district?.getGroundHeight?.(x, z) ?? 0, this.cameraRig.camera);
+    this.localLights.update(0, this.player.position, (x, z) => district?.getGroundHeight?.(x, z) ?? 0, this.cameraRig.camera, this.sceneMgr.isVisualNight);
     this.surfaceMaterials=new SurfaceMaterials();
     const surfaceKinds=new Map(Object.entries(district?.groundMaterials??{}).map(([kind,material])=>[material,kind]));
     this.surfaceMaterials.apply(this.sceneMgr.scene,surfaceKinds);
@@ -790,7 +790,7 @@ export class Game {
     this.sceneMgr.setTimeOfDay(this.clock.hour);
     this.sceneMgr.followTarget(this.player.position);
     this.profiler?.mark('entorno');
-    const isNight = this.clock.isNight;
+    const isNight = this.sceneMgr.isVisualNight;
     if (this._wasNight !== isNight) {
       this._wasNight = isNight;
       this.world.active?.setNightMode?.(isNight);
@@ -966,8 +966,8 @@ export class Game {
 
     this.localLights.setQuality?.(quality);
     this._syncOverlayLights();
-    for(const car of this.cars??[])car.setNight?.(this.clock.isNight);
-    for(const vehicle of this.traffic?.vehicles??[])vehicle.car.setNight?.(this.clock.isNight);
+    for(const car of this.cars??[])car.setNight?.(this.sceneMgr.isVisualNight);
+    for(const vehicle of this.traffic?.vehicles??[])vehicle.car.setNight?.(this.sceneMgr.isVisualNight);
     if (this._effectiveQuality !== quality) {
       this.renderer.diagnostics?.record('quality',0,{from:this._effectiveQuality,to:quality,pressure:this.renderer.resolution.pressure});
       this._effectiveQuality = quality;
@@ -975,7 +975,7 @@ export class Game {
     }
     const elapsed = this._lastRenderTime === undefined ? 0 : (now - this._lastRenderTime) / 1000;
     this._lastRenderTime = now;
-    this.localLights.update(elapsed, this.player.position, (x, z) => this.world.active?.getGroundHeight?.(x, z) ?? 0, this.cameraRig.camera);
+    this.localLights.update(elapsed, this.player.position, (x, z) => this.world.active?.getGroundHeight?.(x, z) ?? 0, this.cameraRig.camera, this.sceneMgr.isVisualNight);
     const showSilhouette = this.collisions.mayOccludePlayer?.(this.cameraRig.camera.position, this.player.position) ?? true;
     this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun], showSilhouette);
     if (this.performanceHUD.update(now, this.player.position, this.renderer, active, this.localLights)) {

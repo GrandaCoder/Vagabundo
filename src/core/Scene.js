@@ -95,6 +95,12 @@ export class SceneManager {
   }
 
   /** Selector temporal de desarrollo: no cambia el reloj ni se guarda. */
+  get isVisualNight() {
+    if (this._timeProfileOverride) return ['blue-hour', 'night'].includes(this._timeProfileOverride);
+    const hour = this._hour ?? 22;
+    return hour < 6 || hour >= 20;
+  }
+
   setTimeProfile(profileId = null) {
     const valid = ['golden','midday','blue-hour','night'];
     this._timeProfileOverride = profileId && valid.includes(profileId) ? profileId : null;

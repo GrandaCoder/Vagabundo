@@ -30,7 +30,7 @@ const LOOKS = {
   midnight: { exposure: 1.04, contrast: 1.08, saturation: 1.06, balance: [0.985, 1.00, 1.035], bloom: 0.30, threshold: 1.00 }
 };
 
-function createPostProcessing(renderer, sceneColor, reflections, enableBloom=true) {
+function createPostProcessing(renderer, sceneColor, reflections, enableBloom=true, bloomResolution=.5) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   // Exposure is applied before bloom so its threshold follows the image's exposed brightness.
   // RenderPipeline performs ACES and the output color-space conversion exactly once, after this graph.
@@ -48,7 +48,7 @@ function createPostProcessing(renderer, sceneColor, reflections, enableBloom=tru
   const bloomInput = vec4(exposed.mul(float(8.0).div(max(peak, 8.0))), 1.0);
   const bloomPass = bloom(bloomInput, 0.24, 0.40, 1.20);
   bloomPass.smoothWidth.value = 0.30;
-  bloomPass.setResolutionScale(0.5);
+  bloomPass.setResolutionScale(bloomResolution);
 
   const outputNode = Fn(() => {
     const color = (enableBloom?exposed.add(bloomPass.rgb):exposed).toVar();
