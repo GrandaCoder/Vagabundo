@@ -7,7 +7,6 @@ import {StableClusteredLighting} from '../graphics/StableClusteredLighting.js';
 import {VisualPipeline} from '../graphics/VisualPipeline.js';
 import * as THREE from 'three/webgpu';
 import { createWebGPURenderer,initializeWebGPU,WEBGPU_QUALITY_KEY } from './WebGPU.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { PlayerSilhouette } from './PlayerSilhouette.js';
 import { AdaptiveResolution } from './AdaptiveResolution.js';
 import { FrustumCulling } from './FrustumCulling.js';
@@ -57,16 +56,6 @@ export class Renderer {
     const wanted=effectiveQuality(this.quality ?? 'alta',this.resolution?.pressure??0);
     if(!this.readyQualities||this.readyQualities.has(wanted))return wanted;
     return this.readyQualities.has('baja')?'baja':this.quality;
-  }
-
-  /** Mapa de entorno neutro: da reflejos (charcos, vidrios) y luz rebotada a los materiales PBR */
-  createEnvironment() {
-    const pmrem = new THREE.PMREMGenerator(this.instance);
-    const room=new RoomEnvironment();
-    const target=pmrem.fromScene(room, 0.04);
-    const tex=target.texture;this.environment=target;room.dispose();
-    pmrem.dispose();
-    return tex;
   }
 
   _onResize() {

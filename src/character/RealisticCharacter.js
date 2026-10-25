@@ -10,8 +10,8 @@ import { buildCharacterClips } from './actionforge.js';
 import { PALETTES } from './look.js';
 
 const BASE = '/models/personaje/';
-// Animaciones descargadas de Mixamo (tools/personaje/mixamo_a_glb.py); si no están, las de prueba
-const ANIM_URLS = ['/models/animaciones.glb', '/models/animaciones-prueba.glb'];
+// Banco existente de respaldo; ActionForge sigue aportando los clips principales.
+const ANIM_URL = '/models/animaciones-prueba.glb';
 
 // El modelo mide ~1,7 m; el mundo usa la escala del personaje procedural (~1,85 m)
 export const REALISTIC_SCALE = 1.08;
@@ -69,12 +69,7 @@ export function randomReal(catalog, base = {}) {
 
 let animsPromise = null;
 function loadAnimations() {
-  animsPromise ??= (async () => {
-    for (const url of ANIM_URLS) {
-      try { return await loader.loadAsync(url); } catch { /* probar la siguiente */ }
-    }
-    throw new Error('No hay animaciones del personaje');
-  })();
+  animsPromise ??= loader.loadAsync(ANIM_URL);
   return animsPromise;
 }
 

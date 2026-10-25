@@ -196,7 +196,6 @@ export class Game {
       this.menu.open({title:'Se perdió la conexión con la GPU',sub:'Recarga para continuar. Tu guardado no se modificó.',render:()=>({body:el('p',{text:'El dispositivo gráfico dejó de responder.'}),foot:[button('Recargar',{onClick:()=>location.reload()})]})});
     };
     globalThis.window?.addEventListener('bazuko-gpu-lost',this.renderer.onDeviceLost);
-    this.sceneMgr.scene.environment=this.renderer.createEnvironment();
     this.sceneMgr.initializeAtmosphere?.(this.renderer.instance);
     await loading.stage('Construyendo la ciudad…', 1);
     this.world.loadDistrict('Bogota', this.collisions);
