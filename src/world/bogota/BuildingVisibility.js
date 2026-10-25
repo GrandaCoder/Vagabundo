@@ -116,6 +116,7 @@ export class BuildingVisibility {
             const copy = material.clone();
             copy.side = side;
             copy.userData.visibilityFade=true;
+            if (material.userData.cityFacade) { copy.alphaHash = true; copy.transparent = false; copy.depthWrite = true; copy.userData.ditherFade = true; }
             copy.userData.staticBatchKey = key;
             if (!this.closedMaterials.has(key)) {
               const closed = material.clone();
@@ -168,7 +169,8 @@ export class BuildingVisibility {
         if (!buckets.has(key)) buckets.set(key, { source: mesh, material, geometries: [] });
         const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
         // Las caras y los adornos comparten estos atributos; no se necesitan tangentes.
-        for (const name of Object.keys(geometry.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name);
+        const kept = ['position', 'normal', 'uv', ...(closed.userData.vertexAttributes ?? [])];
+        for (const name of Object.keys(geometry.attributes)) if (!kept.includes(name)) geometry.deleteAttribute(name);
         if (!geometry.attributes.uv) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 2), 2));
         if (carried) bakeVertexColor(geometry, carried.color);
         buckets.get(key).geometries.push(geometry);

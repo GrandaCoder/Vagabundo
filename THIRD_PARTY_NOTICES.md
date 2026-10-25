@@ -66,3 +66,5 @@ bridge heights, traffic lights, TransMilenio service and gameplay. They connect 
 algorithms to shared vehicle batches, steerable wheels and Howler's master output.
 Vertical contact filtering and bus route constraints are local additions. Geographic
 data, New York routes and additional driving modes are not imported.
+
+- `src/graphics/CityFacade.js` adapta a Bogotá la idea de fachadas procedurales con parámetros por vértice y filtrado por periodo de `tsl-materials.js` de Slop New York (MIT). No usa su mapa, coordenadas ni rótulos.
