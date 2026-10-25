@@ -19,7 +19,7 @@ test('F solo ocupa estacionados cercanos y salir conserva un unico controlador',
 });
 test('la conduccion avanza sobre +X, frena antes de retroceder y gira sin cambiar el collider',()=>{
  const f=fixture();f.driving.enter();for(let i=0;i<10;i++)f.driving.update(.1,f.input('KeyW'));
- assert.ok(f.car.position.x>4);assert.ok(f.driving.speed>0);assert.equal(f.player.position.x,f.car.position.x);
+ assert.ok(f.car.position.x>1&&f.car.position.x<3);assert.ok(f.driving.speed>0);assert.equal(f.player.position.x,f.car.position.x);
  f.driving.update(.1,f.input('KeyS'));assert.ok(f.driving.speed>0);
  const x=f.car.position.x;for(let i=0;i<20;i++)f.driving.update(.1,f.input('KeyW','KeyA'));assert.notEqual(f.car.group.rotation.y,0);assert.ok(f.car.position.x>x);assert.equal(f.car.length,4.3);
 });

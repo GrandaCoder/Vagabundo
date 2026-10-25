@@ -1,7 +1,7 @@
 // Adapted from Slop New York 1b54e165 (MIT); see THIRD_PARTY_NOTICES.md.
 import * as THREE from 'three/webgpu';
 import {cityUniforms} from '../graphics/GraphicsState.js';
-import {carLayout,CAR_PARTS} from './SlopGeometry.js';
+import {carLayout,CAR_PARTS,BUS_SPEC} from './SlopGeometry.js';
 import {
   Fn,
   float,
@@ -77,6 +77,12 @@ const coverage = (d) => {
 
 let _carPlateTexture;
 let taxiLabel;
+const localLabels=new Map();
+function localLabel(text){
+ if(localLabels.has(text))return localLabels.get(text);
+ if(typeof document==='undefined')return new THREE.DataTexture(new Uint8Array([255,255,255,255]),1,1);
+ const c=document.createElement('canvas');c.width=256;c.height=64;const ctx=c.getContext('2d');ctx.fillStyle='#edf1e9';ctx.fillRect(0,0,256,64);ctx.fillStyle='#20502c';ctx.font='bold 32px sans-serif';ctx.textAlign='center';ctx.fillText(text,128,43);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;localLabels.set(text,t);return t;
+}
 function taxiTexture(){
   if(taxiLabel)return taxiLabel;
   if(typeof document==='undefined')return taxiLabel=new THREE.DataTexture(new Uint8Array([255,240,190,255]),1,1);
@@ -114,6 +120,7 @@ function carPlateTexture() {
  * more than once into temporaries), so the fragment shader evaluates each SDF a single time.
  */
 export function createSlopMaterial(spec, fixedColorHex = null) {
+  if(spec.name==='bus')return createUrbanBusMaterial(fixedColorHex);
 
 
   const night=fixedColorHex!==null?uniform(0):attribute('carNight','float');
@@ -290,7 +297,8 @@ export function createSlopMaterial(spec, fixedColorHex = null) {
   // ---- Colour ---------------------------------------------------------------------------------------------------
   // Liveries: NYPD (white with blue & light-blue side stripes, lettering on the front doors); the taxi's door badges
   // and medallion number
-  const painted=paint;
+  const policeBand=smoothstep(.60,.64,p.y).mul(float(1).sub(smoothstep(.90,.94,p.y))).mul(step(.5,abs(n.x)));
+  const painted=spec.name==='police'?mix(paint,color(0x4d8038),policeBand):paint;
   // Panel shading: soft occlusion low down & under the arch lips; unpainted cladding (SUVs); door shut lines &
   // handles; trunk / hood shut lines; black cowl panel under the windshield
   const archLip = smoothstep(archR + 0.05, archR - 0.005, wheelDist).mul(smoothstep(0.6, 0.9, ax));
@@ -302,6 +310,10 @@ export function createSlopMaterial(spec, fixedColorHex = null) {
     seams = max(seams, roundedRect(vec2(p.z.sub(zh), p.y.sub(belt.sub(0.095))), vec2(0.06, 0.011), 0.008));
   }
   let body = mix(painted.mul(ao), color(0x1e2124), cladding);
+  if(spec.name==='police'){
+    const mask=step(.5,abs(n.x)).mul(step(.65,p.y)).mul(step(p.y,.90)).mul(step(abs(p.z),.6));
+    body=mix(body,texture(localLabel('POLICÍA'),vec2(p.z.mul(n.x.sign()).div(1.2).add(.5),p.y.sub(.65).div(.25))).rgb,mask);
+  }
   body = body.mul(one.sub(seams.mul(onDoors).mul(0.55))).mul(one.sub(panelSeam.mul(0.5)));
   body = mix(body, color(0x15181b), cowlPanel);
 
@@ -396,6 +408,111 @@ export function createSlopMaterial(spec, fixedColorHex = null) {
   mat.emissiveNode = headlamps.add(tail).add(stop).add(turn).add(sign);
 
 
+  return mat;
+}
+
+
+// Bus urbano adaptado de Slop New York 09361be1, MIT.
+const BUS_PARTS={BODY:0,TRIM:1,POD:2};
+function createUrbanBusMaterial(fixedColorHex) {
+
+  const s = BUS_SPEC;
+  const p = attribute('position', 'vec3');
+  const n = attribute('normal', 'vec3');
+  const partId = attribute('partId', 'float');
+  const fixed=fixedColorHex!==null, state=fixed?uniform(new THREE.Vector4()):attribute('carState','vec4'); const night=fixed?uniform(0):attribute('carNight','float');
+  const isBody = step(abs(partId.sub(BUS_PARTS.BODY)), 0.25);
+  const isTrim = step(abs(partId.sub(BUS_PARTS.TRIM)), 0.25);
+  const isPod = step(abs(partId.sub(BUS_PARTS.POD)), 0.25);
+  const ax = abs(p.x);
+  const one = float(1.0);
+
+  const front = smoothstep(0.1, 0.35, n.z).mul(step(s.zFront - 0.9, p.z)).mul(isBody);
+  const rear = smoothstep(0.1, 0.35, n.z.negate()).mul(step(p.z, s.zRear + 0.9)).mul(isBody);
+  const side = smoothstep(0.5, 0.75, abs(n.x)).mul(isBody);
+  const curb = step(p.x, 0.0);
+
+  // Windshield (wrapping round the corners), sign band, gasket; rear window & engine louvres
+  const frontGlass = roundedRect(vec2(p.x, p.y.sub(1.82)), vec2(1.2, 0.58), 0.14).mul(smoothstep(0.012, 0.024, ax)).mul(front);
+  const frontSeal = roundedRect(vec2(p.x, p.y.sub(1.82)), vec2(1.24, 0.62), 0.16).mul(front);
+  const signBand = roundedRect(vec2(p.x, p.y.sub(2.55)), vec2(1.02, 0.16), 0.04).mul(front);
+  const rearGlass = roundedRect(vec2(p.x, p.y.sub(2.06)), vec2(0.92, 0.36), 0.08).mul(rear);
+  const rearSeal = roundedRect(vec2(p.x, p.y.sub(2.06)), vec2(0.96, 0.4), 0.1).mul(rear);
+  const louvres = roundedRect(vec2(p.x, p.y.sub(0.98)), vec2(0.78, 0.34), 0.05).mul(rear);
+  const slats = step(0.5, fract(p.y.mul(16.0))).mul(0.45).add(0.4);
+
+  // Side window band with mullions; driver's window; curb-side doors (glazed leaves, frames)
+  const [wy0, wy1] = s.window;
+  const winMid = (wy0 + wy1) / 2;
+  const winHalf = (wy1 - wy0) / 2;
+  const sideBand = roundedRect(vec2(p.z.add(0.5), p.y.sub(winMid)), vec2(4.82, winHalf), 0.08).mul(side);
+  const mullion = smoothstep(0.03, 0.045, abs(fract(p.z.mul(0.8).add(0.35)).sub(0.5).mul(1.25)));
+  const sideSeal = roundedRect(vec2(p.z.add(0.5), p.y.sub(winMid)), vec2(4.86, winHalf + 0.04), 0.1).mul(side);
+  const driverWin = roundedRect(vec2(p.z.sub(4.86), p.y.sub(winMid + 0.04)), vec2(0.5, winHalf + 0.04), 0.1).mul(side).mul(one.sub(curb));
+  const door = (z0, z1) => {
+    const zc = (z0 + z1) / 2;
+    const hw = (z1 - z0) / 2;
+    const frame = roundedRect(vec2(p.z.sub(zc), p.y.sub(1.44)), vec2(hw, 1.0), 0.05);
+    const leaves = roundedRect(vec2(abs(p.z.sub(zc)).sub(hw * 0.5), p.y.sub(1.5)), vec2(hw * 0.4, 0.84), 0.035);
+    return { frame: frame.mul(side).mul(curb), glass: leaves.mul(side).mul(curb) };
+  };
+  const d0 = door(s.frontDoor[0], s.frontDoor[1]);
+  const d1 = door(s.rearDoor[0], s.rearDoor[1]);
+  const doorFrame = max(d0.frame, d1.frame);
+  const glass = clamp(max(max(frontGlass, rearGlass), max(max(sideBand.mul(mullion), driverWin), max(d0.glass, d1.glass))), 0.0, 1.0);
+  const seal = clamp(max(max(frontSeal, rearSeal), max(max(sideSeal, signBand), doorFrame)), 0.0, 1.0);
+
+  // MTA livery
+  const shadeY = smoothstep(0.34, 1.2, p.y).mul(0.2).add(0.8);
+  const blueStripe = smoothstep(0.9, 0.93, p.y).mul(smoothstep(1.2, 1.17, p.y));
+  const cyanRibbon = smoothstep(0.84, 0.86, p.y).mul(smoothstep(0.885, 0.865, p.y));
+  const skirt = smoothstep(0.53, 0.5, p.y);
+  const livery = mix(mix(mix(color(0x176eaa), color(0xe4ba36), blueStripe), color(0xc2d5dc), cyanRibbon), color(0x1c2026), skirt).mul(shadeY);
+
+  // Lamps: twin round headlamps & amber turn signals in black pods; red tail / brake light columns, amber turn &
+  // white reverse lamps at the rear corners; plates
+  const pod = roundedRect(vec2(ax.sub(0.86), p.y.sub(0.8)), vec2(0.27, 0.085), 0.06).mul(front);
+  const headLamp = max(
+    smoothstep(0.05, 0.04, length(vec2(ax.sub(0.72), p.y.sub(0.8)))),
+    smoothstep(0.05, 0.04, length(vec2(ax.sub(0.86), p.y.sub(0.8))))
+  ).mul(pod);
+  const turnFront = smoothstep(0.045, 0.035, length(vec2(ax.sub(1.02), p.y.sub(0.8)))).mul(pod);
+  const tailCol = roundedRect(vec2(ax.sub(1.04), p.y.sub(0.92)), vec2(0.075, 0.27), 0.05).mul(rear);
+  const tailLamp = tailCol.mul(smoothstep(0.93, 0.95, p.y));
+  const turnRear = tailCol.mul(smoothstep(0.92, 0.9, p.y)).mul(smoothstep(0.76, 0.78, p.y));
+  const reverse = tailCol.mul(smoothstep(0.75, 0.73, p.y));
+  const plate = roundedRect(vec2(p.x, p.y.sub(0.77)), vec2(0.16, 0.06), 0.008).mul(max(front.mul(step(ax, 0.3)), rear));
+
+  let body = mix(livery, color(0x15191e), seal);
+  const destination=texture(localLabel('BOGOTÁ · URBANO'),vec2(p.x.div(1.9).add(.5),p.y.sub(2.415).div(.27))).rgb;
+  body=mix(body,destination,signBand);
+  body = mix(body, color(0x1a1e23).mul(slats), louvres);
+  body = mix(body, color(0x111418), pod);
+  body = mix(body, mix(color(0xdcefff), color(0xffa21a), turnFront), max(headLamp, turnFront));
+  body = mix(body, color(0x9a0d14), tailLamp);
+  body = mix(body, color(0xc8641a), turnRear);
+  body = mix(body, color(0xe8eef2), reverse);
+  body = mix(body, color(0xf2b718), plate);
+  const glassTint = mix(color(0x0e1a26), color(0x1b3046), clamp(p.y.sub(1.3).mul(0.8), 0.0, 1.0));
+  body = mix(body, glassTint, glass);
+
+  const col = mix(mix(body, color(0x1b1f24), isTrim), color(0xc9ced3), isPod);
+
+  const mat = new THREE.MeshStandardNodeMaterial();
+  mat.colorNode = col;
+  mat.roughnessNode = mix(mix(mix(float(0.3), float(0.16), max(glass, max(headLamp, tailCol))), float(0.7), max(isTrim, seal.mul(one.sub(glass)))), float(0.45), isPod);
+  mat.metalnessNode = mix(mix(float(0.22), float(0.7), glass), float(0.05), max(isTrim, isPod));
+
+  const brake = state.x;
+  const blink = max(state.y.mul(step(0.0, p.x)), state.z.mul(step(p.x, 0.0)));
+  const nightHeadlamp = night;
+  mat.emissiveNode = color(0xd9efff)
+    .mul(pod.mul(0.45).add(headLamp.mul(1.35)))
+    .mul(nightHeadlamp)
+    .add(color(0xff9a14).mul(max(turnFront, turnRear).mul(blink).mul(2.0)))
+    .add(color(0xff0a12).mul(tailLamp.mul(brake.mul(1.5).add(night.mul(.75)))));
+
+  mat.userData.vehicleState={night,wheelAngle:uniform(0),paint:uniform(new THREE.Color('#176eaa')),braking:fixed?{get value(){return state.value.x;},set value(v){state.value.x=v;}}:{value:0}}; mat.userData.carState=fixed?state:null;
   return mat;
 }
 

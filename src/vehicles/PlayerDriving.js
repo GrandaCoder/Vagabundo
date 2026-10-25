@@ -56,6 +56,7 @@ export class PlayerDriving {
      car.animateDrive(this.speed*step,before*throttle<0);
    }
    const acceleration=(this.speed-before)/step,targetPitch=-THREE.MathUtils.clamp(acceleration/CAR_DRIVE.acceleration,-1,1)*.026,targetRoll=-this.steer*(this.speed/CAR_DRIVE.speed)*.092;
+   this.acceleration=acceleration;
    this.pitchVel+=((targetPitch-this.pitch)*68-this.pitchVel*11.2)*step;this.rollVel+=((targetRoll-this.roll)*68-this.rollVel*11.2)*step;
    this.pitch=THREE.MathUtils.clamp(this.pitch+this.pitchVel*step,-.22,.22);this.roll=THREE.MathUtils.clamp(this.roll+this.rollVel*step,-.26,.26);
    this.heaveVel+=(-this.heaveY*85-this.heaveVel*12)*step;this.heaveY=THREE.MathUtils.clamp(this.heaveY+this.heaveVel*step,-.08,.14);

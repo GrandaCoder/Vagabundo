@@ -12,9 +12,9 @@ export function getDrivingAssets(variant){
  }return bank.get(variant);
 }
 export function createDrivingVisual(car){
- const variant=car.modelKind==='car2'?'taxi':'sedan',spec=BODY_SPECS[variant],a=getDrivingAssets(variant),material=createSlopMaterial(spec,variant==='taxi'?'#edbd18':car.vehicle.material?.userData.vehicleState.paint.value??'#b6bdc4');
+ const variant=car.variant??(car.modelKind==='car2'?'taxi':'sedan'),spec=BODY_SPECS[variant],a=getDrivingAssets(variant),material=createSlopMaterial(spec,variant==='taxi'?'#edbd18':car.vehicle.material?.userData.vehicleState.paint.value??'#b6bdc4');
  const group=new THREE.Group(),oriented=new THREE.Group(),chassis=new THREE.Group(),wheels=[];
- const size=a.size;group.name='Carro ocupado';group.scale.set(car.length/size.z,(variant==='taxi'?1.45:1.75)/size.y,car.width/size.x);oriented.rotation.y=Math.PI/2;group.add(oriented);oriented.add(chassis);chassis.add(new THREE.Mesh(a.body,material));
+ const size=a.size;group.name='Carro ocupado';group.scale.set(car.length/size.z,(car.height??(variant==='taxi'?1.45:1.75))/size.y,car.width/size.x);oriented.rotation.y=Math.PI/2;group.add(oriented);oriented.add(chassis);chassis.add(new THREE.Mesh(a.body,material));
  for(const [i,side] of [-1,1].entries())for(const z of [-spec.wheelZ,spec.wheelZ]){
   const pivot=new THREE.Group(),spin=new THREE.Group();pivot.position.set(side*spec.wheelX,spec.wheelRadius,z);pivot.add(spin);spin.add(new THREE.Mesh(a.wheels[i][0],tyre),new THREE.Mesh(a.wheels[i][1],alloy));oriented.add(pivot);wheels.push({pivot,spin,front:z>0});
  }

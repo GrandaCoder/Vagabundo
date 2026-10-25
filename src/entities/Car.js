@@ -5,9 +5,10 @@ import * as THREE from 'three';
 import { COLORS, CAR_COOLDOWN } from '../utils/constants.js';
 import { makeVehicle } from '../world/bogota/vehicles.js';
 import { createVehicleVisual } from '../vehicles/VehicleVisuals.js';
+import { VEHICLE_TYPES } from '../vehicles/VehicleTypes.js';
 
 export class Car {
-  constructor(scene, position, rotation = 0, { traffic = false, visualMode = 'slop', visualFactory = createVehicleVisual } = {}) {
+  constructor(scene, position, rotation = 0, { traffic = false, variant = null, visualMode = 'slop', visualFactory = createVehicleVisual } = {}) {
     this.scene = scene;
     this.used = false;
     this.cooldown = 0;
@@ -24,12 +25,15 @@ export class Car {
 
     // Carro realista (portado de rebusque): particular o taxi amarillo, frente hacia +X local
     const kind = Math.random() < 0.3 ? 'taxi' : 'carro';
-    this.modelKind = kind === 'taxi' ? 'car2' : 'car1';
+    this.variant = variant ?? (kind === 'taxi' ? 'taxi' : 'sedan');
+    this.modelKind = this.variant === 'taxi' ? 'car2' : 'car1';
     this.visualSeed = Math.floor(Math.random() * 8);
     const v = makeVehicle(kind, this.visualSeed, { beams: false });
     this.vehicle = v;
     this.length = v.length;
     this.width = v.width;
+    this.height = VEHICLE_TYPES[this.variant]?.height ?? 1.75;
+    if (variant && VEHICLE_TYPES[variant]) {this.length=VEHICLE_TYPES[variant].length;this.width=VEHICLE_TYPES[variant].width;}
     v.group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.group.add(v.group);
 
@@ -85,7 +89,7 @@ export class Car {
     if(this._disposed)return {commit:()=>false,release(){}};
     const token=++this._visualToken;
     if(this.vehicle.mode===mode)return {commit:()=>true,release(){}};
-    const next=await this._visualFactory(mode,{variant:this.modelKind==='car2'?'taxi':'sedan',seed:this.visualSeed,length:this.length,width:this.width,scene:this.scene,mirrors:this.mirrors});
+    const next=await this._visualFactory(mode,{variant:this.variant,seed:this.visualSeed,length:this.length,width:this.width,scene:this.scene,mirrors:this.mirrors});
     next.mode=mode;
     let settled=false;
     const release=()=>{if(!settled){settled=true;next.dispose();}};

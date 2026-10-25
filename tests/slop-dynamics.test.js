@@ -10,7 +10,7 @@ test('IDM distingue carretera libre, seguimiento y obstaculo detenido',()=>{
  assert.equal(weightedMove(['recto','giro'],x=>x==='recto'?3:1,()=>.5),'recto');
 });
 test('la resistencia y freno de Slop no invierten la marcha, el impulso no recorta inercia',()=>{
- assert.ok(driveSpeed(20,1,false,.1)>20);assert.ok(driveSpeed(20,1,true,.1)>driveSpeed(20,1,false,.1));assert.ok(driveSpeed(30,1,false,.1)>23.5);
+ assert.ok(driveSpeed(5,1,false,.1)>5);assert.ok(driveSpeed(10,1,true,.1)>driveSpeed(10,1,false,.1));assert.ok(driveSpeed(20,1,false,.1)<20);assert.ok(driveSpeed(30,1,false,.1)>18);
  assert.equal(driveSpeed(.1,-1,false,1),0);assert.ok(driveSpeed(0,-1,false,.1)<0);assert.equal(driveSpeed(.1,0,false,10),0);
 });
 test('red bogotana solo conecta rutas coincidentes y carriles contiguos declarados',()=>{

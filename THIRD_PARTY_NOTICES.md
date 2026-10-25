@@ -1,5 +1,17 @@
 # Third-party code
 
+## Slop New York — update 09361be1
+
+Additional adaptations are pinned to revision `09361be1fe6a2efaee6ef62420a664c677e577b9` of https://github.com/mrdoob/slop-newyork and are covered by the MIT license and copyright notice below:
+
+- `actor-models.js`: urban bus loft/body material and SUV geometry; local Bogotá destination, police identification and colors replace foreign liveries. Entity dimensions, +X orientation and shared batches remain BAZUKO adapters.
+- `controllers.js`: power-limited acceleration, with BAZUKO player speed limits halved.
+- `traffic.js`: main-road yielding, blocked-exit checks and waiting priority adapted to Bogotá's path reservations; no geographic data imported.
+- `audio-synthesis.js`: combustion buffers, transmission and tire voices in `SlopMotorSynthesis.js`. Helicopter, bicycle and siren branches/resources are excluded. `audio-events.js` supplies horn synthesis alongside the existing crash adaptation.
+- `tsl-materials.js`: period-integrated facade filtering in `FacadeNodes.js`, adapted to local brick colors and BAZUKO night controls.
+
+The original revision remains recorded below for modules whose source has not changed.
+
 ## Slop New York — vehicle geometry
 
 Source: https://github.com/mrdoob/slop-newyork
