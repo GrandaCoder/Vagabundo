@@ -5,6 +5,7 @@ import {SunLight} from 'three/addons/lights/SunLight.js';
 import {SunLightNode} from 'three/addons/lights/SunLightNode.js';
 import {uniform,mix,vec4,float} from 'three/tsl';
 import {cityUniforms} from './GraphicsState.js';
+import {setShadowActive,setShadowResolution,shadowResolutionFor} from './ShadowState.js';
 
 // Time-of-day profiles adapted from Slop New York's lighting.js (MIT,
 // revision 1b54e165ddc26b3e951d5614d56a88995da1da38). The Bogotá clock
@@ -50,7 +51,7 @@ export class Atmosphere {
   update(hour,wetness=0,forceBake=false){
     const p=profileAt(hour,wetness);this.hour=hour;this.wetness=wetness;this.profile=p.id;this.profileLabel=p.label;
     this.night.value=p.night;cityUniforms.night.value=p.night;cityUniforms.uInteriorGlow.value=.25+p.night;cityUniforms.wetness.value=wetness;cityUniforms.clouds.value=p.clouds;
-    this.day=1-p.night;this.sun.castShadow=this.quality!=='baja'&&p.night<.95;
+    this.day=1-p.night;setShadowActive(this.sun,this.quality!=='baja'&&p.night<.95);
     this.sun.intensity=p.sunIntensity;this.sun.color.copy(p.sunColor);
     const angle=(hour-6)/24*Math.PI*2;this.sun.position.set(Math.cos(angle)*.7,Math.max(.18,Math.sin(angle)),.45).normalize();this.sun.updateMatrixWorld();
     this.ambient.intensity=p.ambient;this.ambient.color.copy(p.sky);this.ambient.groundColor.set('#846b52');
@@ -76,7 +77,8 @@ export class Atmosphere {
     try{this.target=this.pmrem.fromScene(this.envScene,0,.1,100,{renderTarget:this.target});this.scene.environment=this.target.texture;}
     finally{this.sky.showSunDisc.value=1;this.scene.add(this.sky);this.sky.position.copy(position);this.lastBakeMs=performance.now()-started;this.bakeCount=(this.bakeCount??0)+1;}
   }
-  setQuality(level){this.quality=level;this.sun.castShadow=level!=='baja'&&(this.day??0)>.05;const size=level==='alta'?2048:1024;if(this.sun.shadow.mapSize.x!==size){this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.sun.shadow.mapSize.set(size,size);this.sun.shadow.needsUpdate=true;}}
+  setQuality(level){this.quality=level;setShadowActive(this.sun,level!=='baja'&&(this.day??0)>.05);}
+  setShadowResolution(level){return setShadowResolution(this.sun,shadowResolutionFor(level));}
   followTarget(position){this.sky.position.copy(position);}
   dispose(){this.sky.removeFromParent();this.sky.geometry.dispose();this.sky.material.dispose();this.sun.removeFromParent();this.sun.dispose();this.target?.dispose();this.pmrem.dispose();}
 }

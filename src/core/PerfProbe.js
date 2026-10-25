@@ -35,6 +35,7 @@ export function installPerfProbe(game, target = globalThis) {
     toggleCamera: async (seconds = 2) => { game.hud?.cameraButton?.click(); return measure('cámara ' + game.cameraRig.mode, seconds); },
     quality: async (level, seconds = 3) => { await game.setGraphicsQuality(level, false); return measure('calidad ' + level, seconds); },
     pressure: (value, seconds = 3) => { game.renderer.resolution.pressure = value; return measure('pressure ' + value, seconds); },
+    ratio: (value, seconds = 3) => { game.renderer.resolution.ratio = value; game.renderer.instance.setPixelRatio(value); return measure('pixelRatio ' + value, seconds); },
     lockQuality: (locked = true) => { game.renderer.adaptiveLocked = locked; return locked; }
   };
   target.__bazukoPerf = probe;

@@ -910,6 +910,18 @@ export class Game {
     };
   }
 
+  /**
+   * Estado de una calidad efectiva, igual en partida y en el calentamiento. Solo toca valores de
+   * ejecución (resolución, luces locales, far, sombras pausadas): nada que cambie claves de render.
+   */
+  _applyQualityState(quality) {
+    this.localLights.setQuality?.(quality);
+    this.sceneMgr.setQuality(quality);
+    this.cameraRig.setQuality?.(quality);
+    if (this.world?.active) this.world.active.animationBudget = GRAPHICS_PROFILES[quality].animationBudget;
+    this.world?.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);
+  }
+
   /** La silueta compila según su lista de luces; debe ser la misma en el calentamiento y en partida. */
   _syncOverlayLights() {
     const pool=this.localLights?.pool;
@@ -930,10 +942,7 @@ export class Game {
     if (this._effectiveQuality !== quality) {
       this.renderer.diagnostics?.record('quality',0,{from:this._effectiveQuality,to:quality,pressure:this.renderer.resolution.pressure});
       this._effectiveQuality = quality;
-      this.sceneMgr.setQuality(quality);
-      this.cameraRig.setQuality?.(quality);
-      if (this.world.active) this.world.active.animationBudget = GRAPHICS_PROFILES[quality].animationBudget;
-      this.world.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);
+      this._applyQualityState(quality);
     }
     const elapsed = this._lastRenderTime === undefined ? 0 : (now - this._lastRenderTime) / 1000;
     this._lastRenderTime = now;
@@ -988,6 +997,7 @@ export class Game {
     const quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta';
     this.renderer.setQuality(quality);
     this.sceneMgr.setQuality(quality);
+    this.sceneMgr.setShadowResolution?.(quality);
     this.cameraRig.setQuality?.(quality);
     this._effectiveQuality = null;
     this.world?.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);

@@ -2,7 +2,7 @@ import {GraphicsDiagnostics} from './GraphicsDiagnostics.js';
 import {prepareSceneTextures} from './TextureBudget.js';
 import {collectShaderWarmupJobs,compileShaderJobs,withoutFrustumCulling} from './ShaderWarmup.js';
 import {syncVehicleBatches,disposeVehicleBatches} from '../vehicles/VehicleBatches.js';
-import {ClusteredLighting} from 'three/addons/lighting/ClusteredLighting.js';
+import {StableClusteredLighting} from '../graphics/StableClusteredLighting.js';
 import {VisualPipeline} from '../graphics/VisualPipeline.js';
 import * as THREE from 'three/webgpu';
 import { createWebGPURenderer,initializeWebGPU,WEBGPU_QUALITY_KEY } from './WebGPU.js';
@@ -48,8 +48,7 @@ export class Renderer {
     const limit = GRAPHICS_PROFILES[this.quality].pixelRatio;
     this.resolution.setLimit(Math.min(globalThis.window?.devicePixelRatio || 1, limit));
     this.instance.setPixelRatio(this.resolution.ratio);
-    this.instance.shadowMap.enabled = this.effectiveQuality !== 'baja';
-    this.instance.shadowMap.needsUpdate = true;
+    // shadowMap.enabled queda fijo: alternarlo reconstruye todos los RenderObject (ShadowState.js).
     try { if(persist)localStorage.setItem(WEBGPU_QUALITY_KEY, this.quality); } catch { /* sin almacenamiento */ }
   }
 
@@ -140,7 +139,7 @@ export class Renderer {
     return this._initialization ??= initializeWebGPU(this.instance).then(()=>{
       this.instance.onDeviceLost=info=>this.onDeviceLost?.(info);
       this.diagnostics.attach(this.instance.backend);this.diagnostics.attachRenderer(this.instance);
-      this.instance.lighting=new ClusteredLighting(256,32,28,48);
+      this.instance.lighting=new StableClusteredLighting(256,32,28,48);
       return this;
     });
   }
@@ -188,7 +187,7 @@ export class Renderer {
     const renderStarted=performance.now(),programs=this.diagnostics?.programs??0;
     syncVehicleBatches(scene,camera);
     this.instance.info.reset();
-    this.culling.apply(camera, this.instance.shadowMap.enabled ? shadowLights : []);
+    this.culling.apply(camera, shadowLights);
     try {
       if(this.instance.backend?.isWebGPUBackend){
       this._ensurePipeline(scene,camera);
@@ -210,12 +209,8 @@ export class Renderer {
     if (this.adaptiveLocked) return;
     if (this.resolution.sample(frameMs)) {
       this.diagnostics?.record('resolution',frameMs,{ratio:this.resolution.ratio,pressure:this.resolution.pressure,quality:this.effectiveQuality});
+      // Solo resolución: las sombras de la calidad efectiva se pausan en Atmosphere sin cambiar claves.
       if (this.instance.getPixelRatio() !== this.resolution.ratio) this.instance.setPixelRatio(this.resolution.ratio);
-      const shadows = this.effectiveQuality !== 'baja';
-      if (this.instance.shadowMap.enabled !== shadows) {
-        this.instance.shadowMap.enabled = shadows;
-        this.instance.shadowMap.needsUpdate = true;
-      }
     }
   }
 }

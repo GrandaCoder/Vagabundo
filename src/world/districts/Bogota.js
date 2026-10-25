@@ -383,11 +383,12 @@ export class Bogota {
     const wet = THREE.MathUtils.clamp(amount, 0, 1);
     if (this.groundMaterials.road) {
       this.groundMaterials.road.roughness = THREE.MathUtils.lerp(0.82, 0.42, wet);
-      this.groundMaterials.road.metalness = THREE.MathUtils.lerp(0.0, 0.18, wet);
+      // Nunca exactamente 0: en WebGPU pasar de 0 a >0 cambia la clave del material y lo reconstruye.
+      this.groundMaterials.road.metalness = THREE.MathUtils.lerp(0.001, 0.18, wet);
     }
     if (this.groundMaterials.busway) {
       this.groundMaterials.busway.roughness = THREE.MathUtils.lerp(1.0, 0.55, wet);
-      this.groundMaterials.busway.metalness = THREE.MathUtils.lerp(0.0, 0.12, wet);
+      this.groundMaterials.busway.metalness = THREE.MathUtils.lerp(0.001, 0.12, wet);
     }
     if (this.groundMaterials.sidewalk) {
       this.groundMaterials.sidewalk.roughness = THREE.MathUtils.lerp(0.75, 0.48, wet);
