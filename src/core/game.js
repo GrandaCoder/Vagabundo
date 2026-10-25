@@ -210,7 +210,7 @@ export class Game {
     if (this.weather) {
       this.weather.setWeather('llovizna', false);
       this.weather.timer = 0;
-      this.weather.wetness = .6;
+      this.weather.wetness = this.weather.isRaining ? .6 : 0;
     }
     // Cada entrada a la partida comienza delante del cambuche, incluso si
     // la partida guardada conserva una ubicación anterior de exploración.

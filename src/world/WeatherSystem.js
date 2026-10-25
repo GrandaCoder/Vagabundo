@@ -1,9 +1,13 @@
 // src/world/WeatherSystem.js
 import * as THREE from 'three';
 
+// Desactivada temporalmente; cambiar a true para volver a tener llovizna al iniciar y en el ciclo.
+export const RAIN_ENABLED = false;
+
 export class WeatherSystem {
   constructor(scene) {
     this.scene = scene;
+    this.rainEnabled = RAIN_ENABLED;
     this.weather = 'nublado'; // 'nublado' | 'llovizna'
     this.timer = 0;
     this.nextChange = 180 + Math.random() * 120; // 3 a 5 minutos
@@ -47,6 +51,7 @@ export class WeatherSystem {
   }
 
   setWeather(type, notify = true) {
+    if (type === 'llovizna' && !this.rainEnabled) return;
     if (this.weather === type) return;
     this.weather = type;
     this.isRaining = type === 'llovizna';
