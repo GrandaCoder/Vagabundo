@@ -34,6 +34,7 @@ The vehicle TSL material graph in src/vehicles/SlopMaterial.js is also adapted f
 
 Additional adapted modules at the same Slop New York revision: src/graphics/Atmosphere.js (sky, environment and cascaded-sun arrangement), src/graphics/PostProcessing.js (TSL color grading and bloom), and src/graphics/VisualPipeline.js (MRT and SSR arrangement). They are adjusted to BAZUKO's scale, clock, weather and quality profiles. These adaptations are covered by the MIT notice above.
 The time-of-day profiles (`golden`, `midday`, `blue-hour`, `night`) in `src/graphics/Atmosphere.js` are adapted from `js/lighting.js` and remain driven by BAZUKO's Bogotá clock.
+`src/graphics/ShadowProxies.js` adapts the cell-based shadow stand-ins of `js/scene-culling.js` (position-only casters merged per cell and face side on a layer only the sun cascades render), with 64 m cells for Bogotá's scale and building stand-ins built from BAZUKO's fading wall and roof parts.
 
 ## Slop New York — traffic, vehicle contacts and crash effects
 
