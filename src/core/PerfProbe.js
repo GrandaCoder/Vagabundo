@@ -33,7 +33,10 @@ export function installPerfProbe(game, target = globalThis) {
     idle: (seconds = 3) => measure('quieto', seconds),
     turn: (seconds = 4) => { const yaw = game.cameraRig.yaw; return measure('giro 360', seconds, p => { game.cameraRig.yaw = yaw + p * Math.PI * 2; }); },
     toggleCamera: async (seconds = 2) => { game.hud?.cameraButton?.click(); return measure('cámara ' + game.cameraRig.mode, seconds); },
-    quality: async (level, seconds = 3) => { await game.setGraphicsQuality(level, false); return measure('calidad ' + level, seconds); },
+    quality: async (level, seconds = 3) => {
+      const started = performance.now(), ok = await game.changeGraphicsQuality(level), changeMs = Math.round(performance.now() - started);
+      return { ...(await measure('calidad ' + level, seconds)), ok, changeMs };
+    },
     pressure: (value, seconds = 3) => { game.renderer.resolution.pressure = value; return measure('pressure ' + value, seconds); },
     ratio: (value, seconds = 3) => { game.renderer.resolution.ratio = value; game.renderer.instance.setPixelRatio(value); return measure('pixelRatio ' + value, seconds); },
     lockQuality: (locked = true) => { game.renderer.adaptiveLocked = locked; return locked; }

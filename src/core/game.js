@@ -52,6 +52,7 @@ import { FrameProfiler } from './FrameProfiler.js';
 import { loadInBatches, withLoadTimeout } from './Startup.js';
 import { NPC_LOD, npcShaderCoverage } from '../entities/Npc.js';
 import { paintLoadingFrame } from '../ui/LoadingScreen.js';
+import { WEBGPU_QUALITY_KEY } from './WebGPU.js';
 import { el, button } from '../ui/dom.js';
 import { Menu } from '../ui/Menu.js';
 import { createCreator } from '../ui/Creator.js';
@@ -1015,15 +1016,50 @@ export class Game {
     return this._vehicleVisualChange;
   }
 
-  setGraphicsQuality(level, notify = true) {
+  setGraphicsQuality(level, notify = true, persist = true) {
     const quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta';
-    this.renderer.setQuality(quality);
+    this.renderer.setQuality(quality, persist);
     this.sceneMgr.setQuality(quality);
     this.sceneMgr.setShadowResolution?.(quality);
     this.cameraRig.setQuality?.(quality);
     this._effectiveQuality = null;
     this.world?.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);
     if (notify) window.dispatchEvent(new CustomEvent('toast', { detail: { text: 'Calidad gráfica: ' + quality, type: 'info' } }));
+  }
+
+  /**
+   * Cambio manual desde el menú: prepara y dibuja la nueva calidad antes de darla por buena.
+   * Solo guarda la preferencia si terminó bien; si falla, vuelve a la anterior. No toca la partida.
+   */
+  changeGraphicsQuality(level, { onProgress = () => {} } = {}) {
+    if (this._qualityChange) return this._qualityChange;
+    const quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta', previous = this.renderer.quality;
+    if (quality === previous) return Promise.resolve(true);
+    this.qualityChanging = true;
+    this._qualityChange = (async () => {
+      try {
+        onProgress(`Preparando calidad ${quality}…`);
+        this.setGraphicsQuality(quality, false, false);
+        if (this._running) {
+          this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
+          await this.renderer.waitForGPU();
+          await paintLoadingFrame();
+        }
+        try { localStorage.setItem(WEBGPU_QUALITY_KEY, quality); } catch { /* sin almacenamiento */ }
+        onProgress(`Calidad ${quality} lista`);
+        window.dispatchEvent(new CustomEvent('toast', { detail: { text: 'Calidad gráfica: ' + quality, type: 'info' } }));
+        return true;
+      } catch (error) {
+        console.warn('[Calidad] No se pudo preparar ' + quality, error);
+        this.setGraphicsQuality(previous, false, false);
+        onProgress(`No se pudo cambiar; se mantiene ${previous}`);
+        return false;
+      } finally {
+        this.qualityChanging = false;
+        this._qualityChange = null;
+      }
+    })();
+    return this._qualityChange;
   }
 
   _registerRenderGroups() {

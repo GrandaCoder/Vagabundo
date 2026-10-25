@@ -432,6 +432,8 @@ body.is-loading #creator-modal { visibility: visible; }
   background: #1c2b24; color: #d9f9e6; border: 1px solid #54776a; cursor: pointer;
 }
 .pause-actions button:hover { background: #2b4238; }
+.pause-actions button:disabled { opacity: .5; cursor: progress; }
+.pause-hint { margin: 6px 0 0; font-size: 11px; color: #aaa; min-height: 1em; }
 .pause-details {
   font-size: 11px; color: #aaa; cursor: pointer;
 }
