@@ -36,7 +36,8 @@ const hex = value => color(value);
 
 function buildGraph() {
   const params = attribute('facadeParams', 'vec4'), tone = attribute('facadeTone', 'vec3');
-  const widthM = params.x, floors = round(params.y), style = round(params.z), seed = params.w;
+  // La semilla se redondea: interpolada entre vértices llega con error de 1e-5 y el seno de rnd lo amplifica en ruido por píxel.
+  const widthM = params.x, floors = round(params.y), style = round(params.z), seed = round(params.w);
   const coord = uv();
   const alongM = coord.x.mul(widthM), heightM = coord.y.mul(floors.mul(3));
   const floorF = heightM.div(3);
