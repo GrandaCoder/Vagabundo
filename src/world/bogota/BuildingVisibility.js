@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { geometryChunk } from './StaticGeometry.js';
+import { geometryChunk, MaterialDeduper, VertexColorCarriers, bakeVertexColor } from './StaticGeometry.js';
 
 const WALL_FACES = [0, 1, 4, 5];
 const LOW_WALL_HEIGHT = 0.65;
@@ -152,6 +152,9 @@ export class BuildingVisibility {
   /** Versión agrupada de las partes altas para tercera persona; conserva el recorte isométrico. */
   buildClosedView() {
     const group = new THREE.Group(), buckets = new Map();
+    // Cada edificio crea sus materiales: se unifican los idénticos y los lisos pasan a color por vértice.
+    const deduper = new MaterialDeduper(), carriers = new VertexColorCarriers();
+    this.closedCarriers = carriers;
     group.name = 'Edificios agrupados en tercera persona';
     group.userData.noMerge = true;
     group.visible = false;
@@ -159,20 +162,24 @@ export class BuildingVisibility {
       part.object.updateWorldMatrix(true, true);
       part.object.traverse(mesh => {
         if (!mesh.isMesh || Array.isArray(mesh.material)) return;
-        const key = `${mesh.material.userData.staticBatchKey ?? mesh.material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${geometryChunk(mesh.geometry, mesh.matrixWorld)}`;
-        if (!buckets.has(key)) buckets.set(key, { source: mesh, geometries: [] });
+        const closed = this.closedMaterials.get(mesh.material.userData.staticBatchKey) ?? mesh.material;
+        const resolved = deduper.resolve(closed), carried = carriers.resolve(resolved), material = carried?.material ?? resolved;
+        const key = `${material.uuid}|${mesh.castShadow}|${mesh.receiveShadow}|${geometryChunk(mesh.geometry, mesh.matrixWorld)}`;
+        if (!buckets.has(key)) buckets.set(key, { source: mesh, material, geometries: [] });
         const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
         // Las caras y los adornos comparten estos atributos; no se necesitan tangentes.
         for (const name of Object.keys(geometry.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geometry.deleteAttribute(name);
+        if (!geometry.attributes.uv) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 2), 2));
+        if (carried) bakeVertexColor(geometry, carried.color);
         buckets.get(key).geometries.push(geometry);
       });
     }
-    for (const { source, geometries } of buckets.values()) {
+    for (const { source, material, geometries } of buckets.values()) {
       const geometry = mergeGeometries(geometries);
       for (const temporary of geometries) temporary.dispose();
       if (!geometry) throw new Error('Geometría incompatible en edificios agrupados');
       // Los lotes nunca comparten un material que pueda atenuarse en isométrica.
-      const mesh = new THREE.Mesh(geometry, this.closedMaterials.get(source.material.userData.staticBatchKey) ?? source.material);
+      const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = source.castShadow;
       mesh.receiveShadow = source.receiveShadow;
       geometry.computeBoundingSphere();
@@ -239,6 +246,8 @@ export class BuildingVisibility {
 
   dispose() {
     for (const material of this.closedMaterials.values()) material.dispose();
+    for (const material of this.closedCarriers?.carriers.values() ?? []) material.dispose();
+    this.closedCarriers = null;
     this.closedMaterials.clear();
     this.closedView = null;
     this._closedMode = null;
