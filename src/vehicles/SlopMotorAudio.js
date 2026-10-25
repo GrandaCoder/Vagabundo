@@ -1,0 +1,25 @@
+import {createSynthResources,createMotorVoice} from './SlopMotorSynthesis.js';
+import {synthHorn} from './SlopCrashAudio.js';
+
+/** Mono voices from the donor, mixed through the existing master volume and city acoustics. */
+export class SlopMotorAudio {
+ constructor(howler){this.howler=howler;this.voices=new Map();this.horns=new Set();this.paused=false;}
+ get available(){return !!this.howler?.ctx?.createBuffer&&!!this.howler.masterGain;}
+ _context(){const ctx=this.howler.ctx;if(!this.available||ctx.state!=='running')return null;if(!this.resources)this.resources=createSynthResources(ctx);return ctx;}
+ update(dt,listener,vehicles,buses,gain){
+  if(this.paused)return;
+  const ctx=this._context();if(!ctx)return;
+  const entries=[...vehicles,...[buses].flat().filter(Boolean).map(car=>({car,speed:car.speed??0,variant:'bus'}))];
+  const near=entries.filter(v=>v.car.position.distanceTo(listener)<55).sort((a,b)=>a.car.position.distanceToSquared(listener)-b.car.position.distanceToSquared(listener)).slice(0,8);
+  const keep=new Set(near.map(v=>v.car));for(const [car,state] of this.voices)if(!keep.has(car)){state.voice.dispose();state.output.disconnect();this.voices.delete(car);}
+  for(const entry of near){const car=entry.car;let state=this.voices.get(car);
+   if(!state){const output=ctx.createGain();output.gain.value=0;output.connect(this.howler.masterGain);const kind=entry.variant==='bus'||car.variant==='bus'?'bus':car.variant==='suv'?'suv':'sedan';state={output,voice:createMotorVoice(ctx,this.resources,kind,output)};this.voices.set(car,state);}
+   const distance=car.position.distanceTo(listener);state.output.gain.setTargetAtTime(.28*Math.max(0,1-distance/55)*gain(car),ctx.currentTime,.08);
+   state.voice.update({speed:entry.speed??0,load:Math.max(0,Math.min(1,(entry.acceleration??0)/2)),seed:car.visualSeed??0});
+  }
+ }
+ honk(car,volume=.45){const ctx=this._context();if(!ctx||this.paused)return;const output=ctx.createGain(),source=ctx.createBufferSource();source.buffer=this.horn??=synthHorn(ctx,.55,17);output.gain.value=volume;source.connect(output);output.connect(this.howler.masterGain);this.horns.add(source);source.onended=()=>{source.disconnect();output.disconnect();this.horns.delete(source);};source.start();
+ }
+ setPaused(value){this.paused=value;if(value)this.clear();}
+ clear(){for(const state of this.voices.values()){state.voice.dispose();state.output.disconnect();}this.voices.clear();for(const source of [...this.horns]){source.stop();source.onended?.();}this.horns.clear();}
+}

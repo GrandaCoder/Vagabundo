@@ -3,7 +3,8 @@ const MAX_NEARBY_VEHICLES = 8;
 
 /** Buffers compartidos; identificadores, mezcla y claxon independientes por vehículo. */
 export class VehicleAudio {
-  constructor(sounds, random = Math.random, driverSounds = []) {
+  constructor(sounds, random = Math.random, driverSounds = [], synthesis = null) {
+    this.synthesis=synthesis;
     this.sounds = sounds;
     this.random = random;
     this.driverSounds = driverSounds;
@@ -20,11 +21,13 @@ export class VehicleAudio {
   }
 
   clear() {
+    this.synthesis?.clear();
     for (const state of this.instances.values()) this._stop(state);
     this.instances.clear();
   }
 
   setPaused(paused) {
+    this.synthesis?.setPaused(paused);
     if (this.paused === paused) return;
     this.paused = paused;
     for (const state of this.instances.values()) {
@@ -50,6 +53,7 @@ export class VehicleAudio {
 
   /** `gain(car)` es la atenuación por edificios entre el vehículo y el jugador (1 si no hay). */
   update(dt, position, vehicles = [], bus = null, gain = () => 1) {
+    this.synthesis?.update(dt,position,vehicles,bus,gain);
     const present = new Set(vehicles.map(vehicle => vehicle.car));
     const buses = [bus].flat().filter(Boolean);
     for (const vehicle of buses) present.add(vehicle);
@@ -78,8 +82,8 @@ export class VehicleAudio {
       state.cooldown = Math.max(0, state.cooldown - dt);
       state.blockedFor = entry.source.personBlocked ? state.blockedFor + dt : 0;
       if (!nearby.has(entry.car)) { this._stop(state); continue; }
-      const idle = this._loop(state, 'idle', this.sounds[entry.bus ? 'busIdle' : 'carIdle']);
-      const drive = this._loop(state, 'drive', this.sounds[entry.bus ? 'busDrive' : 'carDrive']);
+      const idle = this.synthesis?.available?null:this._loop(state, 'idle', this.sounds[entry.bus ? 'busIdle' : 'carIdle']);
+      const drive = this.synthesis?.available?null:this._loop(state, 'drive', this.sounds[entry.bus ? 'busDrive' : 'carDrive']);
       const mix = Math.min(1, Math.max(0, entry.source.speed) / 2.5), heard = gain(entry.car);
       const smoothing = 1 - Math.exp(-dt * 7);
       state.idleVolume += ((1 - mix) * (entry.bus ? .38 : .34) - state.idleVolume) * smoothing;
@@ -92,12 +96,10 @@ export class VehicleAudio {
       }
       if (state.blockedFor >= state.patience && state.cooldown === 0) {
         const sound = this.sounds[`horn${state.hornIndex + 1}`];
-        if (sound.state() === 'loaded') {
+        if (this.synthesis?.available || sound.state() === 'loaded') {
           if (state.horn) state.horn.sound.stop(state.horn.id);
-          const id = sound.play('honk');
-          state.horn = { sound, id };
-          sound.volume(.48 * heard, id);
-          sound.rate(state.pitch, id);
+          if(this.synthesis?.available)this.synthesis.honk(entry.car,.48*heard);
+          else {const id = sound.play('honk');state.horn = { sound, id };sound.volume(.48 * heard, id);sound.rate(state.pitch, id);}
           if (!entry.bus && entry.voiceDistance < 8 && this.driverSounds.length) {
             const index = Math.min(this.driverSounds.length - 1, Math.floor(this.random() * this.driverSounds.length));
             const remark = this.driverSounds[index];
