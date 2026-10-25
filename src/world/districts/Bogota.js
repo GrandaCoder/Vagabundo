@@ -35,7 +35,7 @@ import { VIADUCT, buildColpatriaViaduct, viaductHeight, viaductSurface } from '.
 import { TERMINAL, inTerminal, terminalGroundHeight, buildTransitTerminal } from '../bogota/TransitTerminal.js';
 import { LAKE_PARK, onLakeBridge, bridgeHeight, buildLakeWater } from '../bogota/LakePark.js';
 import { PigeonFlock } from '../../entities/PigeonFlock.js';
-import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper } from '../bogota/StaticGeometry.js';
+import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper, VertexColorCarriers, bakeVertexColor, isPlainSurface } from '../bogota/StaticGeometry.js';
 import { buildShadowProxies } from '../../graphics/ShadowProxies.js';
 import { instanceModelByCells } from '../../graphics/InstancedChunks.js';
 import { createTreeField, TREE_SPECIES_INDEX } from '../bogota/TreeField.js';
@@ -977,16 +977,19 @@ export class Bogota {
     this.group.updateMatrixWorld(true);
     const buckets = new Map();
     const replacedGeometries = new Set();
-    const materials = new MaterialDeduper(this._liveMaterials());
+    const live = this._liveMaterials(), materials = new MaterialDeduper(live), carriers = new VertexColorCarriers(live);
     const visit = (o) => {
       if (o.userData.update || o.userData.noMerge) return; // animados y faroles quedan aparte
       if (o.isMesh && !Array.isArray(o.material) && !o.isSkinnedMesh) {
-        if (!o.geometry.attributes.uv || !o.geometry.attributes.normal) return;
-        const material = materials.resolve(o.material);
+        // Sin mapas el UV no se usa: el tablero del puente, por ejemplo, no lo traía y quedaba en cientos de mallas sueltas.
+        if (!o.geometry.attributes.normal || (!o.geometry.attributes.uv && !isPlainSurface(o.material) && !o.material.isNodeMaterial)) return;
+        const resolved = materials.resolve(o.material), carried = carriers.resolve(resolved), material = carried?.material ?? resolved;
         // Conserva los índices: expandir cajas y planos duplicaba sus vértices.
         const key = `${material.uuid}|${o.castShadow}|${o.receiveShadow}|${!!o.geometry.index}|${geometryChunk(o.geometry, o.matrixWorld)}`;
         const g = o.geometry.clone();
         for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+        if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+        if (carried) bakeVertexColor(g, carried.color);
         g.applyMatrix4(o.matrixWorld);
         const bucket = buckets.get(key) ?? { mat: material, cast: o.castShadow, recv: o.receiveShadow, list: [], sources: [] };
         buckets.set(key, bucket);
@@ -1015,7 +1018,7 @@ export class Bogota {
     // Una geometría compartida por objetos animados sigue en uso.
     this.group.traverse((o) => replacedGeometries.delete(o.geometry));
     for (const geometry of replacedGeometries) geometry.dispose();
-    this.mergeStats = { buckets: buckets.size, unifiedMaterials: materials.replaced.size, disposedMaterials: materials.disposeUnused(this.group) };
+    this.mergeStats = { buckets: buckets.size, unifiedMaterials: materials.replaced.size, colorCarriers: carriers.carriers.size, disposedMaterials: materials.disposeUnused(this.group) };
   }
 
   // ---------- ciclo ----------

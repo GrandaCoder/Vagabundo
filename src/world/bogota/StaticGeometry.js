@@ -65,6 +65,49 @@ export class MaterialDeduper {
   }
 }
 
+/**
+ * Materiales lisos (sin mapas, emisión ni transparencia) que solo difieren en el color: la ciudad
+ * tenía un material, y con él un dibujo por chunk, por cada tono. Se dibujan con un material
+ * portador por clase de acabado y el tono viaja en un atributo de color por vértice (como en la
+ * ciudad de Slop New York, donde el color es dato y no un programa distinto).
+ */
+export function isPlainSurface(material) {
+  return !!material.isMeshStandardMaterial && !material.isMeshPhysicalMaterial && !material.isNodeMaterial
+    && !material.map && !material.emissiveMap && !material.normalMap && !material.bumpMap && !material.alphaMap
+    && !material.aoMap && !material.roughnessMap && !material.metalnessMap && !material.vertexColors
+    && !material.transparent && material.opacity === 1 && !material.alphaTest && !material.flatShading
+    && material.emissive.getHex() === 0 && Object.keys(material.userData).length === 0;
+}
+
+export class VertexColorCarriers {
+  constructor(protectedMaterials = new Set()) {
+    this.protected = protectedMaterials;
+    this.carriers = new Map();
+  }
+
+  /** `{ material, color }` con el material portador y el color a hornear, o null si no aplica. */
+  resolve(material) {
+    if (this.protected.has(material) || !isPlainSurface(material)) return null;
+    const key = `${material.type}|${material.roughness}|${material.metalness}|${material.side}`;
+    let carrier = this.carriers.get(key);
+    if (!carrier) {
+      carrier = material.clone();
+      carrier.color.set(0xffffff);
+      carrier.vertexColors = true;
+      carrier.name = material.name ? `${material.name} · color por vértice` : 'color por vértice';
+      this.carriers.set(key, carrier);
+    }
+    return { material: carrier, color: material.color };
+  }
+}
+
+/** Añade al clon el atributo `color` con el tono del material de origen. */
+export function bakeVertexColor(geometry, color) {
+  const count = geometry.attributes.position.count, array = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) { array[i * 3] = color.r; array[i * 3 + 1] = color.g; array[i * 3 + 2] = color.b; }
+  geometry.setAttribute('color', new THREE.BufferAttribute(array, 3));
+}
+
 /** Mantiene geometría localizable por el frustum, sin una malla que cubra toda la ciudad. */
 export function mergeByChunk(geometries, material, { castShadow = false, receiveShadow = false } = {}) {
   const group = new THREE.Group(), buckets = new Map();
