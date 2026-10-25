@@ -24,6 +24,8 @@ import * as TX from '../bogota/textures.js';
 import * as P from '../bogota/props.js';
 import { Npc } from '../../entities/Npc.js';
 import { BuildingVisibility, createBuildingShell } from '../bogota/BuildingVisibility.js';
+import { ShopSignAtlas } from '../bogota/ShopSignAtlas.js';
+import { createCityFacadeMaterial, applyFacadeAttributes, facadeTone } from '../../graphics/CityFacade.js';
 import { PedestrianNavigation } from '../bogota/PedestrianNavigation.js';
 import { TrafficRoute } from '../bogota/TrafficRoute.js';
 import { BusService } from '../bogota/BusService.js';
@@ -35,7 +37,7 @@ import { VIADUCT, buildColpatriaViaduct, viaductHeight, viaductSurface } from '.
 import { TERMINAL, inTerminal, terminalGroundHeight, buildTransitTerminal } from '../bogota/TransitTerminal.js';
 import { LAKE_PARK, onLakeBridge, bridgeHeight, buildLakeWater } from '../bogota/LakePark.js';
 import { PigeonFlock } from '../../entities/PigeonFlock.js';
-import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper } from '../bogota/StaticGeometry.js';
+import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper, VertexColorCarriers, bakeVertexColor, isPlainSurface } from '../bogota/StaticGeometry.js';
 import { buildShadowProxies } from '../../graphics/ShadowProxies.js';
 import { instanceModelByCells } from '../../graphics/InstancedChunks.js';
 import { createTreeField, TREE_SPECIES_INDEX } from '../bogota/TreeField.js';
@@ -576,25 +578,10 @@ export class Bogota {
     const floors = skylineFloors(tiles[0][0], tiles[0][1], ruin);
     const h = floors * 3;
     const style = ruin ? 'ruina' : random() < 0.55 ? 'ladrillo' : 'pintada';
-    // el ladrillo necesita más resolución para que cada ladrillo (36 × 12 cm) se distinga
-    // Variantes compartidas: ampliar el barrio no triplica las texturas de fachada en la GPU.
-    const variant = Math.floor(random() * 2);
-    const textureKey = `${widthM}:${floors}:${style}:${variant}`;
-    let tex = this._facadeTextures.get(textureKey);
-    if (!tex) {
-      tex = TX.facade({ seed: Math.floor(random() * 1e6), width: widthM, floors, pxPerM: style === 'pintada' ? 28 : 40, shopFront: true, style });
-      this._facadeTextures.set(textureKey, tex);
-    }
-    for (const t of [tex.map, tex.emissiveMap, tex.bumpMap]) { t.anisotropy = 8; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; }
-    let facadeMat = this._facadeMaterials.get(textureKey);
-    if (!facadeMat) {
-      facadeMat = new THREE.MeshStandardMaterial({
-        map: tex.map, emissiveMap: tex.emissiveMap, emissive: '#ffffff', emissiveIntensity: 0,
-        bumpMap: tex.bumpMap, bumpScale: 0.4, roughness: 0.85
-      });
-      this._facadeMaterials.set(textureKey, facadeMat);
-      this.facadeMats.push(facadeMat);
-    }
+    // Un único material procedural para todas las fachadas: ancho, pisos, estilo y tono viajan como datos de vértice.
+    random();
+    const facadeMat = this._cityFacadeMaterial ??= createCityFacadeMaterial();
+    const facadeData = { width: widthM, floors, style, seed: Math.floor(random() * 1000), tone: facadeTone(style, random) };
 
     const [x0, z0] = tiles[0], [x1, z1] = tiles[tiles.length - 1];
     const cx = (W(x0) + W(x1)) / 2 - dx * (depth - 1) * T / 2;
@@ -611,6 +598,7 @@ export class Bogota {
       x: cx, z: cz, height: h, interiorMaterial: this._interiorMat,
       facadeFace: face, wallInteriorMaterial: sideMat, wallInteriorUV: U.brick
     });
+    shell.root.traverse(o => { if (o.isMesh && o.material === facadeMat) applyFacadeAttributes(o.geometry, facadeData); });
     this.group.add(shell.root);
 
     // punto de la fachada (centro, al ras de la calle) y orientación hacia afuera
@@ -621,10 +609,8 @@ export class Bogota {
     // aviso de local en el primer piso
     if (!ruin && random() < 0.55) {
       const [title, sub] = pick(SHOP_NAMES);
-      const map = signTexture({ title, sub, bg: pick(['#0b4fa3', '#c0392b', '#1f6b3a', '#f2c600', '#ffffff', '#6a1b9a']), fg: '#ffffff', w: 768, h: 192 });
-      if (map) {
-        const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(widthM * 0.85, 3.6), Math.min(widthM * 0.85, 3.6) / 4),
-          new THREE.MeshBasicMaterial({ map }));
+      const sign = (this._signAtlas ??= new ShopSignAtlas(signTexture)).mesh({ title, sub, bg: pick(['#0b4fa3', '#c0392b', '#1f6b3a', '#f2c600', '#ffffff', '#6a1b9a']), fg: '#ffffff' }, Math.min(widthM * 0.85, 3.6));
+      if (sign) {
         sign.position.set(fx + dx * 0.06 - cx, 3.05, fz + dz * 0.06 - cz);
         sign.rotation.y = yaw;
         shell.walls.get(face).add(sign);
@@ -977,16 +963,20 @@ export class Bogota {
     this.group.updateMatrixWorld(true);
     const buckets = new Map();
     const replacedGeometries = new Set();
-    const materials = new MaterialDeduper(this._liveMaterials());
+    const live = this._liveMaterials(), materials = new MaterialDeduper(live), carriers = new VertexColorCarriers(live);
     const visit = (o) => {
       if (o.userData.update || o.userData.noMerge) return; // animados y faroles quedan aparte
       if (o.isMesh && !Array.isArray(o.material) && !o.isSkinnedMesh) {
-        if (!o.geometry.attributes.uv || !o.geometry.attributes.normal) return;
-        const material = materials.resolve(o.material);
+        // Sin mapas el UV no se usa: el tablero del puente, por ejemplo, no lo traía y quedaba en cientos de mallas sueltas.
+        if (!o.geometry.attributes.normal || (!o.geometry.attributes.uv && !isPlainSurface(o.material) && !o.material.isNodeMaterial)) return;
+        const resolved = materials.resolve(o.material), carried = carriers.resolve(resolved), material = carried?.material ?? resolved;
         // Conserva los índices: expandir cajas y planos duplicaba sus vértices.
         const key = `${material.uuid}|${o.castShadow}|${o.receiveShadow}|${!!o.geometry.index}|${geometryChunk(o.geometry, o.matrixWorld)}`;
         const g = o.geometry.clone();
-        for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+        const kept = ['position', 'normal', 'uv', ...(o.material.userData.vertexAttributes ?? [])];
+        for (const name of Object.keys(g.attributes)) if (!kept.includes(name)) g.deleteAttribute(name);
+        if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+        if (carried) bakeVertexColor(g, carried.color);
         g.applyMatrix4(o.matrixWorld);
         const bucket = buckets.get(key) ?? { mat: material, cast: o.castShadow, recv: o.receiveShadow, list: [], sources: [] };
         buckets.set(key, bucket);
@@ -1015,7 +1005,7 @@ export class Bogota {
     // Una geometría compartida por objetos animados sigue en uso.
     this.group.traverse((o) => replacedGeometries.delete(o.geometry));
     for (const geometry of replacedGeometries) geometry.dispose();
-    this.mergeStats = { buckets: buckets.size, unifiedMaterials: materials.replaced.size, disposedMaterials: materials.disposeUnused(this.group) };
+    this.mergeStats = { buckets: buckets.size, unifiedMaterials: materials.replaced.size, colorCarriers: carriers.carriers.size, disposedMaterials: materials.disposeUnused(this.group) };
   }
 
   // ---------- ciclo ----------
@@ -1080,6 +1070,8 @@ export class Bogota {
     this.treeField?.dispose();
     this._facadeTextures.clear();
     this._facadeMaterials.clear();
+    this._cityFacadeMaterial?.dispose();
+    this._signAtlas?.dispose();
     scene.remove(this.group);
     for (const n of this.npcs) n.dispose();
     this.group.traverse((o) => {

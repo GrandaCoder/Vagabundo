@@ -30,6 +30,8 @@ export function signalState(time, axis) {
 
 export function intersectionPhase(signals,node,axis){return node.control==='priority'?0:signalState(signals.time,axis);}
 
+const SIGNAL_CELL = 64;
+
 export class TrafficSignals {
   constructor() {
     this.group = new THREE.Group();
@@ -139,11 +141,12 @@ export class TrafficSignals {
     this.model = { poleX: cnt ? sx / cnt : 0, poleZ: cnt ? sz / cnt : 0 };
 
     const geometry = mesh.geometry.clone();
-    geometry.setAttribute('trafficAxis', new THREE.InstancedBufferAttribute(new Float32Array(this.poles.map(pole => pole.axis)), 1));
     const material = createSignalMaterial(mesh.material, this.lensStates);
-    const im = new THREE.InstancedMesh(geometry, material, this.poles.length);
     const M = new THREE.Matrix4(), R = new THREE.Matrix4(), T = new THREE.Matrix4();
-    this.poles.forEach((p, i) => {
+    // Un lote por celda de 64 m: cada vista y cada cascada de sombra dibuja solo los semáforos cercanos
+    // (un único lote con todos repetía unos 70 mil triángulos en cada pasada).
+    const cells = new Map();
+    this.poles.forEach((p) => {
       const th = Math.atan2(-p.hz, p.hx); // la cara (-X local) mira al conductor (-rumbo)
       p.th = th;
       const c = Math.cos(th), s = Math.sin(th);
@@ -154,20 +157,38 @@ export class TrafficSignals {
       R.makeRotationY(th);
       T.makeTranslation(ox, 0, oz);
       M.copy(T).multiply(R).multiply(rel);
-      im.setMatrixAt(i, M);
+      const key = `${Math.floor(ox / SIGNAL_CELL)},${Math.floor(oz / SIGNAL_CELL)}`;
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key).push({ matrix: M.clone(), axis: p.axis });
     });
-    im.instanceMatrix.needsUpdate = true;
-    im.castShadow = true; im.receiveShadow = true;
-    im.frustumCulled = false;
-    this.group.add(im);
-    this.poleMesh = im;
+    const root = new THREE.Group();
+    root.name = 'Semáforos por celdas';
+    this.poleMeshes = [];
+    for (const [key, items] of cells) {
+      const chunk = new THREE.BufferGeometry();
+      for (const [name, attribute] of Object.entries(geometry.attributes)) chunk.setAttribute(name, attribute);
+      chunk.setIndex(geometry.index);
+      chunk.setAttribute('trafficAxis', new THREE.InstancedBufferAttribute(new Float32Array(items.map(item => item.axis)), 1));
+      const im = new THREE.InstancedMesh(chunk, material, items.length);
+      items.forEach((item, i) => im.setMatrixAt(i, item.matrix));
+      im.instanceMatrix.needsUpdate = true;
+      im.castShadow = true; im.receiveShadow = true;
+      im.name = `Semáforos · celda ${key}`;
+      im.computeBoundingSphere();
+      root.add(im);
+      this.poleMeshes.push(im);
+    }
+    this.poleGeometry = geometry;
+    this.group.add(root);
+    this.poleMesh = this.poleMeshes[0];
   }
 
 
 
   dispose() {
     this.group.removeFromParent();
-    this.poleMesh?.geometry.dispose(); this.poleMesh?.material.dispose();
+    for (const mesh of this.poleMeshes ?? []) mesh.geometry.dispose();
+    this.poleGeometry?.dispose(); this.poleMesh?.material.dispose();
     for(const mesh of this.stopSigns??[]){mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose();mesh.dispose();}
   }
 }

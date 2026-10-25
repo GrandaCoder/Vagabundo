@@ -224,3 +224,47 @@ test('panel muestra las coordenadas y FPS con pocas escrituras DOM y descarta la
     assert.ok(hud.metrics.min > 59);
   } finally { globalThis.document = previousDocument; }
 });
+
+test('las ramas estáticas congeladas no se recorren cada fotograma salvo que algo las modifique', () => {
+  const root = new THREE.Group(), bus = new THREE.Group(), house = new THREE.Group(), wall = new THREE.Mesh();
+  house.add(wall);
+  root.add(house, bus);
+  freezeStaticTransforms(root, bus);
+  let visits = 0;
+  const wallUpdate = wall.updateMatrixWorld;
+  wall.updateMatrixWorld = function (force) { visits++; return wallUpdate.call(this, force); };
+  root.updateMatrixWorld();
+  assert.equal(visits, 0, 'sin cambios no se entra en la rama');
+  assert.equal(root.children.includes(bus) && bus.updateMatrixWorld === THREE.Object3D.prototype.updateMatrixWorld, true, 'lo dinámico conserva su actualización');
+  house.position.x = 4;
+  house.updateMatrix();
+  root.updateMatrixWorld();
+  assert.equal(visits, 1, 'una matriz marcada como modificada recorre la rama');
+  assert.equal(wall.matrixWorld.elements[12], 0, 'la pared congelada no recalcula su matriz de mundo');
+  visits = 0;
+  house.add(new THREE.Mesh());
+  root.updateMatrixWorld();
+  assert.equal(visits, 1, 'un hijo añadido después de congelar devuelve la rama al recorrido normal');
+  assert.equal(house.updateMatrixWorld, THREE.Object3D.prototype.updateMatrixWorld);
+});
+
+test('un objeto oculto no recorre sus huesos y al mostrarse recupera las matrices de mundo', async () => {
+  const { skipWhenHidden } = await import('../src/graphics/HiddenSubtrees.js');
+  const parent = new THREE.Group(), root = new THREE.Group(), bone = new THREE.Object3D();
+  root.add(bone);
+  parent.add(root);
+  skipWhenHidden(root);
+  bone.position.x = 1;
+  parent.updateMatrixWorld(true);
+  assert.equal(bone.matrixWorld.elements[12], 1);
+  root.visible = false;
+  bone.position.x = 5;
+  root.position.z = 3;
+  parent.updateMatrixWorld();
+  assert.equal(bone.matrixWorld.elements[12], 1, 'oculto: el hueso no se recalcula');
+  assert.equal(root.matrixWorld.elements[14], 3, 'oculto: la matriz propia sí');
+  root.visible = true;
+  parent.updateMatrixWorld();
+  assert.equal(bone.matrixWorld.elements[12], 5, 'al mostrarse se actualiza todo');
+  assert.equal(bone.matrixWorld.elements[14], 3);
+});

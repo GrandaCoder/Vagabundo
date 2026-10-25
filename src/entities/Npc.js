@@ -5,6 +5,7 @@
 // Rendimiento: de lejos usa la versión liviana (cuerpo proxy de MakeHuman y piezas simplificadas);
 // la completa se prepara por cercania y se muestra al acercarse. Fuera de cámara no se dibuja ni se anima, y la animación
 // se actualiza menos seguido a media distancia.
+import { skipWhenHidden } from '../graphics/HiddenSubtrees.js';
 import * as THREE from 'three';
 import { createRealisticCharacter, loadCatalog, normalizeReal, optionsFor, REALISTIC_SCALE } from '../character/RealisticCharacter.js';
 import { randomLook, DEFAULT_LOOK } from '../character/look.js';
@@ -88,6 +89,7 @@ export class Npc {
     this._nextPosition = new THREE.Vector3();
     this.isWalkable = opts.isWalkable ?? (() => true);
     this.root = new THREE.Group();
+    skipWhenHidden(this.root);
     this.root.position.copy(position);
     this.root.rotation.y = opts.facing ?? Math.random() * Math.PI * 2;
     scene.add(this.root);

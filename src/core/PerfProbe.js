@@ -71,6 +71,19 @@ export function installPerfProbe(game, target = globalThis) {
     pressure: (value, seconds = 3) => { game.renderer.resolution.pressure = value; return measure('pressure ' + value, seconds); },
     ratio: (value, seconds = 3) => { game.renderer.resolution.ratio = value; game.renderer.instance.setPixelRatio(value); return measure('pixelRatio ' + value, seconds); },
     lockQuality: (locked = true) => { game.renderer.adaptiveLocked = locked; return locked; },
+    /** Milisegundos de GPU de los últimos cuadros (requiere ?perf y la función timestamp-query del navegador). */
+    gpu: async (seconds = 2) => {
+      const renderer = game.renderer.instance;
+      if (!renderer.backend.trackTimestamp) return { supported: false };
+      const samples = [], started = performance.now();
+      while (performance.now() - started < seconds * 1000) {
+        await nextFrame();
+        const ms = await renderer.resolveTimestampsAsync('render');
+        if (ms) samples.push(ms);
+      }
+      samples.sort((a, b) => a - b);
+      return { supported: true, samples: samples.length, medianMs: samples[Math.floor(samples.length / 2)] ?? null, maxMs: samples.at(-1) ?? null };
+    },
     /** Mallas que dibuja cada cámara (vista y cascadas de sombra), agrupadas por su rama de la escena. */
     breakdown: (top = 15) => drawBreakdown(game, top),
     /** Perfil de luz temporal ('midday', 'night'…; null vuelve al reloj). No se guarda. */
