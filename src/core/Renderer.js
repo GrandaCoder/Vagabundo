@@ -167,20 +167,39 @@ export class Renderer {
     this.pipeline=this._pipelines.get(quality);
   }
 
-  async warmup(scene,camera,playerRoot){
+  /**
+   * Dibuja la escena completa en cada calidad con su estado real (`applyQuality`) y en cada vista
+   * (`views`: tercera persona e isométrica), incluida la silueta, antes de ocultar la carga.
+   */
+  async warmup(scene,camera,playerRoot,{applyQuality=()=>{},views=[()=>'vista']}={}){
     const started=performance.now();this.culling.restore();
     const requested=this.effectiveQuality;
     this._overlayRoot=playerRoot;this._overlayEnabled=true;
-    await withoutFrustumCulling([scene],async()=>{
-      // Compile and draw all directions while loading, including the depth overlay.
-      for(const quality of ['baja','media','alta']){
-        this.onPrepareProgress?.(`Preparando vista completa: ${quality}`);
-        this._ensurePipeline(scene,camera,quality);this.pipeline.render(this.hour??22);
-        await this.waitForGPU();await paintLoadingFrame();
-      }
-    });
-    this._ensurePipeline(scene,camera,requested);
+    try{
+      await withoutFrustumCulling([scene],async()=>{
+        for(const quality of ['baja','media','alta']){
+          applyQuality(quality);
+          for(const view of views){
+            const label=view();
+            this.onPrepareProgress?.(`Preparando vista completa: ${quality} · ${label}`);
+            this._ensurePipeline(scene,camera,quality);this.pipeline.render(this.hour??22);
+            await this.waitForGPU();await paintLoadingFrame();
+          }
+        }
+      });
+    }finally{applyQuality(requested);this._ensurePipeline(scene,camera,requested);}
     this.startupStats.fullWarmupMs=performance.now()-started;
+  }
+
+  /** Trabajo gráfico que aparece al dibujar `views` ya calentadas; debería ser cero. */
+  async verifyPrepared(scene,camera,playerRoot,shadowLights,views){
+    const before=this.diagnostics.snapshot();
+    for(const view of views){view();this.render(scene,camera,playerRoot,shadowLights);await this.waitForGPU();}
+    const after=this.diagnostics.snapshot();
+    const leftover=Object.fromEntries(Object.keys(after).map(key=>[key,after[key]-before[key]]));
+    this.startupStats.verification=leftover;
+    if(leftover.programs||leftover.pipelines||leftover.discarded)console.warn('[WebGPU] Trabajo pendiente tras el calentamiento',leftover);
+    return leftover;
   }
 
   render(scene, camera, playerRoot = null, shadowLights = [], showSilhouette = true) {

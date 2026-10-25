@@ -280,13 +280,17 @@ export class Game {
     await loading.stage('Preparando el primer fotograma…', 4.8);
     const warmupStarted=performance.now();
     this.localLights.setQuality?.(this.renderer.effectiveQuality);this._syncOverlayLights();
-    await this.renderer.warmup?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root);
-    // Estas pasadas preparan sombras, geometría y silueta sin simular ni medir FPS.
-    for (let frame = 0; frame < 3; frame++) {
-      this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
-      await paintLoadingFrame();
-    }
-    await this.renderer.waitForGPU();
+    const startMode=this.cameraRig.mode,views=this._cameraWarmupViews(startMode);
+    try {
+      await this.renderer.warmup?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,{applyQuality:quality=>this._applyQualityState(quality),views});
+      // Estas pasadas preparan sombras, geometría y silueta sin simular ni medir FPS.
+      for (let frame = 0; frame < 3; frame++) {
+        this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
+        await paintLoadingFrame();
+      }
+      await this.renderer.waitForGPU();
+      await this.renderer.verifyPrepared?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,[this.sceneMgr.sun],views);
+    } finally { this._setCameraView(startMode); }
     this.renderer.startupStats={...this.renderer.startupStats,assetsMs,warmupMs:performance.now()-warmupStarted,totalMs:performance.now()-(this.startupStarted??performance.now())};
     console.info('[WebGPU] Carga completa '+JSON.stringify(this.renderer.startupStats));
     await loading.stage('Todo listo', 5);
@@ -920,6 +924,24 @@ export class Game {
     this.cameraRig.setQuality?.(quality);
     if (this.world?.active) this.world.active.animationBudget = GRAPHICS_PROFILES[quality].animationBudget;
     this.world?.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);
+  }
+
+  /**
+   * Coloca la cámara en un modo sin guardarlo ni soltar los controles y actualiza lo que depende
+   * de él (en tercera persona la ciudad dibuja las fachadas cerradas, en isométrica las piezas).
+   */
+  _setCameraView(mode) {
+    const rig = this.cameraRig;
+    rig.mode = mode; rig.camera.userData.cameraMode = mode; rig._snap = true;
+    rig.follow(this.player.position, 0, this.collisions);
+    this.world.update(0, this.player.position, rig.camera, this.traffic?.vehicles ?? []);
+    return mode;
+  }
+
+  /** Vistas del calentamiento: primero la otra cámara y al final la de inicio. */
+  _cameraWarmupViews(startMode = this.cameraRig.mode) {
+    const other = startMode === 'isometric' ? 'third-person' : 'isometric';
+    return [other, startMode].map(mode => () => this._setCameraView(mode));
   }
 
   /** La silueta compila según su lista de luces; debe ser la misma en el calentamiento y en partida. */
