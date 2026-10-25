@@ -24,6 +24,7 @@ import * as TX from '../bogota/textures.js';
 import * as P from '../bogota/props.js';
 import { Npc } from '../../entities/Npc.js';
 import { BuildingVisibility, createBuildingShell } from '../bogota/BuildingVisibility.js';
+import { ShopSignAtlas } from '../bogota/ShopSignAtlas.js';
 import { createCityFacadeMaterial, applyFacadeAttributes, facadeTone } from '../../graphics/CityFacade.js';
 import { PedestrianNavigation } from '../bogota/PedestrianNavigation.js';
 import { TrafficRoute } from '../bogota/TrafficRoute.js';
@@ -608,10 +609,8 @@ export class Bogota {
     // aviso de local en el primer piso
     if (!ruin && random() < 0.55) {
       const [title, sub] = pick(SHOP_NAMES);
-      const map = signTexture({ title, sub, bg: pick(['#0b4fa3', '#c0392b', '#1f6b3a', '#f2c600', '#ffffff', '#6a1b9a']), fg: '#ffffff', w: 768, h: 192 });
-      if (map) {
-        const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(widthM * 0.85, 3.6), Math.min(widthM * 0.85, 3.6) / 4),
-          new THREE.MeshBasicMaterial({ map }));
+      const sign = (this._signAtlas ??= new ShopSignAtlas(signTexture)).mesh({ title, sub, bg: pick(['#0b4fa3', '#c0392b', '#1f6b3a', '#f2c600', '#ffffff', '#6a1b9a']), fg: '#ffffff' }, Math.min(widthM * 0.85, 3.6));
+      if (sign) {
         sign.position.set(fx + dx * 0.06 - cx, 3.05, fz + dz * 0.06 - cz);
         sign.rotation.y = yaw;
         shell.walls.get(face).add(sign);
@@ -1072,6 +1071,7 @@ export class Bogota {
     this._facadeTextures.clear();
     this._facadeMaterials.clear();
     this._cityFacadeMaterial?.dispose();
+    this._signAtlas?.dispose();
     scene.remove(this.group);
     for (const n of this.npcs) n.dispose();
     this.group.traverse((o) => {

@@ -76,7 +76,8 @@ function buildGraph() {
   const glow = mix(mix(hex('#ff9e45').mul(warm), hex('#6f9dff'), cold), hex('#c9ecff'), white).mul(max(max(warm, cold), white));
   const wu = cx.sub(cellId).sub(float(.5).sub(widthCell.mul(.5))).div(widthCell), wv = floorF.sub(floorId).sub(top.sub(wh)).div(wh);
   const bars = max(3, round(widthCell.mul(cellM).mul(3.1)));
-  const barMask = max(pulse(wu.mul(bars), .9, 1), pulse(wv.mul(2), .9, 1)).mul(windowMask).mul(float(1).sub(ruin.mul(step(rnd(key, 11), .55))));
+  const barFade = float(1).sub(smoothstep(.12, .45, max(fwidth(wu.mul(bars)), fwidth(wv.mul(2)))));
+  const barMask = max(pulse(wu.mul(bars), .9, 1), pulse(wv.mul(2), .9, 1)).mul(barFade).mul(windowMask).mul(float(1).sub(ruin.mul(step(rnd(key, 11), .55))));
   const curtained = step(rnd(key, 12), .6).mul(max(max(warm, cold), white));
   const curtainColor = mix(mix(hex('#7a2c2c'), hex('#2c4d7a'), step(.33, rnd(key, 13))), hex('#3b2a55'), step(.66, rnd(key, 13)));
   const curtain = pulse(cx, float(.5).sub(widthCell.mul(.5)), float(.5).sub(widthCell.mul(.5)).add(widthCell.mul(rnd(key, 14).mul(.3).add(.3)))).mul(curtained).mul(windowMask);
