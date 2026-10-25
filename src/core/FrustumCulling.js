@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isShadowActive } from '../graphics/ShadowState.js';
 
 /** Descarte por grupos durante el render; nunca modifica la simulación ni la visibilidad de juego. */
 export class FrustumCulling {
@@ -28,8 +29,10 @@ export class FrustumCulling {
     this.frustum.setFromProjectionMatrix(this.matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),camera.coordinateSystem,camera.reversedDepth);
     this.shadowFrustums.length = 0;
     for (const light of shadowLights) {
-      if(light.isSunLight&&light.visible&&light.castShadow){light.shadow.updateMatrices(light,camera);this.shadowFrustums.push(light.shadow.getFrustum(0),light.shadow.getFrustum(1));continue;}
-      if (!light.visible || !light.castShadow || !light.isDirectionalLight) continue;
+      // Una sombra pausada (calidad baja o noche) no mantiene objetos solo por proyectar sombra.
+      if (!light.visible || !isShadowActive(light)) continue;
+      if(light.isSunLight){light.shadow.updateMatrices(light,camera);this.shadowFrustums.push(light.shadow.getFrustum(0),light.shadow.getFrustum(1));continue;}
+      if (!light.isDirectionalLight) continue;
       light.updateWorldMatrix(true, false);
       light.target.updateWorldMatrix(true, false);
       light.shadow.updateMatrices(light);

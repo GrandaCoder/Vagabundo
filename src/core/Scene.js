@@ -1,4 +1,6 @@
 import {Atmosphere} from '../graphics/Atmosphere.js';
+import {setShadowActive,setShadowResolution,shadowResolutionFor} from '../graphics/ShadowState.js';
+import {enableShadowProxyLayer} from '../graphics/ShadowProxies.js';
 import * as THREE from 'three';
 
 const _NIGHT = new THREE.Color(0x0c131d);     // Noche azul oscuro fría
@@ -36,6 +38,7 @@ export class SceneManager {
     this.sun.shadow.camera.bottom = -45;
     this.sun.shadow.bias = -0.0002;
     this.sun.shadow.normalBias = 0.035;
+    enableShadowProxyLayer(this.sun);
     this.scene.add(this.sun);
 
     this.sun.target.position.set(0, 0, 0);
@@ -53,7 +56,7 @@ export class SceneManager {
    */
   initializeAtmosphere(renderer){
     this.sun.removeFromParent();this.sun.target.removeFromParent();this.sun.dispose();
-    this.atmosphere=new Atmosphere(this.scene,renderer,this.ambient);this.sun=this.atmosphere.sun;this.atmosphere.setQuality(this.quality);
+    this.atmosphere=new Atmosphere(this.scene,renderer,this.ambient);this.sun=this.atmosphere.sun;this.atmosphere.setQuality(this.quality);this.atmosphere.setShadowQuality(this.shadowLevel??this.quality);
   }
 
   setTimeOfDay(hour) {
@@ -103,32 +106,29 @@ export class SceneManager {
     this.quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta';
     level = this.quality;
     if(this.atmosphere){this.atmosphere.setQuality(level);this.setTimeOfDay(this._hour??22);return;}
-    const size = level === 'media' ? 1024 : 2048;
-    if (this.sun.shadow.mapSize.x !== size) {
-      this.sun.shadow.map?.dispose();
-      this.sun.shadow.mapPass?.dispose();
-      this.sun.shadow.map = this.sun.shadow.mapPass = null;
-      this.sun.shadow.mapSize.set(size, size);
-      this.sun.shadow.needsUpdate = true;
-    }
     if (level === 'baja') {
-      this.sun.castShadow = false;
       if (this.scene.fog) {
         this.scene.fog.near = 40;
         this.scene.fog.far = 130;
       }
     } else if (level === 'media') {
-      this.sun.castShadow = true;
-      this.sun.shadow.mapSize.set(1024, 1024);
       if (this.scene.fog) {
         this.scene.fog.near = 45;
         this.scene.fog.far = 160;
       }
-    } else {
-      this.sun.castShadow = true;
-      this.sun.shadow.mapSize.set(2048, 2048);
     }
     this.setTimeOfDay(this._hour ?? 6);
+  }
+
+  /**
+   * Sombras de la calidad elegida en el menú: resolución y, en baja, pausa (sin cambiar castShadow,
+   * clave de todos los RenderObject). La presión de FPS no las toca.
+   */
+  setShadowQuality(level = 'alta') {
+    this.shadowLevel = level;
+    if (this.atmosphere) return this.atmosphere.setShadowQuality(level);
+    setShadowActive(this.sun, level !== 'baja');
+    return setShadowResolution(this.sun, shadowResolutionFor(level));
   }
 
   _limitFog() {

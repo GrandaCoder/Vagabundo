@@ -13,6 +13,7 @@ import { InteractionSystem } from '../src/systems/InteractionSystem.js';
 import { StatsSystem } from '../src/systems/StatsSystem.js';
 import { ITEMS } from '../src/data/items.js';
 import { Game } from '../src/core/game.js';
+import { isShadowActive } from '../src/graphics/ShadowState.js';
 
 beforeEach(() => {
   globalThis.window = new EventTarget();
@@ -33,7 +34,8 @@ test('los perfiles respetan su límite de resolución incluso después de la ada
     assert.ok(renderer.instance.ratio < cap);
     for (let i = 0; i < 4000; i++) renderer.adaptResolution(10);
     assert.ok(renderer.instance.ratio <= cap);
-    assert.equal(renderer.instance.shadowMap.enabled, quality !== 'baja');
+    // Nunca se alterna: cambiar shadowMap.enabled reconstruye todos los RenderObject.
+    assert.equal(renderer.instance.shadowMap.enabled, undefined);
     assert.equal(localStorage.getItem('bazuko.webgpu.graphics_quality'), quality);
   }
 });
@@ -42,6 +44,8 @@ test('el ciclo de iluminación mantiene la calidad elegida y libera el mapa de s
   const manager = new SceneManager(); let disposed = 0;
   manager.sun.shadow.map = { dispose() { disposed++; } };
   manager.setQuality('media');
+  assert.equal(disposed, 0);
+  manager.setShadowQuality('media');
   assert.equal(disposed, 1);
   assert.equal(manager.sun.shadow.map, null);
   assert.equal(manager.sun.shadow.mapSize.x, 1024);
@@ -49,12 +53,13 @@ test('el ciclo de iluminación mantiene la calidad elegida y libera el mapa de s
     manager.setTimeOfDay(hour);
     assert.ok(manager.scene.fog.far <= 160);
   }
-  manager.setQuality('baja'); manager.setTimeOfDay(12);
-  assert.equal(manager.sun.castShadow, false);
-  assert.ok(manager.scene.fog.far <= 130);
-  manager.setQuality('alta');
-  assert.equal(manager.sun.shadow.mapSize.x, 2048);
+  manager.setQuality('baja'); manager.setShadowQuality('baja'); manager.setTimeOfDay(12);
   assert.equal(manager.sun.castShadow, true);
+  assert.equal(isShadowActive(manager.sun), false);
+  assert.ok(manager.scene.fog.far <= 130);
+  manager.setQuality('alta'); manager.setShadowQuality('alta');
+  assert.equal(manager.sun.shadow.mapSize.x, 2048);
+  assert.equal(isShadowActive(manager.sun), true);
   assert.ok(manager.scene.fog.far > 160);
   assert.equal(manager.sun.shadow.normalBias, .035);
 });

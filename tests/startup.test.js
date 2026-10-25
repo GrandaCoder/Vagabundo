@@ -73,6 +73,7 @@ test('el inicio espera modelos, shaders y GPU antes de mostrar, medir o simular;
   const f = fixture(t);
   f.game.clock = new Clock();
   f.game.weather = new WeatherSystem(f.game.sceneMgr.scene);
+  f.game.weather.rainEnabled = true;
   f.game.world.active.reserved = { spawn: { x: 112.98, z: 97.84 } };
   f.game.world.active.getGroundHeight = () => .08;
   f.game._loadIfSave = () => {

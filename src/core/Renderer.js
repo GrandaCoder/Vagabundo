@@ -2,7 +2,8 @@ import {GraphicsDiagnostics} from './GraphicsDiagnostics.js';
 import {prepareSceneTextures} from './TextureBudget.js';
 import {collectShaderWarmupJobs,compileShaderJobs,withoutFrustumCulling} from './ShaderWarmup.js';
 import {syncVehicleBatches,disposeVehicleBatches} from '../vehicles/VehicleBatches.js';
-import {ClusteredLighting} from 'three/addons/lighting/ClusteredLighting.js';
+import {syncInstanceBatches,disposeInstanceBatches} from '../graphics/InstanceBatches.js';
+import {StableClusteredLighting} from '../graphics/StableClusteredLighting.js';
 import {VisualPipeline} from '../graphics/VisualPipeline.js';
 import * as THREE from 'three/webgpu';
 import { createWebGPURenderer,initializeWebGPU,WEBGPU_QUALITY_KEY } from './WebGPU.js';
@@ -12,6 +13,9 @@ import { AdaptiveResolution } from './AdaptiveResolution.js';
 import { FrustumCulling } from './FrustumCulling.js';
 import { paintLoadingFrame } from '../ui/LoadingScreen.js';
 import { GRAPHICS_PROFILES, effectiveQuality } from './GraphicsQuality.js';
+import { installStableSkinningNames } from './StableSkinning.js';
+
+installStableSkinningNames();
 
 export class Renderer {
   constructor(canvas) {
@@ -45,8 +49,7 @@ export class Renderer {
     const limit = GRAPHICS_PROFILES[this.quality].pixelRatio;
     this.resolution.setLimit(Math.min(globalThis.window?.devicePixelRatio || 1, limit));
     this.instance.setPixelRatio(this.resolution.ratio);
-    this.instance.shadowMap.enabled = this.effectiveQuality !== 'baja';
-    this.instance.shadowMap.needsUpdate = true;
+    // shadowMap.enabled queda fijo: alternarlo reconstruye todos los RenderObject (ShadowState.js).
     try { if(persist)localStorage.setItem(WEBGPU_QUALITY_KEY, this.quality); } catch { /* sin almacenamiento */ }
   }
 
@@ -69,7 +72,7 @@ export class Renderer {
   async prepare(scene, camera, extraModels = []) {
     const started=performance.now();
     console.info('[WebGPU] Preparando recursos');
-    syncVehicleBatches(scene,camera);
+    syncVehicleBatches(scene,camera);syncInstanceBatches(scene);
     const budget=await prepareSceneTextures([scene,...extraModels]);
     const textures=budget.textures;this.textureStats={unique:textures.size,resized:budget.resized,reused:budget.reused,prepareMs:performance.now()-started};
     console.info('[WebGPU] Texturas únicas',this.textureStats);
@@ -120,10 +123,16 @@ export class Renderer {
       this._ensurePipeline(scene,camera);
       const target=this.instance.getRenderTarget(),targets=this.instance.getMRT(),started=performance.now();
       this.compilingDynamic=true;
+      // compileAsync construye los nodos después de su primer await y lee getMRT() en ese momento:
+      // el destino MRT debe seguir puesto hasta que termine, o el shader sale con una sola salida
+      // y el pipeline (creado con el contexto MRT) falla. render() restaura el estado normal en
+      // los cuadros que caen en medio y vuelve a poner este al terminar.
+      this._compileState={target:this.pipeline.scenePass.renderTarget,mrt:this.pipeline.scenePass.getMRT(),restoreTarget:target,restoreMRT:targets};
       try{
-        this.instance.setRenderTarget(this.pipeline.scenePass.renderTarget);this.instance.setMRT(this.pipeline.scenePass.getMRT());
+        this.instance.setRenderTarget(this._compileState.target);this.instance.setMRT(this._compileState.mrt);
         await withoutFrustumCulling([root],()=>this.instance.compileAsync(root,camera,scene));
       }finally{
+        this._compileState=null;
         this.instance.setRenderTarget(target);this.instance.setMRT(targets);this.compilingDynamic=false;
         this.diagnostics?.record('dynamic-compile',performance.now()-started);
       }
@@ -134,8 +143,8 @@ export class Renderer {
   async initialize() {
     return this._initialization ??= initializeWebGPU(this.instance).then(()=>{
       this.instance.onDeviceLost=info=>this.onDeviceLost?.(info);
-      this.diagnostics.attach(this.instance.backend);
-      this.instance.lighting=new ClusteredLighting(256,32,28,48);
+      this.diagnostics.attach(this.instance.backend);this.diagnostics.attachRenderer(this.instance);
+      this.instance.lighting=new StableClusteredLighting(256,32,28,48);
       return this;
     });
   }
@@ -147,7 +156,7 @@ export class Renderer {
   dispose() {
     this._disposed=true;this.diagnostics?.dispose();
     window.removeEventListener('resize',this._resizeListener);document.removeEventListener('visibilitychange',this._visibilityListener);this.silhouette.material.dispose();
-    if(this._pipelineScene)disposeVehicleBatches(this._pipelineScene);
+    if(this._pipelineScene){disposeVehicleBatches(this._pipelineScene);disposeInstanceBatches(this._pipelineScene);}
     for(const pipeline of this._pipelines?.values()??[])pipeline.dispose();this._pipelines?.clear();this.environment?.dispose();this.instance.dispose();
   }
 
@@ -163,28 +172,49 @@ export class Renderer {
     this.pipeline=this._pipelines.get(quality);
   }
 
-  async warmup(scene,camera,playerRoot){
+  /**
+   * Dibuja la escena completa en cada calidad con su estado real (`applyQuality`) y en cada vista
+   * (`views`: tercera persona e isométrica), incluida la silueta, antes de ocultar la carga.
+   */
+  async warmup(scene,camera,playerRoot,{applyQuality=()=>{},views=[()=>'vista']}={}){
     const started=performance.now();this.culling.restore();
     const requested=this.effectiveQuality;
     this._overlayRoot=playerRoot;this._overlayEnabled=true;
-    await withoutFrustumCulling([scene],async()=>{
-      // Compile and draw all directions while loading, including the depth overlay.
-      for(const quality of ['baja','media','alta']){
-        this.onPrepareProgress?.(`Preparando vista completa: ${quality}`);
-        this._ensurePipeline(scene,camera,quality);this.pipeline.render(this.hour??22);
-        await this.waitForGPU();await paintLoadingFrame();
-      }
-    });
-    this._ensurePipeline(scene,camera,requested);
+    try{
+      await withoutFrustumCulling([scene],async()=>{
+        for(const quality of ['baja','media','alta']){
+          applyQuality(quality);
+          for(const view of views){
+            const label=view();
+            this.onPrepareProgress?.(`Preparando vista completa: ${quality} · ${label}`);
+            this._ensurePipeline(scene,camera,quality);this.pipeline.render(this.hour??22);
+            await this.waitForGPU();await paintLoadingFrame();
+          }
+        }
+      });
+    }finally{applyQuality(requested);this._ensurePipeline(scene,camera,requested);}
     this.startupStats.fullWarmupMs=performance.now()-started;
   }
 
+  /** Trabajo gráfico que aparece al dibujar `views` ya calentadas; debería ser cero. */
+  async verifyPrepared(scene,camera,playerRoot,shadowLights,views){
+    const before=this.diagnostics.snapshot();
+    for(const view of views){view();this.render(scene,camera,playerRoot,shadowLights);await this.waitForGPU();}
+    const after=this.diagnostics.snapshot();
+    const leftover=Object.fromEntries(Object.keys(after).map(key=>[key,after[key]-before[key]]));
+    this.startupStats.verification=leftover;
+    if(leftover.programs||leftover.pipelines||leftover.discarded)console.warn('[WebGPU] Trabajo pendiente tras el calentamiento',leftover);
+    return leftover;
+  }
+
   render(scene, camera, playerRoot = null, shadowLights = [], showSilhouette = true) {
-    if(this.compilingDynamic)return;
-    const renderStarted=performance.now(),programs=this.diagnostics?.programs??0;
+    const renderStarted=performance.now(),programs=this.diagnostics?.programs??0,compiling=this._compileState;
+    if(compiling){this.instance.setRenderTarget(compiling.restoreTarget);this.instance.setMRT(compiling.restoreMRT);}
     syncVehicleBatches(scene,camera);
     this.instance.info.reset();
-    this.culling.apply(camera, this.instance.shadowMap.enabled ? shadowLights : []);
+    this.culling.apply(camera, shadowLights);
+    // Después del descarte: los recogibles fuera de vista y sombra no entran en su lote.
+    syncInstanceBatches(scene);
     try {
       if(this.instance.backend?.isWebGPUBackend){
       this._ensurePipeline(scene,camera);
@@ -196,19 +226,19 @@ export class Renderer {
       }
     } finally {
       this.culling.restore();
+      if(compiling&&this._compileState===compiling){this.instance.setRenderTarget(compiling.target);this.instance.setMRT(compiling.mrt);}
       const ms=performance.now()-renderStarted;
       if(this.diagnostics){this.diagnostics.maxRenderMs=Math.max(this.diagnostics.maxRenderMs,ms);if(ms>100)this.diagnostics.record('render',ms,{newPrograms:this.diagnostics.programs-programs,quality:this.effectiveQuality});}
     }
   }
 
   adaptResolution(frameMs) {
+    // La sonda `?perf` puede fijar la calidad para medir sin cambios automáticos.
+    if (this.adaptiveLocked) return;
     if (this.resolution.sample(frameMs)) {
+      this.diagnostics?.record('resolution',frameMs,{ratio:this.resolution.ratio,pressure:this.resolution.pressure,quality:this.effectiveQuality});
+      // Solo resolución: las sombras de la calidad efectiva se pausan en Atmosphere sin cambiar claves.
       if (this.instance.getPixelRatio() !== this.resolution.ratio) this.instance.setPixelRatio(this.resolution.ratio);
-      const shadows = this.effectiveQuality !== 'baja';
-      if (this.instance.shadowMap.enabled !== shadows) {
-        this.instance.shadowMap.enabled = shadows;
-        this.instance.shadowMap.needsUpdate = true;
-      }
     }
   }
 }

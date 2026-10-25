@@ -35,7 +35,11 @@ import { VIADUCT, buildColpatriaViaduct, viaductHeight, viaductSurface } from '.
 import { TERMINAL, inTerminal, terminalGroundHeight, buildTransitTerminal } from '../bogota/TransitTerminal.js';
 import { LAKE_PARK, onLakeBridge, bridgeHeight, buildLakeWater } from '../bogota/LakePark.js';
 import { PigeonFlock } from '../../entities/PigeonFlock.js';
-import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors } from '../bogota/StaticGeometry.js';
+import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper } from '../bogota/StaticGeometry.js';
+import { buildShadowProxies } from '../../graphics/ShadowProxies.js';
+import { instanceModelByCells } from '../../graphics/InstancedChunks.js';
+import { createTreeField, TREE_SPECIES_INDEX } from '../bogota/TreeField.js';
+import { createImportedModel } from '../../utils/ImportedModels.js';
 import { CITY_WIDTH, CITY_HEIGHT, CITY_AREA_MULTIPLIER, CITY_CARRERAS as CARRERAS,
   CITY_CALLES as CALLES, ORIGINAL_CITY_WIDTH, ORIGINAL_CITY_HEIGHT, EXTENSION_PARKS,
   expandCity } from '../bogota/CityLayout.js';
@@ -205,6 +209,11 @@ export class Bogota {
       ...createRenderSectors(this.group, new Set([closedView, ...this.busServices.map(bus => bus.group)])),
       ...createRenderSectors(closedView)
     ];
+    this._buildShadowProxies(closedView);
+    // Árboles procedurales instanciados por celdas (trees.js de Slop): fuera de la fusión y de los sustitutos,
+    // porque su follaje se recorta y se mueve con el viento.
+    this.treeField = createTreeField(scene, this.treeSites ?? []);
+    this.group.add(this.treeField.group);
     scene.add(this.group);
     freezeStaticTransforms(this.group, new Set(this.busServices.map(bus => bus.group)));
     this.signals = new TrafficSignals();
@@ -383,11 +392,12 @@ export class Bogota {
     const wet = THREE.MathUtils.clamp(amount, 0, 1);
     if (this.groundMaterials.road) {
       this.groundMaterials.road.roughness = THREE.MathUtils.lerp(0.82, 0.42, wet);
-      this.groundMaterials.road.metalness = THREE.MathUtils.lerp(0.0, 0.18, wet);
+      // Nunca exactamente 0: en WebGPU pasar de 0 a >0 cambia la clave del material y lo reconstruye.
+      this.groundMaterials.road.metalness = THREE.MathUtils.lerp(0.001, 0.18, wet);
     }
     if (this.groundMaterials.busway) {
       this.groundMaterials.busway.roughness = THREE.MathUtils.lerp(1.0, 0.55, wet);
-      this.groundMaterials.busway.metalness = THREE.MathUtils.lerp(0.0, 0.12, wet);
+      this.groundMaterials.busway.metalness = THREE.MathUtils.lerp(0.001, 0.12, wet);
     }
     if (this.groundMaterials.sidewalk) {
       this.groundMaterials.sidewalk.roughness = THREE.MathUtils.lerp(0.75, 0.48, wet);
@@ -688,6 +698,11 @@ export class Bogota {
 
   }
 
+  /** Escala por especie para los parques pequeños del centro: copas de unos 5,5 a 7 m. */
+  _plantTree(x, z, species, scale = { urapan: .68, eucalipto: .7, caucho: .6 }[species]) {
+    (this.treeSites ??= []).push({ x, y: this.getGroundHeight(x, z), z, scale, species: TREE_SPECIES_INDEX[species] });
+  }
+
   _add(obj, x, z, rotY = 0) {
     obj.position.set(x, obj.position.y, z);
     obj.rotation.y = rotY;
@@ -822,7 +837,7 @@ export class Bogota {
       const x = rand(29.5, 38.5), z = rand(33.5, 45.5);
       if (Math.abs(x - 33.5) < 1.6 || Math.abs(z - 39) < 1.2) continue;
       if (Math.hypot(WX(x) - SHELTER_LOCATION.x, WZ(z) - SHELTER_LOCATION.z) < 6) continue;
-      this._add(P.tree(rand(0.9, 1.3)), WX(x), WZ(z));
+      this._plantTree(WX(x), WZ(z), i % 3 === 2 ? 'caucho' : 'urapan');
     }
     for (const [x, z, r] of [[32, 37, Math.PI / 2], [35, 41, -Math.PI / 2], [31, 39.8, 0], [36.5, 38.2, Math.PI]]) {
       if (Math.hypot(WX(x) - SHELTER_LOCATION.x, WZ(z) - SHELTER_LOCATION.z) < 5) continue;
@@ -837,7 +852,7 @@ export class Bogota {
   _buildExtensions() {
     for (const park of EXTENSION_PARKS) {
       for (let z=park.z0+1;z<park.z1;z+=4) for (let x=park.x0+1;x<park.x1;x+=4) {
-        if (this.map[z][x] === 'grass') this._add(P.tree(rand(0.9,1.3)), W(x), W(z));
+        if (this.map[z][x] === 'grass') this._plantTree(W(x), W(z), (x + z) % 3 ? 'urapan' : 'caucho');
       }
       const pathZ=Math.floor((park.z0+park.z1)/2);
       for (const x of [park.x0+2,park.x1-2]) {
@@ -854,7 +869,7 @@ export class Bogota {
     // Arbolado espaciado; solo crece en césped, nunca dentro del lago o sobre el puente.
     for (let z = 230; z < 314; z += 12) for (let x = 14; x < 230; x += 12) {
       if (this.map[Math.round(z / T)]?.[Math.round(x / T)] !== 'grass' || onLakeBridge(x, z)) continue;
-      this._add(P.tree(1 + ((x + z) % 3) * .12), x, z);
+      this._plantTree(x, z, (x + z) % 36 < 12 ? 'eucalipto' : (x + z) % 36 < 24 ? 'urapan' : 'caucho');
     }
     for (const [x, z] of [[20, 226], [132, 236], [134, 288], [20, 310], [156, 310]]) {
       const bench = new Banca(new THREE.Vector3(x, this.getGroundHeight(x, z), z), 0);
@@ -915,20 +930,59 @@ export class Bogota {
    * Junta en una sola malla todo lo estático que comparte material (postes de balcón, dulces,
    * gajos de paraguas, bolsas…): pasa de miles de llamadas de dibujo a unos cientos.
    */
+  /**
+   * Sombras de los inmuebles estáticos por celdas (scene-culling.js de Slop). Los edificios se
+   * sustituyen desde sus piezas y proyectan igual en ambas cámaras: el corte isométrico es una
+   * ayuda de la vista, el edificio sigue ahí. Lo animado y lo no fusionable conserva su sombra.
+   */
+  _buildShadowProxies(closedView) {
+    const city = [], parts = [];
+    const visit = (o) => {
+      if (o === closedView || o.userData.update || o.userData.noMerge) return;
+      if (o.isMesh) city.push(o);
+      for (const c of o.children) visit(c);
+    };
+    for (const c of this.group.children) visit(c);
+    for (const building of this.buildingVisibility?.buildings ?? []) for (const part of building.parts) {
+      part.object.traverse(o => { if (o.isMesh) parts.push(o); });
+    }
+    const casters = parts.filter(mesh => mesh.castShadow).length;
+    const cityProxies = buildShadowProxies(city, this.group, { name: 'Sombras de la ciudad por celdas' });
+    const buildingProxies = buildShadowProxies(parts, this.group, { name: 'Sombras de edificios por celdas', allowFade: true });
+    // La vista cerrada se arma con las mismas piezas: si todas quedaron sustituidas, tampoco proyecta.
+    if (buildingProxies.replaced === casters) closedView?.traverse(o => { if (o.isMesh) o.castShadow = false; });
+    this.shadowProxyStats = { city: cityProxies.replaced, buildings: buildingProxies.replaced, buildingCasters: casters,
+      proxies: cityProxies.proxies + buildingProxies.proxies };
+  }
+
+  /** Materiales que se cambian en partida (noche, humedad, cortes, props con estado): nunca se unifican. */
+  _liveMaterials() {
+    const live = new Set([...(this.facadeMats ?? []), ...(this.towerLights ?? []),
+      ...Object.values(this.groundMaterials ?? {}), ...(this.buildingVisibility?.closedMaterials?.values() ?? [])]);
+    const collect = o => { for (const m of [o.material].flat()) if (m) live.add(m); };
+    for (const { instance } of this.props) (instance.group ?? instance.root ?? instance.mesh)?.traverse?.(collect);
+    // Cualquier material que también use algo que no se fusiona (animado, farol, partes de edificio).
+    const skipped = o => { if (o.userData.update || o.userData.noMerge) { o.traverse(collect); return; } for (const c of o.children) skipped(c); };
+    for (const c of this.group.children) skipped(c);
+    return live;
+  }
+
   _mergeStatic() {
     this.group.updateMatrixWorld(true);
     const buckets = new Map();
     const replacedGeometries = new Set();
+    const materials = new MaterialDeduper(this._liveMaterials());
     const visit = (o) => {
       if (o.userData.update || o.userData.noMerge) return; // animados y faroles quedan aparte
       if (o.isMesh && !Array.isArray(o.material) && !o.isSkinnedMesh) {
         if (!o.geometry.attributes.uv || !o.geometry.attributes.normal) return;
+        const material = materials.resolve(o.material);
         // Conserva los índices: expandir cajas y planos duplicaba sus vértices.
-        const key = `${o.material.uuid}|${o.castShadow}|${o.receiveShadow}|${!!o.geometry.index}|${geometryChunk(o.geometry, o.matrixWorld)}`;
+        const key = `${material.uuid}|${o.castShadow}|${o.receiveShadow}|${!!o.geometry.index}|${geometryChunk(o.geometry, o.matrixWorld)}`;
         const g = o.geometry.clone();
         for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
         g.applyMatrix4(o.matrixWorld);
-        const bucket = buckets.get(key) ?? { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, list: [], sources: [] };
+        const bucket = buckets.get(key) ?? { mat: material, cast: o.castShadow, recv: o.receiveShadow, list: [], sources: [] };
         buckets.set(key, bucket);
         bucket.list.push(g);
         bucket.sources.push(o);
@@ -955,17 +1009,31 @@ export class Bogota {
     // Una geometría compartida por objetos animados sigue en uso.
     this.group.traverse((o) => replacedGeometries.delete(o.geometry));
     for (const geometry of replacedGeometries) geometry.dispose();
+    this.mergeStats = { buckets: buckets.size, unifiedMaterials: materials.replaced.size, disposedMaterials: materials.disposeUnused(this.group) };
   }
 
   // ---------- ciclo ----------
 
   async preloadDetails() {
+    const lamps = this.props.map(prop => prop.instance).filter(instance => instance instanceof Farol);
     await Promise.all([
       this.signals.preloadModel(),
-      ...this.props.map(prop => prop.instance.preloadModel?.())
+      this._instanceStreetLamps(lamps),
+      ...this.props.filter(prop => !lamps.includes(prop.instance)).map(prop => prop.instance.preloadModel?.())
     ]);
     // Actualizar los límites después de cargar el mobiliario.
     this.group.updateWorldMatrix(true, true);
+  }
+
+  /** Un modelo de farol compartido, dibujado por celdas (instancias de scene-culling.js de Slop). */
+  async _instanceStreetLamps(lamps) {
+    if (!lamps.length) return;
+    const model = await createImportedModel('lampara');
+    this.group.updateMatrixWorld(true);
+    for (const lamp of lamps) lamp.useInstancedModel();
+    this.streetLamps = instanceModelByCells(model, lamps.map(lamp => lamp.group.matrixWorld.clone()), { name: 'Faroles por celdas' });
+    this.streetLampStats = { lamps: lamps.length, draws: this.streetLamps.children.length };
+    this.group.add(this.streetLamps);
   }
 
   update(dt, playerPos, camera, trafficVehicles = []) {
@@ -1002,6 +1070,7 @@ export class Bogota {
     for (const prop of this.props) prop.instance.dispose?.();
     for (const bus of this.busServices ?? []) bus.dispose();
     this.buildingVisibility.dispose();
+    this.treeField?.dispose();
     this._facadeTextures.clear();
     this._facadeMaterials.clear();
     scene.remove(this.group);

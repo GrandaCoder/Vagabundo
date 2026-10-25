@@ -33,6 +33,7 @@ import { TrafficSystem } from '../systems/TrafficSystem.js';
 import { distributeShelterLoot, spreadPickupPositions } from '../systems/ShelterLoot.js';
 import { InventorySystem } from '../systems/InventorySystem.js';
 import { AudioSystem } from '../systems/AudioSystem.js';
+import { CityAcoustics } from '../systems/CityAcoustics.js';
 import { InteractionSystem } from '../systems/InteractionSystem.js';
 import { DiseaseSystem } from '../systems/DiseaseSystem.js';
 import { TalentSystem } from '../systems/TalentSystem.js';
@@ -50,7 +51,9 @@ import { LocalLights } from './LocalLights.js';
 import { GRAPHICS_PROFILES } from './GraphicsQuality.js';
 import { FrameProfiler } from './FrameProfiler.js';
 import { loadInBatches, withLoadTimeout } from './Startup.js';
+import { NPC_LOD, npcShaderCoverage } from '../entities/Npc.js';
 import { paintLoadingFrame } from '../ui/LoadingScreen.js';
+import { WEBGPU_QUALITY_KEY } from './WebGPU.js';
 import { el, button } from '../ui/dom.js';
 import { Menu } from '../ui/Menu.js';
 import { createCreator } from '../ui/Creator.js';
@@ -81,6 +84,8 @@ export class Game {
     this.collisions = new CollisionSystem();
     this.inventory = new InventorySystem();
     this.audio = new AudioSystem();
+    // Los edificios tapan motores, claxon, alarmas y voces con las mismas cajas del movimiento.
+    this.audio.setAcoustics(new CityAcoustics(this.collisions));
     this.stats = new StatsSystem();
     this.time = new TimeSystem();
     this.save = new SaveSystem();
@@ -209,7 +214,7 @@ export class Game {
     if (this.weather) {
       this.weather.setWeather('llovizna', false);
       this.weather.timer = 0;
-      this.weather.wetness = .6;
+      this.weather.wetness = this.weather.isRaining ? .6 : 0;
     }
     // Cada entrada a la partida comienza delante del cambuche, incluso si
     // la partida guardada conserva una ubicación anterior de exploración.
@@ -239,7 +244,7 @@ export class Game {
     ].filter(Boolean);
     await withLoadTimeout(Promise.all([
       modelo !== 'procedural' ? this.player.setModel('realista') : Promise.resolve(),
-      loadInBatches(district?.npcs ?? [], npc => npc.preload({full:!npc.position||npc.position.distanceTo(this.player.position)<18})),
+      this._preloadNpcs(district?.npcs ?? []),
       loadInBatches(importedEntities, entity => entity.preloadModel()),
       district?.preloadDetails?.() ?? Promise.resolve(),
       this.audio.ready
@@ -278,13 +283,18 @@ export class Game {
     } finally { if (rain) rain.visible = this.weather.isRaining; }
     await loading.stage('Preparando el primer fotograma…', 4.8);
     const warmupStarted=performance.now();
-    await this.renderer.warmup?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root);
-    // Estas pasadas preparan sombras, geometría y silueta sin simular ni medir FPS.
-    for (let frame = 0; frame < 3; frame++) {
-      this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
-      await paintLoadingFrame();
-    }
-    await this.renderer.waitForGPU();
+    this.localLights.setQuality?.(this.renderer.effectiveQuality);this._syncOverlayLights();
+    const startMode=this.cameraRig.mode,views=this._cameraWarmupViews(startMode);
+    try {
+      await this.renderer.warmup?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,{applyQuality:quality=>this._applyQualityState(quality),views});
+      // Estas pasadas preparan sombras, geometría y silueta sin simular ni medir FPS.
+      for (let frame = 0; frame < 3; frame++) {
+        this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
+        await paintLoadingFrame();
+      }
+      await this.renderer.waitForGPU();
+      await this.renderer.verifyPrepared?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,[this.sceneMgr.sun],views);
+    } finally { this._setCameraView(startMode); }
     this.renderer.startupStats={...this.renderer.startupStats,assetsMs,warmupMs:performance.now()-warmupStarted,totalMs:performance.now()-(this.startupStarted??performance.now())};
     console.info('[WebGPU] Carga completa '+JSON.stringify(this.renderer.startupStats));
     await loading.stage('Todo listo', 5);
@@ -300,6 +310,15 @@ export class Game {
     loading.finish();
     this.audio.startAmbient();
     requestAnimationFrame(this._loop);
+  }
+
+  /** Detalle completo para los NPC cercanos y para un NPC por cada variante de shader. */
+  async _preloadNpcs(npcs) {
+    const near=npc=>!npc.position||npc.position.distanceTo(this.player.position)<NPC_LOD.prefetch;
+    await loadInBatches(npcs,npc=>npc.preload({full:near(npc)}));
+    const coverage=npcShaderCoverage(npcs.filter(npc=>!near(npc)),npcs.filter(near));
+    this.npcPreloadStats={near:npcs.filter(near).length,coverage:coverage.length};
+    await loadInBatches(coverage,npc=>npc.preload());
   }
 
   /** Primera vez: abre el creador antes de jugar */
@@ -893,26 +912,66 @@ export class Game {
     return {
       environment:{bakeMs:this.sceneMgr.atmosphere?.lastBakeMs,bakes:this.sceneMgr.atmosphere?.bakeCount},diagnostics:this.renderer.diagnostics?.events, cpu: this.profiler.report(), frames: this.performanceHUD.metrics.recentStats(),
       graphics: { selected: this.renderer.quality, effective: this.renderer.effectiveQuality,
-        pixelRatio: this.renderer.instance.getPixelRatio(), ...this.renderer.instance.info.render }
+        pixelRatio: this.renderer.instance.getPixelRatio(), ...this.renderer.instance.info.render },
+      work: this.renderer.diagnostics?.snapshot?.(), startup: this.renderer.startupStats,
+      memoryMB: globalThis.performance?.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null
     };
   }
 
+  /**
+   * Estado de una calidad efectiva, igual en partida y en el calentamiento. Solo toca valores de
+   * ejecución (resolución, luces locales, far, sombras pausadas): nada que cambie claves de render.
+   */
+  _applyQualityState(quality) {
+    this.localLights.setQuality?.(quality);
+    this.sceneMgr.setQuality(quality);
+    this.cameraRig.setQuality?.(quality);
+    if (this.world?.active) this.world.active.animationBudget = GRAPHICS_PROFILES[quality].animationBudget;
+    this.world?.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);
+  }
+
+  /**
+   * Coloca la cámara en un modo sin guardarlo ni soltar los controles y actualiza lo que depende
+   * de él (en tercera persona la ciudad dibuja las fachadas cerradas, en isométrica las piezas).
+   */
+  _setCameraView(mode) {
+    const rig = this.cameraRig;
+    rig.mode = mode; rig.camera.userData.cameraMode = mode; rig._snap = true;
+    rig.follow(this.player.position, 0, this.collisions);
+    this.world.update(0, this.player.position, rig.camera, this.traffic?.vehicles ?? []);
+    // De noche la sombra está pausada; una pasada forzada (intensidad 0) compila sus pipelines
+    // en la carga para que el primer amanecer no lo haga en partida.
+    if (this.sceneMgr.sun?.shadow) this.sceneMgr.sun.shadow.needsUpdate = true;
+    return mode;
+  }
+
+  /** Vistas del calentamiento: primero la otra cámara y al final la de inicio. */
+  _cameraWarmupViews(startMode = this.cameraRig.mode) {
+    const other = startMode === 'isometric' ? 'third-person' : 'isometric';
+    return [other, startMode].map(mode => () => this._setCameraView(mode));
+  }
+
+  /** La silueta compila según su lista de luces; debe ser la misma en el calentamiento y en partida. */
+  _syncOverlayLights() {
+    const pool=this.localLights?.pool;
+    if(!pool||this._overlayLightCount===pool.length)return;
+    this._overlayLightCount=pool.length;
+    this.renderer.overlayLights=[this.sceneMgr.ambient,this.sceneMgr.sun,...pool,...(this.localLights.spotPool??[])];
+  }
+
   _renderFrame(now, active) {
-    if(this.renderer.compilingDynamic)return;
     this.cameraRig.driving=!!this.driving?.car;
     const quality = this.renderer.effectiveQuality;
     this.renderer.hour=this.clock.hour;this.sceneMgr.wetness=this.weather?.wetness??0;
 
     this.localLights.setQuality?.(quality);
-    if(this._overlayLightCount!==this.localLights.pool.length){this._overlayLightCount=this.localLights.pool.length;this.renderer.overlayLights=[this.sceneMgr.ambient,this.sceneMgr.sun,...this.localLights.pool,...(this.localLights.spotPool??[])];}
+    this._syncOverlayLights();
     for(const car of this.cars??[])car.setNight?.(this.clock.isNight);
     for(const vehicle of this.traffic?.vehicles??[])vehicle.car.setNight?.(this.clock.isNight);
     if (this._effectiveQuality !== quality) {
+      this.renderer.diagnostics?.record('quality',0,{from:this._effectiveQuality,to:quality,pressure:this.renderer.resolution.pressure});
       this._effectiveQuality = quality;
-      this.sceneMgr.setQuality(quality);
-      this.cameraRig.setQuality?.(quality);
-      if (this.world.active) this.world.active.animationBudget = GRAPHICS_PROFILES[quality].animationBudget;
-      this.world.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);
+      this._applyQualityState(quality);
     }
     const elapsed = this._lastRenderTime === undefined ? 0 : (now - this._lastRenderTime) / 1000;
     this._lastRenderTime = now;
@@ -963,14 +1022,50 @@ export class Game {
     return this._vehicleVisualChange;
   }
 
-  setGraphicsQuality(level, notify = true) {
+  setGraphicsQuality(level, notify = true, persist = true) {
     const quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta';
-    this.renderer.setQuality(quality);
+    this.renderer.setQuality(quality, persist);
     this.sceneMgr.setQuality(quality);
+    this.sceneMgr.setShadowQuality?.(quality);
     this.cameraRig.setQuality?.(quality);
     this._effectiveQuality = null;
     this.world?.active?.setWetness?.(quality === 'baja' ? 0 : this.weather?.wetness ?? 0);
     if (notify) window.dispatchEvent(new CustomEvent('toast', { detail: { text: 'Calidad gráfica: ' + quality, type: 'info' } }));
+  }
+
+  /**
+   * Cambio manual desde el menú: prepara y dibuja la nueva calidad antes de darla por buena.
+   * Solo guarda la preferencia si terminó bien; si falla, vuelve a la anterior. No toca la partida.
+   */
+  changeGraphicsQuality(level, { onProgress = () => {} } = {}) {
+    if (this._qualityChange) return this._qualityChange;
+    const quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta', previous = this.renderer.quality;
+    if (quality === previous) return Promise.resolve(true);
+    this.qualityChanging = true;
+    this._qualityChange = (async () => {
+      try {
+        onProgress(`Preparando calidad ${quality}…`);
+        this.setGraphicsQuality(quality, false, false);
+        if (this._running) {
+          this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
+          await this.renderer.waitForGPU();
+          await paintLoadingFrame();
+        }
+        try { localStorage.setItem(WEBGPU_QUALITY_KEY, quality); } catch { /* sin almacenamiento */ }
+        onProgress(`Calidad ${quality} lista`);
+        window.dispatchEvent(new CustomEvent('toast', { detail: { text: 'Calidad gráfica: ' + quality, type: 'info' } }));
+        return true;
+      } catch (error) {
+        console.warn('[Calidad] No se pudo preparar ' + quality, error);
+        this.setGraphicsQuality(previous, false, false);
+        onProgress(`No se pudo cambiar; se mantiene ${previous}`);
+        return false;
+      } finally {
+        this.qualityChanging = false;
+        this._qualityChange = null;
+      }
+    })();
+    return this._qualityChange;
   }
 
   _registerRenderGroups() {

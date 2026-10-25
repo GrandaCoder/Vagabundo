@@ -5,6 +5,8 @@ import {SunLight} from 'three/addons/lights/SunLight.js';
 import {SunLightNode} from 'three/addons/lights/SunLightNode.js';
 import {uniform,mix,vec4,float} from 'three/tsl';
 import {cityUniforms} from './GraphicsState.js';
+import {setShadowActive,setShadowResolution,shadowResolutionFor} from './ShadowState.js';
+import {enableShadowProxyLayer} from './ShadowProxies.js';
 
 // Time-of-day profiles adapted from Slop New York's lighting.js (MIT,
 // revision 1b54e165ddc26b3e951d5614d56a88995da1da38). The Bogotá clock
@@ -39,7 +41,7 @@ export class Atmosphere {
   constructor(scene,renderer,ambient){
     this.scene=scene;this.renderer=renderer;this.ambient=ambient;this.envScene=new THREE.Scene();
     renderer.library.addLight(SunLightNode,SunLight);
-    this.sun=new SunLight(0xffedce,4);this.sun.castShadow=true;this.sun.shadow.camera.far=140;this.sun.shadow.normalBias=.05;
+    this.sun=new SunLight(0xffedce,4);this.sun.castShadow=true;this.sun.shadow.camera.far=140;this.sun.shadow.normalBias=.05;enableShadowProxyLayer(this.sun);
     scene.add(this.sun);
     this.sky=new SkyMesh();this.sky.name='Cielo atmosférico de Bogotá';this.sky.scale.setScalar(200000);this.sky.frustumCulled=false;
     this.sky.cloudScale.value=.00018;this.sky.cloudSpeed.value=.000015;this.sky.turbidity.value=8;this.sky.rayleigh.value=2.5;
@@ -47,10 +49,10 @@ export class Atmosphere {
     this.sky.material.colorNode=vec4(mix(raw.rgb.mul(.145),new THREE.Color('#0c172c'),this.night),float(1));
     scene.add(this.sky);this.pmrem=new THREE.PMREMGenerator(renderer);this.target=null;this.quality='alta';
   }
-  update(hour,wetness=0){
+  update(hour,wetness=0,forceBake=false){
     const p=profileAt(hour,wetness);this.hour=hour;this.wetness=wetness;this.profile=p.id;this.profileLabel=p.label;
     this.night.value=p.night;cityUniforms.night.value=p.night;cityUniforms.uInteriorGlow.value=.25+p.night;cityUniforms.wetness.value=wetness;cityUniforms.clouds.value=p.clouds;
-    this.day=1-p.night;this.sun.castShadow=this.quality!=='baja'&&p.night<.95;
+    this.day=1-p.night;setShadowActive(this.sun,this.shadowsEnabled!==false&&p.night<.95);
     this.sun.intensity=p.sunIntensity;this.sun.color.copy(p.sunColor);
     const angle=(hour-6)/24*Math.PI*2;this.sun.position.set(Math.cos(angle)*.7,Math.max(.18,Math.sin(angle)),.45).normalize();this.sun.updateMatrixWorld();
     this.ambient.intensity=p.ambient;this.ambient.color.copy(p.sky);this.ambient.groundColor.set('#846b52');
@@ -58,13 +60,15 @@ export class Atmosphere {
     this.scene.environmentIntensity=.3+(1-p.night)*.4;
     this.scene.background.copy(p.sky);this.scene.fog.color.copy(p.fog);
     this.scene.fog.near=35+(1-p.night)*30;this.scene.fog.far=(this.quality==='baja'?145:this.quality==='media'?200:280)*(1-wetness*.12);
-    const bucket=Math.floor(hour*2)+Math.floor(wetness*4)*100;
-    if(this.bucket!==bucket){this.bucket=bucket;this.bake();}
+    const bucket=Math.floor(hour*2)+Math.floor(wetness*4)*100,now=performance.now();
+    if(this.bucket!==bucket&&(forceBake||this.bucket===undefined||now-(this.lastBakeAt??-Infinity)>=5000)){
+      this.bucket=bucket;this.lastBakeAt=now;this.bake();
+    }
   }
   updateProfile(profileId, wetness=0){
     const hour=PROFILE_HOURS[profileId];
     if(hour===undefined) return false;
-    this.update(hour,wetness);
+    this.update(hour,wetness,this.profile!==profileId);
     this.profile=profileId;this.profileLabel=TIME_PROFILES[profileId].label;
     return true;
   }
@@ -74,7 +78,9 @@ export class Atmosphere {
     try{this.target=this.pmrem.fromScene(this.envScene,0,.1,100,{renderTarget:this.target});this.scene.environment=this.target.texture;}
     finally{this.sky.showSunDisc.value=1;this.scene.add(this.sky);this.sky.position.copy(position);this.lastBakeMs=performance.now()-started;this.bakeCount=(this.bakeCount??0)+1;}
   }
-  setQuality(level){this.quality=level;this.sun.castShadow=level!=='baja'&&(this.day??0)>.05;const size=level==='alta'?2048:1024;if(this.sun.shadow.mapSize.x!==size){this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.sun.shadow.mapSize.set(size,size);this.sun.shadow.needsUpdate=true;}}
+  // La calidad efectiva (presión de FPS) no toca las sombras: solo la elección manual las quita.
+  setQuality(level){this.quality=level;}
+  setShadowQuality(level){this.shadowsEnabled=level!=='baja';setShadowActive(this.sun,this.shadowsEnabled&&(this.day??0)>.05);return setShadowResolution(this.sun,shadowResolutionFor(level));}
   followTarget(position){this.sky.position.copy(position);}
   dispose(){this.sky.removeFromParent();this.sky.geometry.dispose();this.sky.material.dispose();this.sun.removeFromParent();this.sun.dispose();this.target?.dispose();this.pmrem.dispose();}
 }

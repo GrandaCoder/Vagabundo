@@ -16,6 +16,9 @@ export class AudioSystem {
       },
       onplayerror(id) { this.once('unlock', () => this.play(id)); }
     });
+    // Obstrucción por edificios (CityAcoustics); sin ella las voces suenan como antes.
+    this.acoustics = null;
+    this._ears = { x: 0, y: 0, z: 0 };
     // Volumen maestro (0.0 a 1.0)
     this.eventTarget = eventTarget;
     this._masterVolume = .7; this.muted = false;
@@ -162,7 +165,7 @@ export class AudioSystem {
     if (!car.position || !listener) return .6;
     const distance = Math.hypot(car.position.x - listener.x, car.position.y - listener.y, car.position.z - listener.z);
     // Volumen completo a cinco metros; silencio desde los 41 m, sin panner espacial.
-    return .6 * Math.max(0, Math.min(1, (41 - distance) / 36));
+    return .6 * Math.max(0, Math.min(1, (41 - distance) / 36)) * this._obstructionGain(car);
   }
 
   playMovingTheft(car) {
@@ -186,7 +189,7 @@ export class AudioSystem {
   _theftVolume(car, listener) {
     if (!car.position || !listener) return .75;
     const distance = Math.hypot(car.position.x - listener.x, car.position.y - listener.y, car.position.z - listener.z);
-    return .75 * Math.max(0, Math.min(1, (12 - distance) / 10));
+    return .75 * Math.max(0, Math.min(1, (12 - distance) / 10)) * this._obstructionGain(car);
   }
 
   updateSteps(moving, running) {
@@ -270,10 +273,19 @@ export class AudioSystem {
     this._playerHornAt=now;const sound=this.vehicleSounds.horn1,id=sound.play('honk');sound.volume(this.muted?0:.55,id);
   }
 
+  setAcoustics(acoustics) { this.acoustics = acoustics; }
+
+  /** Volumen que deja pasar el edificio entre la fuente y los oídos del jugador (1 si nada tapa). */
+  _obstructionGain(car, height = 1) {
+    if (!this.acoustics || !this._listenerPosition || !car?.position) return 1;
+    return this.acoustics.gain(car, car.position, this._ears, height);
+  }
+
   updateWorld(dt, position, _camera, vehicles, bus) {
     this._listenerPosition = position;
+    if (position) { this._ears.x = position.x; this._ears.y = position.y + 1.6; this._ears.z = position.z; }
     this.setPaused(false);
-    this.vehicles.update(dt, position, vehicles, bus);
+    this.vehicles.update(dt, position, vehicles, bus, car => this._obstructionGain(car));
     for (const [car, voice] of this._theftVoices) {
       if (!voice.sound.playing(voice.id)) this._theftVoices.delete(car);
       else voice.sound.volume(this._theftVolume(car, position), voice.id);

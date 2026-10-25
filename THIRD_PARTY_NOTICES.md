@@ -34,6 +34,9 @@ The vehicle TSL material graph in src/vehicles/SlopMaterial.js is also adapted f
 
 Additional adapted modules at the same Slop New York revision: src/graphics/Atmosphere.js (sky, environment and cascaded-sun arrangement), src/graphics/PostProcessing.js (TSL color grading and bloom), and src/graphics/VisualPipeline.js (MRT and SSR arrangement). They are adjusted to BAZUKO's scale, clock, weather and quality profiles. These adaptations are covered by the MIT notice above.
 The time-of-day profiles (`golden`, `midday`, `blue-hour`, `night`) in `src/graphics/Atmosphere.js` are adapted from `js/lighting.js` and remain driven by BAZUKO's Bogotá clock.
+`src/graphics/ShadowProxies.js` adapts the cell-based shadow stand-ins of `js/scene-culling.js` (position-only casters merged per cell and face side on a layer only the sun cascades render), with 64 m cells for Bogotá's scale and building stand-ins built from BAZUKO's fading wall and roof parts.
+`src/graphics/InstancedChunks.js` adapts `chunkInstancedMesh` from the same file: copies of a repeated model (BAZUKO's street lamps) become one InstancedMesh per model mesh and 64 m cell, sharing geometry and material, culled per cell by the view and each cascade.
+`src/world/bogota/TreeField.js` adapts `js/trees.js` (seeded growth, leaf atlas with coverage-preserving mips, bark tubes and leaf cards, three levels of detail per cell) and `src/graphics/TreeMaterial.js` adapts `createTreeMaterial` and `FoliageLightingModel` from `js/tsl-materials.js`. The New York species (London plane, honey locust, American elm) are replaced by Bogotá species (urapán, eucalipto, caucho sabanero) with their own leaf sprays, growth rules, tints and barks; distances and cells follow BAZUKO's scale and the wind blows from the east-southeast.
 
 ## Slop New York — traffic, vehicle contacts and crash effects
 
@@ -44,6 +47,7 @@ The following adaptations use the same pinned revision
 - `src/vehicles/SlopCollisionPhysics.js`: oriented SAT, player/traffic impulses, chain impacts, steering, lateral recovery and suspension/yaw coefficients from `js/traffic.js`; wall response from `js/controllers.js`.
 - `src/vehicles/CollisionSparks.js`: collision spark distribution and bounded particle pool from `js/traffic.js`, rendered with WebGPU node materials.
 - `src/vehicles/SlopCrashAudio.js`: body, metal and debris synthesis from `js/audio-events.js`; contact debounce and severity layering adapted from `js/audio-system.js` and `js/audio-events.js`.
+- `src/systems/CityAcoustics.js`: segment-through-box thickness, three-ray aperture and exponential obstruction from `js/audio-acoustics.js`; direct gain through buildings from `js/audio-system.js`. BAZUKO queries its movement spatial index per trace, sums the thickness of its 2 m block strips and applies the result as volume only.
 
 BAZUKO's adapters retain its Car entities, dimensions, +X local front, road network,
 bridge heights, traffic lights, TransMilenio service and gameplay. They connect these

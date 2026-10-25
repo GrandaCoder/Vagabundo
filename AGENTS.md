@@ -52,7 +52,7 @@ Para las pruebas de navegador, instalar Chromium con `npx playwright install chr
 - El juego y la medición de FPS comienzan después de cargar modelos, materiales y GPU. Menús, inventario, creador y pestaña oculta suspenden la simulación correspondiente.
 - La muerte requiere recuperación explícita; no teletransportar automáticamente al jugador. Dejar terminar una caída mortal antes de mostrar su pantalla.
 - El frenado de los carros es gradual. Mantener las prioridades de los cruces, rutas aleatorias y carril exclusivo del bus. Los vehículos usan cajas simples de colisión, no sus triángulos.
-- Motores y claxones usan reproducción normal con voces por vehículo. Los alcances se calculan con volumen, sin panners: alarma hasta 41 metros, frases de obstrucción hasta 8 metros y frases de robo a carros en circulación hasta 12 metros.
+- Motores y claxones usan reproducción normal con voces por vehículo. Los alcances se calculan con volumen, sin panners: alarma hasta 41 metros, frases de obstrucción hasta 8 metros y frases de robo a carros en circulación hasta 12 metros. `CityAcoustics` (de Slop New York) baja el volumen de esas voces cuando un edificio queda entre la fuente y el jugador, sin cambiar los alcances; usa las cajas estáticas del movimiento.
 - Los carros en circulación permiten robar espejos con E; los estacionados activan alarma. Mantener el enfriamiento entre robos y evitar duplicar voces por fotograma.
 - El Chato conserva su amistad al guardar. Come pan o atún; las caricias tienen enfriamiento. Respetar su navegación y las colisiones existentes.
 - Hay diez palomas en cada uno de los tres parques. Huyen del jugador o NPC a menos de 3,5 metros. Conservar instancias compartidas, filtro de personas cercanas y suspensión a distancia.
@@ -75,7 +75,7 @@ Las animaciones ActionForge se adaptan en `src/character/actionforge.js`; el ban
 
 ## Parque, viaducto y edificios
 
-LakePark.js define el parque al sur desde Z 222. El agua no es transitable. ColpatriaViaduct.js construye el único tablero desde Z 15,43 hasta Z 318; BridgeElevation.js comparte la cota de 7,82 metros. La rampa norte llega a esa cota en Z 39 y la sur comienza en Z 280. No generar otro tablero sobre el lago ni separadores planos debajo. Las consultas de movimiento distinguen la calle inferior del puente y respetan los colliders layered.
+LakePark.js define el parque al sur desde Z 222. El agua no es transitable. Los árboles de los parques son procedurales (TreeField.js y TreeMaterial.js, adaptados de trees.js de Slop New York): urapán, eucalipto y caucho sabanero, instanciados por celdas de 64 m con tres niveles de detalle; se plantan con _plantTree, sin colisión, como los anteriores. ColpatriaViaduct.js construye el único tablero desde Z 15,43 hasta Z 318; BridgeElevation.js comparte la cota de 7,82 metros. La rampa norte llega a esa cota en Z 39 y la sur comienza en Z 280. No generar otro tablero sobre el lago ni separadores planos debajo. Las consultas de movimiento distinguen la calle inferior del puente y respetan los colliders layered.
 
 El puente conserva 14 metros de ancho real en rectas y curvas; la llegada norte mantiene eje X 75 y bordes X 68–82. bridgeCenter define el eje y bridgeNormal su perpendicular. Generar ambos bordes desplazando 7 metros sobre esa normal; no medir el ancho sobre X ni ensanchar secciones según la envolvente del bus. El concreto se extruye verticalmente 6 cm bajo el asfalto, con las mismas UV globales de las calles. viaductSurface debe coincidir con los triángulos dibujados.
 
