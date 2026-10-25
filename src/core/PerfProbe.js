@@ -76,6 +76,8 @@ export function installPerfProbe(game, target = globalThis) {
     /** Perfil de luz temporal ('midday', 'night'…; null vuelve al reloj). No se guarda. */
     timeProfile: (id = null) => game.sceneMgr.setTimeProfile(id),
     get scene() { return game.sceneMgr.scene; },
+    /** Acceso de depuración (solo con ?perf). */
+    get game() { return game; },
     /** Obstrucción de cada vehículo a menos de 55 m y coste de trazarlos todos (dos pasadas: la segunda ya optimizada). */
     acoustics: () => {
       const acoustics = game.audio.acoustics, p = game.player.position, ears = { x: p.x, y: p.y + 1.6, z: p.z };
