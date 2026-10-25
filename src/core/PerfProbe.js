@@ -1,4 +1,5 @@
 /** Sonda de rendimiento para `?perf`: escenarios repetibles desde la consola, sin tocar el guardado. */
+import * as THREE from 'three';
 export function frameStats(intervals) {
   const sorted = [...intervals].sort((a, b) => a - b);
   const at = p => sorted.length ? Math.round(sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * p) - 1)] * 10) / 10 : 0;
@@ -7,6 +8,36 @@ export function frameStats(intervals) {
 
 function delta(after, before) {
   return Object.fromEntries(Object.entries(after).map(([key, value]) => [key, value - (before[key] ?? 0)]));
+}
+
+/** Rama con nombre más cercana a la escena: sirve para saber qué sistema aporta los dibujos. */
+function branchName(object, scene) {
+  const names = [];
+  for (let o = object; o && o !== scene; o = o.parent) if (o.name) names.push(o.name);
+  return names.slice(-2).reverse().join(' › ') || object.type;
+}
+
+function drawBreakdown(game, top) {
+  const scene = game.sceneMgr.scene, view = game.cameraRig.camera, sun = game.sceneMgr.sun;
+  const shadowCameras = sun?.shadow?.getViewportCount ? Array.from({ length: sun.shadow.getViewportCount() }, (_, i) => sun.shadow.getCamera(i)) : [];
+  const count = (camera, shadow) => {
+    camera.updateMatrixWorld();
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(camera.projectionMatrix.clone().multiply(camera.matrixWorldInverse));
+    const groups = new Map();
+    let total = 0;
+    scene.traverseVisible(o => {
+      if (!(o.isMesh || o.isInstancedMesh || o.isBatchedMesh) || !o.layers.test(camera.layers) || (shadow && !o.castShadow)) return;
+      if (o.frustumCulled !== false && !frustum.intersectsObject(o)) return;
+      const draws = Array.isArray(o.material) ? Math.max(1, o.geometry.groups.length) : 1;
+      const key = branchName(o, scene), entry = groups.get(key) ?? { draws: 0, instanced: 0 };
+      entry.draws += draws;
+      if (o.isInstancedMesh) entry.instanced += draws;
+      groups.set(key, entry);
+      total += draws;
+    });
+    return { total, top: [...groups].sort((a, b) => b[1].draws - a[1].draws).slice(0, top).map(([name, e]) => ({ name, ...e })) };
+  };
+  return { mode: game.cameraRig.mode, view: count(view, false), cascades: shadowCameras.map(camera => count(camera, true)) };
 }
 
 export function installPerfProbe(game, target = globalThis) {
@@ -39,7 +70,12 @@ export function installPerfProbe(game, target = globalThis) {
     },
     pressure: (value, seconds = 3) => { game.renderer.resolution.pressure = value; return measure('pressure ' + value, seconds); },
     ratio: (value, seconds = 3) => { game.renderer.resolution.ratio = value; game.renderer.instance.setPixelRatio(value); return measure('pixelRatio ' + value, seconds); },
-    lockQuality: (locked = true) => { game.renderer.adaptiveLocked = locked; return locked; }
+    lockQuality: (locked = true) => { game.renderer.adaptiveLocked = locked; return locked; },
+    /** Mallas que dibuja cada cámara (vista y cascadas de sombra), agrupadas por su rama de la escena. */
+    breakdown: (top = 15) => drawBreakdown(game, top),
+    /** Perfil de luz temporal ('midday', 'night'…; null vuelve al reloj). No se guarda. */
+    timeProfile: (id = null) => game.sceneMgr.setTimeProfile(id),
+    get scene() { return game.sceneMgr.scene; }
   };
   target.__bazukoPerf = probe;
   return probe;
