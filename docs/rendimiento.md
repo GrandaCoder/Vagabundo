@@ -85,3 +85,21 @@ Medida con `?perf` en X 209.48, Z 38.65 (tercera persona, mediodía, calidad baj
 **Suelo fijo del render: recorrido de matrices.** `scene.updateMatrixWorld()` visita los ~15 000 nodos de la escena en cada fotograma aunque nada cambie, y Three 0.186 no salta los objetos ocultos ni los congelados. Con todo activo en tu punto costaba 1,5 ms, de los que unos 0,7 ms eran los ~60 huesos de cada peatón fuera de cámara. Ahora (1) las ramas totalmente congeladas por `freezeStaticTransforms` solo se recorren si alguien las marca como modificadas, si un ancestro fuerza la actualización o si se les añade un hijo, y (2) la raíz de cada NPC (`skipWhenHidden`, `src/graphics/HiddenSubtrees.js`) no recorre sus huesos mientras está oculta y recupera todo al mostrarse. Resultado: recorrido de matrices 1,5 → 0,8 ms y render 15,4 → 14,3 ms con todos los sistemas activos (72 NPC, 51 fuera de cámara). No se aplica a los grupos del descarte por frustum (coches, perro, recogibles): calculan sus límites con las matrices de sus hijos y quedarían obsoletas. El resto del suelo fijo (~2 ms con la escena vacía) está en el pipeline posterior y el renderer de Three, no en el juego.
 
 **Ruido en las ventanas de las casas.** La semilla de cada fachada viaja como atributo de vértice y llega al píxel interpolada con un error de ~1e-5; el seno de la función de azar la multiplica por ~4·10⁴ y el resultado cambiaba de un píxel a otro (ventanas con puntos que titilan al mover la cámara, manchas de grafiti moteadas). Ahora el shader redondea la semilla antes de usarla, así que cada celda recibe el mismo valor en todos sus píxeles.
+
+## Sombras solares (rama cambio-de-prueba-de-ciudad)
+
+Medido en X 209.48, Z 38.65 con la ciudad sola y calidad media. Slop New York usa también dos cascadas (`SunLight`, PCF); la diferencia está en lo que entra en ellas: sustitutos de sombra de 500 m, instancias troceadas por celdas y casi nada suelto. Aquí cada cascada dibujaba cosas enteras:
+
+| Cascadas del sol | Antes | Ahora |
+| --- | --- | --- |
+| Dibujos (cascada cercana + lejana) | 74 + 223 | 27 + 56 |
+| Triángulos | 567 mil + 668 mil | 135 mil + 262 mil |
+
+Lo que lo causaba y lo que se hizo:
+- **Recogibles (bolsas y contenedores):** sus modelos tienen 8 mil y 18 mil triángulos y el lote los repetía todos (415 mil) en cada cascada. Más allá de 48 m de la cámara se dibujan en un lote aparte que no proyecta sombra (`InstanceBatches`, `SHADOW_RANGE`).
+- **Semáforos:** un único lote con todos los de la ciudad (71 mil triángulos) se dibujaba en cada vista y cascada. Ahora hay un lote por celda de 64 m y el descarte por frustum los separa.
+- **Sustitutos de sombra:** celdas de 160 m (antes 64 m), menos dibujos por cascada. Los lotes instanciados mantienen su celda de 64 m (`INSTANCE_CELL`).
+- **Lotes vacíos:** los lotes de vehículos y recogibles sin instancias se dibujaban en la vista y en cada cascada. Tras el calentamiento se ocultan (`scene.userData.skipEmptyBatches`); durante él se dibujan para que sus pipelines queden preparados.
+- **Objetos pequeños lejanos:** los lugares de interacción (tienda, punto de venta, mesa de crafteo, traficante, contenedores) y los objetos animados registrados en el descarte dejan de proyectar sombra a más de 60 m (`FrustumCulling`, opción `shadowRange`) y entran en el descarte por frustum.
+
+Lo que no cambió: el tiempo de CPU del render con sombras sigue siendo ~5,5 ms mayor que sin ellas. No lo domina el número de dibujos (los comandos de dibujo cuestan 0,3 ms en la pasada de sombras) sino el trabajo por objeto de Three en cada cascada (recorrido del grafo, enlaces y uniformes de cada RenderObject de sombra). La reducción de triángulos y dibujos debería notarse sobre todo cuando la GPU es el límite. Posible mejora no aplicada: actualizar la cascada lejana cada dos cuadros.
