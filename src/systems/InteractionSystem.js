@@ -83,6 +83,7 @@ export class InteractionSystem {
 
     for (const t of this.targets) {
       const d = t.position.distanceTo(this.player.position);
+      if(t.debugDisabled)continue;
       if (d < nearestDist) {
         nearestDist = d;
         nearest = t;

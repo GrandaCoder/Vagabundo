@@ -123,12 +123,13 @@ export class Npc {
   }
 
   _loadFull() {
+    if(this.debugDisabled||this._disposed)return Promise.resolve();
     return this._fullLoading ??= createRealisticCharacter(this.look, { lod: false })
       .then(async c => {
-        if(this._disposed){c.dispose?.();return;}
-        try{await this.prepareFull?.(c);}catch(error){c.dispose?.();throw error;}
-        if(this._disposed)c.dispose?.();else this.fullChar=c;
-      });
+        if(this._disposed||this.debugDisabled){c.dispose?.();return;}
+        try{const prepared=await this.prepareFull?.(c);if(prepared===false){c.dispose?.();return;}}catch(error){c.dispose?.();throw error;}
+        if(this._disposed||this.debugDisabled)c.dispose?.();else this.fullChar=c;
+      }).finally(()=>{if(!this.fullChar)this._fullLoading=null;});
   }
 
   _show(char) {

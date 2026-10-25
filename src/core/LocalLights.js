@@ -69,7 +69,7 @@ export class LocalLights {
     for (const entry of this.sources.values()) {
       const light = entry.light;
       // Gate the rendered proxies, not the source: flickering stalls rewrite intensity every frame.
-      if (!isNight) continue;
+      if (!isNight || this.enabled === false) continue;
       if (light.intensity <= 0) continue;
       let visible = true;
       for (let node = light; node; node = node.parent) if (!node.visible) { visible = false; break; }

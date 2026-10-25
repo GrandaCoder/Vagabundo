@@ -26,6 +26,11 @@ export class VehicleAudio {
     this.instances.clear();
   }
 
+  suppress(cars) {
+    this.synthesis?.suppress(cars);
+    for(const car of cars){const state=this.instances.get(car);if(state)this._stop(state);this.instances.delete(car);}
+  }
+
   setPaused(paused) {
     this.synthesis?.setPaused(paused);
     if (this.paused === paused) return;

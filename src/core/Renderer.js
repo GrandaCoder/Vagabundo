@@ -114,10 +114,11 @@ export class Renderer {
     this.startupStats.compileMs=performance.now()-started;
   }
 
-  prepareDynamic(root,scene,camera,decorate=()=>{}){
+  prepareDynamic(root,scene,camera,decorate=()=>{},isActive=()=>true){
     const prepare=async()=>{
-      if(this._disposed)return;
+      if(this._disposed||!isActive())return false;
       const budget=await prepareSceneTextures([root]);decorate(root);
+      if(!isActive())return false;
       for(const texture of budget.textures)this.instance.initTexture(texture);
       this._ensurePipeline(scene,camera);
       const target=this.instance.getRenderTarget(),targets=this.instance.getMRT(),started=performance.now();
@@ -173,19 +174,21 @@ export class Renderer {
       for(const p of this._pipelines.values())p.dispose();this._pipelines.clear();
       this._pipelineScene=scene;this._pipelineCamera=camera;
     }
-    if(!this._pipelines.has(quality))this._pipelines.set(quality,new VisualPipeline(this.instance,scene,camera,quality,()=>{
+    const key=`${quality}:${this.effectsEnabled!==false}`;
+    if(!this._pipelines.has(key))this._pipelines.set(key,new VisualPipeline(this.instance,scene,camera,quality,()=>{
       if(this._overlayRoot&&this._overlayEnabled)this.silhouette.render(this.instance,scene,camera,this._overlayRoot,this.overlayLights);
-    },this._pipelines.values().next().value?.scenePass));
-    this.pipeline=this._pipelines.get(quality);
+    },this._pipelines.values().next().value?.scenePass,this.effectsEnabled!==false));
+    this.pipeline=this._pipelines.get(key);
   }
 
   /**
    * Dibuja la escena completa en cada calidad con su estado real (`applyQuality`) y en cada vista
    * (`views`: tercera persona e isométrica), incluida la silueta, antes de ocultar la carga.
    */
-  async warmup(scene,camera,playerRoot,{applyQuality=()=>{},views=[()=>'vista'],qualities=['baja','media','alta']}={}){
+  async warmup(scene,camera,playerRoot,{applyQuality=()=>{},views=[()=>'vista'],qualities=['baja','media','alta'],effectsEnabled=this.effectsEnabled}={}){
     const started=performance.now();this.culling.restore();
     const requested=this.effectiveQuality;
+    const previousEffects=this.effectsEnabled;this.effectsEnabled=effectsEnabled;
     this._overlayRoot=playerRoot;this._overlayEnabled=true;
     try{
       await withoutFrustumCulling([scene],async()=>{
@@ -200,7 +203,7 @@ export class Renderer {
           (this.readyQualities??=new Set()).add(quality);
         }
       });
-    }finally{applyQuality(requested);this._ensurePipeline(scene,camera,requested);}
+    }finally{this.effectsEnabled=previousEffects;applyQuality(requested);this._ensurePipeline(scene,camera,requested);}
     this.startupStats.fullWarmupMs=performance.now()-started;
   }
 

@@ -50,3 +50,8 @@ test('la verificación informa el trabajo que quedó pendiente después del cale
   assert.equal(leftover.programs, 4);assert.equal(leftover.discarded, 2);assert.equal(leftover.pipelines, 0);
   assert.deepEqual(renderer.startupStats.verification, leftover);
 });
+test('la variante temporal de efectos restaura su estado incluso si falla la GPU',async()=>{
+ const {renderer}=fakeRenderer();renderer.effectsEnabled=true;let prepared;
+ renderer.waitForGPU=async()=>{prepared=renderer.effectsEnabled;throw new Error('device lost');};
+ await assert.rejects(renderer.warmup(new THREE.Scene(),new THREE.PerspectiveCamera(),new THREE.Group(),{effectsEnabled:false}),/device lost/);assert.equal(prepared,false);assert.equal(renderer.effectsEnabled,true);
+});

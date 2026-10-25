@@ -54,7 +54,7 @@ export class Atmosphere {
     const lightsOn = hour < 6 || hour >= 20;
     cityUniforms.lightsOn.value = lightsOn ? 1 : 0;
     this.night.value=p.night;cityUniforms.night.value=p.night;cityUniforms.uInteriorGlow.value=lightsOn ? 1.25 : 0;cityUniforms.wetness.value=wetness;cityUniforms.clouds.value=p.clouds;
-    this.day=1-p.night;setShadowActive(this.sun,this.shadowsEnabled!==false&&p.night<.95);
+    this.day=1-p.night;setShadowActive(this.sun,this.shadowsEnabled!==false&&this.debugShadowsEnabled!==false&&p.night<.95);
     this.sun.intensity=p.sunIntensity;this.sun.color.copy(p.sunColor);
     const angle=(hour-6)/24*Math.PI*2;this.sun.position.set(Math.cos(angle)*.7,Math.max(.18,Math.sin(angle)),.45).normalize();this.sun.updateMatrixWorld();
     this.ambient.intensity=p.ambient;this.ambient.color.copy(p.sky);this.ambient.groundColor.set('#846b52');
@@ -82,7 +82,7 @@ export class Atmosphere {
   }
   // La calidad efectiva (presión de FPS) no toca las sombras: solo la elección manual las quita.
   setQuality(level){this.quality=level;}
-  setShadowQuality(level){this.shadowsEnabled=level!=='baja';setShadowActive(this.sun,this.shadowsEnabled&&(this.day??0)>.05);return setShadowResolution(this.sun,shadowResolutionFor(level));}
+  setShadowQuality(level){this.shadowsEnabled=level!=='baja';setShadowActive(this.sun,this.shadowsEnabled&&this.debugShadowsEnabled!==false&&(this.day??0)>.05);return setShadowResolution(this.sun,shadowResolutionFor(level));}
   followTarget(position){this.sky.position.copy(position);}
   dispose(){this.sky.removeFromParent();this.sky.geometry.dispose();this.sky.material.dispose();this.sun.removeFromParent();this.sun.dispose();this.target?.dispose();this.pmrem.dispose();}
 }

@@ -14,3 +14,7 @@ test('compilar detalle mantiene el MRT hasta terminar y los cuadros intermedios 
  reject(new Error('device lost'));await assert.rejects(task,/device lost/);assert.equal(target,'screen');assert.equal(mrt,null);assert.equal(renderer.compilingDynamic,false);assert.equal(root.children[0].frustumCulled,true);
  renderer._disposed=true;await renderer.prepareDynamic(root);assert.equal(calls,1);
 });
+test('detalle desactivado mientras espera la cola no compila ni sube recursos',async()=>{
+ let release,compiled=0;const renderer=Object.assign(Object.create(Renderer.prototype),{_dynamicQueue:new Promise(r=>release=r),instance:{compileAsync(){compiled++;}}});let active=true;
+ const task=renderer.prepareDynamic(new THREE.Group(),null,null,()=>{},()=>active);active=false;release();assert.equal(await task,false);assert.equal(compiled,0);
+});

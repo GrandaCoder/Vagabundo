@@ -130,7 +130,7 @@ export class AudioSystem {
   /** Ladrido breve sintetizado; usa el mismo volumen maestro y silencio que los vehículos. */
   barkDog() {
     const ctx = this.howler.ctx;
-    if (this._paused || !ctx || ctx.state !== 'running' || !ctx.createBuffer || !this.howler.masterGain) return;
+    if (this.debugDogEnabled===false || this._paused || !ctx || ctx.state !== 'running' || !ctx.createBuffer || !this.howler.masterGain) return;
     if (!this._barkBuffer) {
       this._barkBuffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * .18), ctx.sampleRate);
       const data = this._barkBuffer.getChannelData(0);
@@ -144,8 +144,19 @@ export class AudioSystem {
     source.buffer = this._barkBuffer; filter.type = 'bandpass'; filter.frequency.value = 700; filter.Q.value = .7;
     gain.gain.value = .5;
     source.connect(filter); filter.connect(gain); gain.connect(this.howler.masterGain);
-    source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+    (this._dogSources??=new Set()).add(source);
+    source.onended = () => { this._dogSources.delete(source);source.disconnect(); filter.disconnect(); gain.disconnect(); };
     source.start();
+  }
+
+  stopDog(){for(const source of this._dogSources??[]){try{source.stop();}catch{}source.onended?.();}this._dogSources?.clear();}
+
+  suppressVehicles(cars){
+    this.vehicles.suppress(cars);this.collisionAudio?.stop();
+    for(const car of cars){
+      const voice=this._theftVoices.get(car);if(voice)voice.sound.stop(voice.id);this._theftVoices.delete(car);
+      const alarm=this._carAlarms.get(car);if(alarm)this.sounds.carAlarm.stop(alarm.id);this._carAlarms.delete(car);
+    }
   }
 
   stop(name) {
@@ -306,6 +317,7 @@ export class AudioSystem {
   }
 
   dispose() {
+    this.stopDog();
     this.collisionAudio.stop();
     this._theftVoices.clear();
     this._carAlarms.clear();

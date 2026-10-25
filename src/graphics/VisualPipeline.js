@@ -5,7 +5,7 @@ import {ssr} from 'three/addons/tsl/display/SSRNode.js';
 import {createPostProcessing} from './PostProcessing.js';
 import {GRAPHICS_PROFILES} from '../core/GraphicsQuality.js';
 export class VisualPipeline {
-  constructor(renderer,scene,camera,quality,overlay,sharedScenePass=null){
+  constructor(renderer,scene,camera,quality,overlay,sharedScenePass=null,effectsEnabled=true){
     this.renderer=renderer;this.ownsScenePass=!sharedScenePass;this.scenePass=sharedScenePass??pass(scene,camera);this.quality=quality;
     let reflections=vec4(0);
     if(!sharedScenePass){
@@ -14,7 +14,7 @@ export class VisualPipeline {
       targets.setBlendMode('normal',new THREE.BlendMode(THREE.MaterialBlending));targets.setBlendMode('metalRough',new THREE.BlendMode(THREE.MaterialBlending));
       this.scenePass.setMRT(targets);
     }
-    if(quality==='alta'){
+    if(effectsEnabled&&quality==='alta'){
       const properties=this.scenePass.getTextureNode('metalRough');
       this.ssr=ssr(this.scenePass.getTextureNode('output'),this.scenePass.getTextureNode('depth'),this.scenePass.getTextureNode('normal'),{metalnessNode:properties.r,roughnessNode:properties.g,camera});
       this.ssr.resolutionScale=.5;this.ssr.blurQuality=1;this.ssr.maxDistance.value=24;this.ssr.thickness.value=.4;this.ssr.quality.value=.25;this.ssr.binaryRefine=true;this.ssr.intensity.value=.45;this.ssr.screenEdgeFadeBlack=true;
@@ -27,7 +27,7 @@ export class VisualPipeline {
     }
     // Preserve the sky/sun glow when adaptive quality drops; reduce its cost, not its intensity.
     const profile=GRAPHICS_PROFILES[quality]??GRAPHICS_PROFILES.alta;
-    this.grade=createPostProcessing(renderer,this.scenePass.getTextureNode('output'),reflections,profile.bloom,profile.bloomResolution);
+    this.grade=createPostProcessing(renderer,this.scenePass.getTextureNode('output'),reflections,effectsEnabled&&profile.bloom,profile.bloomResolution);
     this.pipeline=new THREE.RenderPipeline(renderer,this.grade.outputNode);
   }
   render(hour=12){this.grade.update(hour);this.pipeline.render();}

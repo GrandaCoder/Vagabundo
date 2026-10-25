@@ -25,8 +25,9 @@ export class SlopMotorAudio {
    state.voice.update({speed:entry.speed??0,load:Math.max(0,Math.min(1,(entry.acceleration??0)/2)),seed:car.visualSeed??0});
   }
  }
- honk(car,volume=.45){const ctx=this._context();if(!ctx||this.paused)return;const output=ctx.createGain(),source=ctx.createBufferSource();source.buffer=this.horn??=synthHorn(ctx,.55,17);output.gain.value=volume;source.connect(output);output.connect(this.howler.masterGain);this.horns.add(source);source.onended=()=>{source.disconnect();output.disconnect();this.horns.delete(source);};source.start();
+ honk(car,volume=.45){const ctx=this._context();if(!ctx||this.paused)return;const output=ctx.createGain(),source=ctx.createBufferSource();source.buffer=this.horn??=synthHorn(ctx,.55,17);output.gain.value=volume;source.connect(output);output.connect(this.howler.masterGain);source.vehicle=car;this.horns.add(source);source.onended=()=>{source.disconnect();output.disconnect();this.horns.delete(source);};source.start();
  }
+ suppress(cars){const removed=new Set(cars);for(const car of removed){const state=this.voices.get(car);if(state){state.voice.dispose();state.output.disconnect();this.voices.delete(car);}}for(const source of [...this.horns])if(removed.has(source.vehicle)){source.stop();source.onended?.();}}
  setPaused(value){this.paused=value;if(value)this.clear();}
  _stopWind(){if(this.wind){this.wind.source.stop();this.wind.source.disconnect();this.wind.filter.disconnect();this.wind.output.disconnect();this.wind=null;}}
  clear(){this._stopWind();for(const state of this.voices.values()){state.voice.dispose();state.output.disconnect();}this.voices.clear();for(const source of [...this.horns]){source.stop();source.onended?.();}this.horns.clear();}

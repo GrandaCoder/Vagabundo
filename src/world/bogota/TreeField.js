@@ -985,6 +985,7 @@ function createTreeField(scene, sites) {
   const last = new V3(Infinity, Infinity, Infinity);
   const cam = new V3();
   function update(position) {
+    if(group.userData.debugDisabled)return;
     cam.copy(position);
     if (cam.distanceToSquared(last) < 16) return false;
     last.copy(cam);

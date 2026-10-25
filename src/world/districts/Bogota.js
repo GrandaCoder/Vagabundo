@@ -806,9 +806,11 @@ export class Bogota {
     const stall = kind === 'fritanga' ? P.fritanga() : P.chaza();
     this._add(stall, x, z, rotY);
     const back = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY)).multiplyScalar(-0.9);
-    this.npcs.push(new Npc(this.scene, new THREE.Vector3(x + back.x, this.getGroundHeight(x, z), z + back.z), {
+    const vendor = new Npc(this.scene, new THREE.Vector3(x + back.x, this.getGroundHeight(x, z), z + back.z), {
       facing: rotY, isWalkable: () => false
-    }));
+    });
+    vendor.isVendor = true;
+    this.npcs.push(vendor);
     this.vendors.push({ kind: 'shop', title, items, position: new THREE.Vector3(x, 0, z) });
   }
 
@@ -1043,7 +1045,8 @@ export class Bogota {
   update(dt, playerPos, camera, trafficVehicles = []) {
     this.t += dt;
     this.signals?.update(this.t);
-    for (const bus of this.busServices ?? []) bus.update(dt, { player: playerPos, pedestrians: this.trafficPedestrians ?? this.npcs, vehicles: trafficVehicles });
+    const pedestrians=(this.trafficPedestrians??this.npcs).filter(n=>!n.debugDisabled);
+    if(this.debugFlags?.transit!==false)for (const bus of this.busServices ?? []) bus.update(dt, { player: playerPos, pedestrians, vehicles: trafficVehicles });
     for (const o of this.animated) o.userData.update(dt, this.t);
     // vista de la cámara una vez por cuadro: los NPC fuera de ella no se dibujan ni se animan
     let frustum = null;
@@ -1054,8 +1057,8 @@ export class Bogota {
       frustum = _frustum.setFromProjectionMatrix(_projView);
     }
     const ctx = { player: playerPos, frustum, animationBudget: this.animationBudget ?? 1 };
-    for (const n of this.npcs) n.update(dt, ctx);
-    for (const flock of this.pigeonFlocks ?? []) flock.update(dt, playerPos, this.npcs);
+    for (const n of this.npcs) if(!n.debugDisabled) n.update(dt, ctx);
+    if(this.debugFlags?.pigeons!==false)for (const flock of this.pigeonFlocks ?? []) flock.update(dt, playerPos, pedestrians);
   }
 
   setNightMode(isNight) {
