@@ -898,7 +898,6 @@ export class Game {
   }
 
   _renderFrame(now, active) {
-    if(this.renderer.compilingDynamic)return;
     this.cameraRig.driving=!!this.driving?.car;
     const quality = this.renderer.effectiveQuality;
     this.renderer.hour=this.clock.hour;this.sceneMgr.wetness=this.weather?.wetness??0;

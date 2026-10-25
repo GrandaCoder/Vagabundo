@@ -47,7 +47,7 @@ export class Atmosphere {
     this.sky.material.colorNode=vec4(mix(raw.rgb.mul(.145),new THREE.Color('#0c172c'),this.night),float(1));
     scene.add(this.sky);this.pmrem=new THREE.PMREMGenerator(renderer);this.target=null;this.quality='alta';
   }
-  update(hour,wetness=0){
+  update(hour,wetness=0,forceBake=false){
     const p=profileAt(hour,wetness);this.hour=hour;this.wetness=wetness;this.profile=p.id;this.profileLabel=p.label;
     this.night.value=p.night;cityUniforms.night.value=p.night;cityUniforms.uInteriorGlow.value=.25+p.night;cityUniforms.wetness.value=wetness;cityUniforms.clouds.value=p.clouds;
     this.day=1-p.night;this.sun.castShadow=this.quality!=='baja'&&p.night<.95;
@@ -58,13 +58,15 @@ export class Atmosphere {
     this.scene.environmentIntensity=.3+(1-p.night)*.4;
     this.scene.background.copy(p.sky);this.scene.fog.color.copy(p.fog);
     this.scene.fog.near=35+(1-p.night)*30;this.scene.fog.far=(this.quality==='baja'?145:this.quality==='media'?200:280)*(1-wetness*.12);
-    const bucket=Math.floor(hour*2)+Math.floor(wetness*4)*100;
-    if(this.bucket!==bucket){this.bucket=bucket;this.bake();}
+    const bucket=Math.floor(hour*2)+Math.floor(wetness*4)*100,now=performance.now();
+    if(this.bucket!==bucket&&(forceBake||this.bucket===undefined||now-(this.lastBakeAt??-Infinity)>=5000)){
+      this.bucket=bucket;this.lastBakeAt=now;this.bake();
+    }
   }
   updateProfile(profileId, wetness=0){
     const hour=PROFILE_HOURS[profileId];
     if(hour===undefined) return false;
-    this.update(hour,wetness);
+    this.update(hour,wetness,this.profile!==profileId);
     this.profile=profileId;this.profileLabel=TIME_PROFILES[profileId].label;
     return true;
   }

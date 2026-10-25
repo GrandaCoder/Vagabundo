@@ -32,3 +32,11 @@ test('las sombras solares se desactivan de noche y regresan de dia segun calidad
 test('seguir al jugador solo mueve el cielo, sin rehacer el entorno',()=>{
  const fake={sky:{position:new THREE.Vector3()}};Atmosphere.prototype.followTarget.call(fake,new THREE.Vector3(2,0,3));assert.equal(fake.sky.position.x,2);assert.equal(fake.bakeCount,undefined);
 });
+
+test('la humedad inicial no encadena bakes y un perfil manual sí renueva el entorno',()=>{
+ const scene=new THREE.Scene();scene.background=new THREE.Color();scene.fog=new THREE.Fog('black',1,100);let bakes=0;
+ const fake={scene,quality:'alta',sun:new THREE.DirectionalLight(),ambient:new THREE.HemisphereLight(),night:{value:0},sky:{sunPosition:{value:new THREE.Vector3()},cloudCoverage:{},cloudDensity:{}},bake(){bakes++;},update:Atmosphere.prototype.update};
+ Atmosphere.prototype.update.call(fake,22,.6);Atmosphere.prototype.update.call(fake,22,.75);Atmosphere.prototype.update.call(fake,22,1);assert.equal(bakes,1);
+ fake.lastBakeAt=-5001;Atmosphere.prototype.update.call(fake,22,1);assert.equal(bakes,2);
+ Atmosphere.prototype.updateProfile.call(fake,'midday',0);assert.equal(bakes,3);assert.equal(fake.profile,'midday');
+});

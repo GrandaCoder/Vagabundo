@@ -286,9 +286,8 @@ export class Npc {
     _sphere.center.set(this.position.x, this.position.y + 0.9, this.position.z);
     const onScreen = !ctx.frustum || ctx.frustum.intersectsSphere(_sphere);
     this.root.visible = onScreen;
-    if (!onScreen) { this.animAcc += dt; return; }
-
     this._updateDetail(dist);
+    if (!onScreen) { this.animAcc += dt; return; }
 
     this.animAcc += dt;
     this.frame++;

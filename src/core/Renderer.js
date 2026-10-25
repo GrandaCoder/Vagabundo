@@ -122,7 +122,9 @@ export class Renderer {
       this.compilingDynamic=true;
       try{
         this.instance.setRenderTarget(this.pipeline.scenePass.renderTarget);this.instance.setMRT(this.pipeline.scenePass.getMRT());
-        await withoutFrustumCulling([root],()=>this.instance.compileAsync(root,camera,scene));
+        const compilation=withoutFrustumCulling([root],()=>this.instance.compileAsync(root,camera,scene));
+        this.instance.setRenderTarget(target);this.instance.setMRT(targets);
+        await compilation;
       }finally{
         this.instance.setRenderTarget(target);this.instance.setMRT(targets);this.compilingDynamic=false;
         this.diagnostics?.record('dynamic-compile',performance.now()-started);
@@ -180,7 +182,6 @@ export class Renderer {
   }
 
   render(scene, camera, playerRoot = null, shadowLights = [], showSilhouette = true) {
-    if(this.compilingDynamic)return;
     const renderStarted=performance.now(),programs=this.diagnostics?.programs??0;
     syncVehicleBatches(scene,camera);
     this.instance.info.reset();
