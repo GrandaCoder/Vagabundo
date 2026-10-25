@@ -278,6 +278,7 @@ export class Game {
     } finally { if (rain) rain.visible = this.weather.isRaining; }
     await loading.stage('Preparando el primer fotograma…', 4.8);
     const warmupStarted=performance.now();
+    this.localLights.setQuality?.(this.renderer.effectiveQuality);this._syncOverlayLights();
     await this.renderer.warmup?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root);
     // Estas pasadas preparan sombras, geometría y silueta sin simular ni medir FPS.
     for (let frame = 0; frame < 3; frame++) {
@@ -897,13 +898,21 @@ export class Game {
     };
   }
 
+  /** La silueta compila según su lista de luces; debe ser la misma en el calentamiento y en partida. */
+  _syncOverlayLights() {
+    const pool=this.localLights?.pool;
+    if(!pool||this._overlayLightCount===pool.length)return;
+    this._overlayLightCount=pool.length;
+    this.renderer.overlayLights=[this.sceneMgr.ambient,this.sceneMgr.sun,...pool,...(this.localLights.spotPool??[])];
+  }
+
   _renderFrame(now, active) {
     this.cameraRig.driving=!!this.driving?.car;
     const quality = this.renderer.effectiveQuality;
     this.renderer.hour=this.clock.hour;this.sceneMgr.wetness=this.weather?.wetness??0;
 
     this.localLights.setQuality?.(quality);
-    if(this._overlayLightCount!==this.localLights.pool.length){this._overlayLightCount=this.localLights.pool.length;this.renderer.overlayLights=[this.sceneMgr.ambient,this.sceneMgr.sun,...this.localLights.pool,...(this.localLights.spotPool??[])];}
+    this._syncOverlayLights();
     for(const car of this.cars??[])car.setNight?.(this.clock.isNight);
     for(const vehicle of this.traffic?.vehicles??[])vehicle.car.setNight?.(this.clock.isNight);
     if (this._effectiveQuality !== quality) {
