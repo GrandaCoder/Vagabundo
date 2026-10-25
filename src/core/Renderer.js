@@ -53,7 +53,11 @@ export class Renderer {
     try { if(persist)localStorage.setItem(WEBGPU_QUALITY_KEY, this.quality); } catch { /* sin almacenamiento */ }
   }
 
-  get effectiveQuality() { return effectiveQuality(this.quality ?? 'alta', this.resolution?.pressure ?? 0); }
+  get effectiveQuality() {
+    const wanted=effectiveQuality(this.quality ?? 'alta',this.resolution?.pressure??0);
+    if(!this.readyQualities||this.readyQualities.has(wanted))return wanted;
+    return this.readyQualities.has('baja')?'baja':this.quality;
+  }
 
   /** Mapa de entorno neutro: da reflejos (charcos, vidrios) y luz rebotada a los materiales PBR */
   createEnvironment() {
@@ -176,13 +180,13 @@ export class Renderer {
    * Dibuja la escena completa en cada calidad con su estado real (`applyQuality`) y en cada vista
    * (`views`: tercera persona e isométrica), incluida la silueta, antes de ocultar la carga.
    */
-  async warmup(scene,camera,playerRoot,{applyQuality=()=>{},views=[()=>'vista']}={}){
+  async warmup(scene,camera,playerRoot,{applyQuality=()=>{},views=[()=>'vista'],qualities=['baja','media','alta']}={}){
     const started=performance.now();this.culling.restore();
     const requested=this.effectiveQuality;
     this._overlayRoot=playerRoot;this._overlayEnabled=true;
     try{
       await withoutFrustumCulling([scene],async()=>{
-        for(const quality of ['baja','media','alta']){
+        for(const quality of new Set(qualities)){
           applyQuality(quality);
           for(const view of views){
             const label=view();
@@ -190,6 +194,7 @@ export class Renderer {
             this._ensurePipeline(scene,camera,quality);this.pipeline.render(this.hour??22);
             await this.waitForGPU();await paintLoadingFrame();
           }
+          (this.readyQualities??=new Set()).add(quality);
         }
       });
     }finally{applyQuality(requested);this._ensurePipeline(scene,camera,requested);}

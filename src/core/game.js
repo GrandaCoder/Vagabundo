@@ -286,7 +286,7 @@ export class Game {
     this.localLights.setQuality?.(this.renderer.effectiveQuality);this._syncOverlayLights();
     const startMode=this.cameraRig.mode,views=this._cameraWarmupViews(startMode);
     try {
-      await this.renderer.warmup?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,{applyQuality:quality=>this._applyQualityState(quality),views});
+      await this.renderer.warmup?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,{applyQuality:quality=>this._applyQualityState(quality),views,qualities:[this.renderer.quality,'baja']});
       // Estas pasadas preparan sombras, geometría y silueta sin simular ni medir FPS.
       for (let frame = 0; frame < 3; frame++) {
         this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
@@ -1045,6 +1045,11 @@ export class Game {
     this._qualityChange = (async () => {
       try {
         onProgress(`Preparando calidad ${quality}…`);
+        if(this._running&&this.renderer.warmup&&!this.renderer.readyQualities?.has(quality)){
+          const mode=this.cameraRig.mode;
+          try {await this.renderer.warmup(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,{applyQuality:q=>this._applyQualityState(q),views:this._cameraWarmupViews(mode),qualities:[quality]});}
+          finally {this._setCameraView(mode);}
+        }
         this.setGraphicsQuality(quality, false, false);
         if (this._running) {
           this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun]);
