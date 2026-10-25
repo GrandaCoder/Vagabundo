@@ -127,14 +127,34 @@ export function mergeByChunk(geometries, material, { castShadow = false, receive
   return group;
 }
 
+const baseUpdateMatrixWorld = THREE.Object3D.prototype.updateMatrixWorld;
+
+/**
+ * Three recorre todos los descendientes en cada fotograma aunque ninguna matriz cambie: en la ciudad
+ * son miles de nodos congelados. Una rama completamente estática solo se recorre si algo la marca
+ * como modificada, si un ancestro fuerza la actualización o si se le añadieron hijos después de congelarla.
+ */
+function updateWhenChanged(force) {
+  if (force || this.matrixWorldNeedsUpdate || this.children.length !== this.userData.frozenChildren) {
+    if (this.children.length !== this.userData.frozenChildren) delete this.updateMatrixWorld;
+    baseUpdateMatrixWorld.call(this, force);
+  }
+}
+
 /** Solo inmuebles: conserva matrices de bus, llamas, ropa tendida y otros animados. */
 export function freezeStaticTransforms(root, dynamicRoot = null) {
   root.updateMatrixWorld(true);
   const visit = object => {
-    if (object === dynamicRoot || dynamicRoot?.has?.(object) || object.userData.update) return;
+    if (object === dynamicRoot || dynamicRoot?.has?.(object) || object.userData.update) return false;
     object.matrixAutoUpdate = false;
     object.matrixWorldAutoUpdate = false;
-    for (const child of object.children) visit(child);
+    let frozen = true;
+    for (const child of object.children) if (!visit(child)) frozen = false;
+    if (frozen && object.children.length) {
+      object.userData.frozenChildren = object.children.length;
+      object.updateMatrixWorld = updateWhenChanged;
+    }
+    return frozen;
   };
   visit(root);
 }
