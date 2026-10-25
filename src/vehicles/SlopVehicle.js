@@ -18,7 +18,7 @@ export function createSlopVehicle({variant='sedan',seed=0,length=4.3,width=1.76,
   // La carrocería original está centrada en X/Z y apoyada en Y=0.
   group.add(mesh);const state=material.userData.vehicleState;
   let disposed=false;
-  const visual={group,wheels:[],tailMat:null,variant,material,
+  const visual={group,wheels:[],tailMat:null,variant,material,headlightFrame:mesh,headlightSpec:spec,
     updateMotion(distance,braking){state.wheelAngle.value=(state.wheelAngle.value+distance/(spec.wheelRadius*group.scale.y))%(Math.PI*2);state.braking.value=braking?1:0;},
     setNight(night){state.night.value=night?1:0;},
     setPose(pitch,roll,heave){mesh.rotation.set(pitch,Math.PI/2,roll,'YXZ');mesh.position.y=heave;visual.pose={pitch,roll,heave};},

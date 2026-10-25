@@ -39,7 +39,8 @@ export class LocalLights {
         this.sources.set(light, entry);
         light.layers.set(2);
       }
-      entry.fixed = fixed;
+      // Vehicle lamps must keep following their root even after the static city refresh.
+      entry.fixed = fixed && !light.userData.dynamicLight;
       light.getWorldPosition(entry.position);
     });
   }

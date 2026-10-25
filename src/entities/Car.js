@@ -36,6 +36,7 @@ export class Car {
     this.headlights=[];
     for(const side of [-1,1]){
       const light=new THREE.SpotLight('#fff3d6',0,30,.2,.85,2);light.position.set(this.length/2-.03,.65,side*.6);light.target.position.set(12,-.35,side*.65);light.castShadow=false;
+      light.userData.dynamicLight=true;
       this.group.add(light,light.target);this.headlights.push(light);
     }
 
@@ -95,6 +96,7 @@ export class Car {
       this.vehicle=next;this.visualMode=mode;
       this.importedModel=mode==='actual'?next.group:undefined;
       this.group.remove(previous.group);previous.dispose();next.activate?.();
+      this.syncHeadlights();
       settled=true;return true;
     }};
   }
@@ -155,11 +157,32 @@ export class Car {
     if(this.drivingVisual)this.drivingVisual.group.visible=enabled;
     for(const mirror of this.mirrors)for(const child of mirror.children)child.visible=enabled||this.visualMode!=='slop';
     if(!enabled&&this.drivingVisual){this.drivingVisual.update(0,0,0,0);}
+    this.syncHeadlights();
+  }
+
+  syncHeadlights(){
+    const visual=this.controller==='player'?this.drivingVisual:this.vehicle;
+    const frame=visual?.headlightFrame,spec=visual?.headlightSpec;
+    if(frame&&spec){
+      frame.updateWorldMatrix(true,false);
+      this._headlightMatrix??=new THREE.Matrix4();this._headlightInverse??=new THREE.Matrix4();
+      this._headlightMatrix.multiplyMatrices(this._headlightInverse.copy(this.group.matrixWorld).invert(),frame.matrixWorld);
+    }
+    this.headlights.forEach((light,i)=>{
+      const side=i===0?-1:1;
+      if(frame&&spec){
+        light.position.set(side*spec.headlight[0],spec.headlight[1],spec.zFront+.02).applyMatrix4(this._headlightMatrix);
+        light.target.position.set(side*spec.headlight[0],spec.headlight[1]-.8,spec.zFront+12).applyMatrix4(this._headlightMatrix);
+      }else{
+        light.position.set(this.length/2-.03,.65,side*.6);light.target.position.set(12,-.35,side*.65);
+      }
+    });
   }
 
   setPose(pitch,roll,heave=0){
     this.vehicle.setPose?.(pitch,roll,heave);
     if(!this.vehicle.setPose){this.vehicle.group.rotation.x=roll;this.vehicle.group.rotation.z=-pitch;this.vehicle.group.position.y=heave;}
+    this.syncHeadlights();
   }
   setSteering(angle,signal=0){this.steerAngle=angle;this.turnSignal=signal;this.vehicle.setSteering?.(angle,signal);}
 

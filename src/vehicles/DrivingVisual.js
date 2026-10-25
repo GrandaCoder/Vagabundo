@@ -20,5 +20,5 @@ export function createDrivingVisual(car){
  }
  group.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});group.visible=false;
  let angle=0;
- return {group,material,update(pitch,roll,steer,distance,heave=0){chassis.position.y=heave;chassis.rotation.x=pitch;chassis.rotation.z=roll;angle=(angle+distance/spec.wheelRadius)%(Math.PI*2);for(const wheel of wheels){wheel.pivot.rotation.y=wheel.front?steer:0;wheel.spin.rotation.x=angle;}},dispose(){group.removeFromParent();material.dispose();}};
+ return {group,material,headlightFrame:chassis,headlightSpec:spec,update(pitch,roll,steer,distance,heave=0){chassis.position.y=heave;chassis.rotation.x=pitch;chassis.rotation.z=roll;angle=(angle+distance/spec.wheelRadius)%(Math.PI*2);for(const wheel of wheels){wheel.pivot.rotation.y=wheel.front?steer:0;wheel.spin.rotation.x=angle;}car.syncHeadlights?.();},dispose(){group.removeFromParent();material.dispose();}};
 }
