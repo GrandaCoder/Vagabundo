@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-export const STATIC_CHUNK_SIZE = 32;
+export const STATIC_CHUNK_SIZE = 96;
 const center = new THREE.Vector3();
 
 export function geometryChunk(geometry, matrix = null) {

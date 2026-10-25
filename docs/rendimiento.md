@@ -67,3 +67,5 @@ Medida con `?perf` en X 209.48, Z 38.65 (tercera persona, mediodía, calidad baj
 
 - Cada dibujo cuesta 14–20 µs de CPU; con ~1000 dibujos el cuadro supera los 30 ms sin que los triángulos (≈400 mil, la mayoría en objetos sueltos y semáforos) ni los píxeles sean el límite.
 - Los sectores estáticos suman ~550 dibujos con 146 materiales distintos y mallas diminutas (media de 20–60 triángulos): la fusión por material × chunk de 32 m produce muchos dibujos pequeños. Las calzadas, andenes y bordillos suman ~90; la vista cerrada de edificios, ~320 en tres decenas de variantes de fachada.
+
+**Chunks estáticos de 96 m (antes 32 m).** En el mismo punto: 1018 → 706 dibujos y 19,9 → 15,1 ms de CPU de render. El corte por frustum sigue por chunk y las sombras usan proxies propios, así que solo se dibujan algo más de triángulos por chunk parcialmente visible.
