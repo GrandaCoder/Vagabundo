@@ -1,4 +1,5 @@
 import {SlopCrashAudio} from '../vehicles/SlopCrashAudio.js';
+import {SlopMotorAudio} from '../vehicles/SlopMotorAudio.js';
 // src/systems/AudioSystem.js
 import { Howl, Howler } from 'howler';
 import { VehicleAudio } from './VehicleAudio.js';
@@ -43,7 +44,7 @@ export class AudioSystem {
       rain: sound('rain_sound_01.mp3', { volume: .45, loop: true })
     };
     // Reproducción normal: sin posiciones, panners ni atenuación 3D.
-    const vehicleOptions = { volume: 0, loop: true, pool: 10 };
+    const vehicleOptions = { volume: 0, loop: true, pool: 10, preload:false };
     this.vehicleSounds = {
       carIdle: sound('car_idling_at_a_traf.opus', vehicleOptions),
       carDrive: sound('small_vehicle_drivin.opus', vehicleOptions),
@@ -61,12 +62,13 @@ export class AudioSystem {
     this.driverSounds = driverFiles.map(file => sound(file, { volume: 0, loop: false, pool: 8 }));
     this.theftSounds = Array.from({ length: 5 }, (_, i) => sound(`roberto_robo_espejo_n${i + 1}.mp3`, { volume: 0, loop: false, pool: 6 }));
     this._theftVoices = new Map();
-    this.vehicles = new VehicleAudio(this.vehicleSounds, Math.random, this.driverSounds);
+    this.motorAudio=new SlopMotorAudio(howler);
+    this.vehicles = new VehicleAudio(this.vehicleSounds, Math.random, this.driverSounds,this.motorAudio);
     this._carAlarms = new Map();
     this.collisionAudio=new SlopCrashAudio(howler,()=>this._listenerPosition,()=>this.muted||this._paused);
 
     // El audio es opcional: un archivo ausente o bloqueado no impide jugar.
-    this.ready = Promise.all([...Object.values(this.sounds), ...Object.values(this.vehicleSounds), ...this.driverSounds, ...this.theftSounds].map(sound => new Promise(resolve => {
+    this.ready = Promise.all([...Object.values(this.sounds), ...this.driverSounds, ...this.theftSounds].map(sound => new Promise(resolve => {
       if (sound.state() === 'loaded') { resolve(); return; }
       const done = () => {
         clearTimeout(timer);
@@ -268,9 +270,9 @@ export class AudioSystem {
     } else if (this._ambientStarted) this.sounds.ambient.play(this._ambientId);
   }
 
-  honkPlayer(){
+  honkPlayer(car){
     const now=performance.now();if(now-(this._playerHornAt??-Infinity)<650||this._paused)return;
-    this._playerHornAt=now;const sound=this.vehicleSounds.horn1,id=sound.play('honk');sound.volume(this.muted?0:.55,id);
+    this._playerHornAt=now;if(this.motorAudio.available){this.motorAudio.honk(car);return;}const sound=this.vehicleSounds.horn1,id=sound.play('honk');sound.volume(this.muted?0:.55,id);
   }
 
   setAcoustics(acoustics) { this.acoustics = acoustics; }

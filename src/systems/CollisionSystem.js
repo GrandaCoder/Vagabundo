@@ -100,7 +100,7 @@ export class CollisionSystem {
       const halfZ = (s * vehicle.length + c * vehicle.width) / 2;
       const p = vehicle.position;
       entry.box.min.set(p.x - halfX, p.y, p.z - halfZ);
-      entry.box.max.set(p.x + halfX, p.y + (isBus ? 3 : 1.65), p.z + halfZ);
+      entry.box.max.set(p.x + halfX, p.y + (vehicle.height ?? (isBus ? 3 : 1.65)), p.z + halfZ);
       this.dynamicColliders.push(entry);
     }
   }

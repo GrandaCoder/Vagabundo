@@ -1,6 +1,6 @@
 # Migración experimental a WebGPU / TSL
 
-Rama: `pruebas-slop-newyork`. Solo WebGPU, Three.js 0.186.1 fijado. No se ha integrado en `main` ni publicado.
+La migración original se integró en `main`. La actualización actual se desarrolla en `pruebas-slop-actualizacion`, sin merge ni push. Solo WebGPU, Three.js 0.186.1 fijado; Vite se conserva. Ver [auditoría, cambios y mediciones actuales](actualizacion-slop.md). Los resultados siguientes describen etapas anteriores, no una garantía de rendimiento de la versión actual.
 
 La base técnica procede de Slop New York, revisión `1b54e165ddc26b3e951d5614d56a88995da1da38`: geometría y materiales de vehículos, organización de cielo/entorno/sol y flujo MRT, SSR, bloom y ajuste de color. Ver [avisos MIT](../THIRD_PARTY_NOTICES.md). Las adaptaciones permanecen en el repositorio; no se carga su CDN `dev` ni se depende del clon en `work/`.
 
@@ -16,7 +16,7 @@ El cielo y la iluminación siguen el reloj y la humedad existentes. El sol utili
 
 | Calidad | Sombras | SSR | Bloom | Luces locales activas máximas |
 | --- | --- | --- | --- | ---: |
-| Baja | No | No | No | 16 |
+| Baja | No | No | Cuarto de resolución | 16 |
 | Media | 2 × 1024 | No | Media resolución | 48 |
 | Alta | 2 × 2048 | Media resolución | Media resolución | 96 |
 

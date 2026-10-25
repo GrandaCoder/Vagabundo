@@ -7,7 +7,6 @@ import {StableClusteredLighting} from '../graphics/StableClusteredLighting.js';
 import {VisualPipeline} from '../graphics/VisualPipeline.js';
 import * as THREE from 'three/webgpu';
 import { createWebGPURenderer,initializeWebGPU,WEBGPU_QUALITY_KEY } from './WebGPU.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { PlayerSilhouette } from './PlayerSilhouette.js';
 import { AdaptiveResolution } from './AdaptiveResolution.js';
 import { FrustumCulling } from './FrustumCulling.js';
@@ -53,16 +52,10 @@ export class Renderer {
     try { if(persist)localStorage.setItem(WEBGPU_QUALITY_KEY, this.quality); } catch { /* sin almacenamiento */ }
   }
 
-  get effectiveQuality() { return effectiveQuality(this.quality ?? 'alta', this.resolution?.pressure ?? 0); }
-
-  /** Mapa de entorno neutro: da reflejos (charcos, vidrios) y luz rebotada a los materiales PBR */
-  createEnvironment() {
-    const pmrem = new THREE.PMREMGenerator(this.instance);
-    const room=new RoomEnvironment();
-    const target=pmrem.fromScene(room, 0.04);
-    const tex=target.texture;this.environment=target;room.dispose();
-    pmrem.dispose();
-    return tex;
+  get effectiveQuality() {
+    const wanted=effectiveQuality(this.quality ?? 'alta',this.resolution?.pressure??0);
+    if(!this.readyQualities||this.readyQualities.has(wanted))return wanted;
+    return this.readyQualities.has('baja')?'baja':this.quality;
   }
 
   _onResize() {
@@ -108,9 +101,15 @@ export class Renderer {
     console.info('[WebGPU] Familias gráficas',this.startupStats);
     this.onPrepareProgress?.(`Shaders TSL: 0/${jobs.length} familias`);
     renderer.setRenderTarget(this.pipeline.scenePass.renderTarget);renderer.setMRT(this.pipeline.scenePass.getMRT());
+    let lastYield=performance.now();
     try{await compileShaderJobs(jobs,async family=>{
-      for(const object of family){culled.push([object,object.frustumCulled]);object.frustumCulled=false;await new Promise(r=>setTimeout(r,0));await renderer.compileAsync(object,camera,scene);}
-    },{concurrency:4,onProgress:(done,total)=>this.onPrepareProgress?.(`Shaders TSL: ${done}/${total} familias`)});}
+      for(const object of family){
+        culled.push([object,object.frustumCulled]);object.frustumCulled=false;
+        // Yield by elapsed CPU budget, not once per binding (thousands of clamped timers).
+        if(performance.now()-lastYield>8){lastYield=performance.now();await new Promise(r=>setTimeout(r,0));}
+        await renderer.compileAsync(object,camera,scene);
+      }
+    },{concurrency:8,onProgress:(done,total)=>this.onPrepareProgress?.(`Shaders TSL: ${done}/${total} familias`)});}
     finally{for(const [object,value] of culled)object.frustumCulled=value;renderer.setRenderTarget(target);renderer.setMRT(targets);}
     this.startupStats.compileMs=performance.now()-started;
   }
@@ -153,6 +152,14 @@ export class Renderer {
     await this.instance.backend.device.queue.onSubmittedWorkDone();
   }
 
+  prepareQuality(scene,camera,playerRoot,options){
+    const pending=(this._dynamicQueue??Promise.resolve()).then(()=>{
+      if(this._disposed)throw new Error('El renderizador ya se liberó');
+      return this.warmup(scene,camera,playerRoot,options);
+    });
+    this._dynamicQueue=pending.catch(()=>{});return pending;
+  }
+
   dispose() {
     this._disposed=true;this.diagnostics?.dispose();
     window.removeEventListener('resize',this._resizeListener);document.removeEventListener('visibilitychange',this._visibilityListener);this.silhouette.material.dispose();
@@ -176,13 +183,13 @@ export class Renderer {
    * Dibuja la escena completa en cada calidad con su estado real (`applyQuality`) y en cada vista
    * (`views`: tercera persona e isométrica), incluida la silueta, antes de ocultar la carga.
    */
-  async warmup(scene,camera,playerRoot,{applyQuality=()=>{},views=[()=>'vista']}={}){
+  async warmup(scene,camera,playerRoot,{applyQuality=()=>{},views=[()=>'vista'],qualities=['baja','media','alta']}={}){
     const started=performance.now();this.culling.restore();
     const requested=this.effectiveQuality;
     this._overlayRoot=playerRoot;this._overlayEnabled=true;
     try{
       await withoutFrustumCulling([scene],async()=>{
-        for(const quality of ['baja','media','alta']){
+        for(const quality of new Set(qualities)){
           applyQuality(quality);
           for(const view of views){
             const label=view();
@@ -190,6 +197,7 @@ export class Renderer {
             this._ensurePipeline(scene,camera,quality);this.pipeline.render(this.hour??22);
             await this.waitForGPU();await paintLoadingFrame();
           }
+          (this.readyQualities??=new Set()).add(quality);
         }
       });
     }finally{applyQuality(requested);this._ensurePipeline(scene,camera,requested);}

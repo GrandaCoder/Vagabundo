@@ -55,7 +55,7 @@ export function installPerfProbe(game, target = globalThis) {
       last = now;
     }
     const info = game.renderer.instance.info.render;
-    return { name, ...frameStats(intervals), work: delta(diagnostics.snapshot(), before), bakes: (game.sceneMgr.atmosphere?.bakeCount ?? 0) - bakes,
+    return { name, ...frameStats(intervals), meanMs:intervals.length?(last-started)/intervals.length:0,elapsedMs:last-started,work: delta(diagnostics.snapshot(), before), bakes: (game.sceneMgr.atmosphere?.bakeCount ?? 0) - bakes,
       events: diagnostics.events.slice(events), quality: game.renderer.effectiveQuality, pixelRatio: game.renderer.instance.getPixelRatio(),
       drawCalls: info.drawCalls, triangles: info.triangles, memoryMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null };
   };

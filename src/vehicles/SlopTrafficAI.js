@@ -1,5 +1,6 @@
 // IDM, bend caps and MOBIL safety adapted from Slop New York 1b54e165/js/traffic.js (MIT).
 export const CAR_DRIVER=Object.freeze({a:2,b:3,T:1.2,s0:2,aLat:3.5});
+export const BUS_DRIVER=Object.freeze({a:1.1,b:2.5,T:1.5,s0:2.5,aLat:2});
 export const LOOKAHEAD=70;
 export function freeAcc(v){return v.driver.a*(1-(v.speed/v.v0)**4);}
 export function brake(v,gap,speed,s0=v.driver.s0,T=v.driver.T){

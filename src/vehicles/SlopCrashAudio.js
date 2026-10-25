@@ -139,3 +139,31 @@ export class SlopCrashAudio {
  }
  stop(){for(const v of this.voices){for(const s of v.sources){try{s.stop();}catch{ /* ended */ }}v.gain.disconnect();}this.voices.clear();this.pairs=new WeakMap();}
 }
+
+export function synthHorn(ctx, duration, seed) {
+  const random = randomSource(seed);
+  const frequencies = [365 + random() * 45, 465 + random() * 55];
+  const phases = [random(), random()];
+  const delay = 0.006 + random() * 0.009;
+  const harmonics = [0.52, 1, 0.65, 0.37, 0.24, 0.14, 0.085];
+  let flutter = 0, air = 0;
+  return makeBuffer(ctx, duration, (t) => {
+    const noise = random() * 2 - 1;
+    flutter += (noise - flutter) * 0.008;
+    air += (noise - air) * 0.24;
+    let tone = 0;
+    for (let reed = 0; reed < 2; reed++) {
+      const local = Math.max(0, t - reed * delay);
+      const attack = 1 - Math.exp(-local * (reed ? 160 : 230));
+      const settling = 1 - 0.065 * Math.exp(-local * 65);
+      phases[reed] += frequencies[reed] * (settling + flutter * 0.045 + Math.sin(local * 71 + reed) * 0.0025) / ctx.sampleRate;
+      let buzz = 0;
+      for (let i = 0; i < harmonics.length; i++) buzz += Math.sin(TAU * phases[reed] * (i + 1)) * harmonics[i];
+      tone += buzz * attack * (reed ? 0.83 : 1);
+    }
+    const release = smoothstep((duration - t) / 0.045);
+    const chatter = (noise - air) * Math.exp(-t * 55) * 0.6;
+    return (tone * (0.95 + flutter * 0.6) + air * 0.17 + chatter) * release;
+  }, 0.7);
+}
+

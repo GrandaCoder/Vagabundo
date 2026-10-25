@@ -1,6 +1,7 @@
 import { createImportedModel,disposeImportedInstance } from '../utils/ImportedModels.js';
 
 export async function createVehicleVisual(mode,options) {
+  if(['suv','police','bus'].includes(options.variant))mode='slop';
   if(mode==='slop') {
     const {createSlopVehicle}=await import('./SlopVehicle.js');
     return createSlopVehicle(options);

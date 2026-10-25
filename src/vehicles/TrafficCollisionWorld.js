@@ -9,7 +9,7 @@ export class TrafficCollisionWorld {
  body(car,owner,{route=false,bus=false}={}){
   let body=this.bodies.get(car);if(body?.owner===owner)return body;
   initializeMotion(owner);const world=this;
-  body={car,owner,bus,type:'traffic',edge:true,half:car.length/2,halfWidth:car.width/2,halfW:car.width/2,halfL:car.length/2,axle:car.length*.3,move:{turn:'S'},edgeInfo:{len:1000},nose:0,tx:Math.cos(car.group.rotation.y),tz:-Math.sin(car.group.rotation.y)};
+  body={car,owner,bus:bus||car.variant==='bus',isSUV:car.variant==='suv',type:'traffic',edge:true,half:car.length/2,halfWidth:car.width/2,halfW:car.width/2,halfL:car.length/2,axle:car.length*.3,move:{turn:'S'},edgeInfo:{len:1000},nose:0,tx:Math.cos(car.group.rotation.y),tz:-Math.sin(car.group.rotation.y)};
   Object.defineProperties(body,{position:{get:()=>car.position},x:{get:()=>car.position.x},z:{get:()=>car.position.z},heading:{get:()=>bus?Math.atan2(car.heading?.x??0,car.heading?.z??-1):car.group.rotation.y+Math.PI/2},speed:{get:()=>owner.speed??0,set:v=>owner.speed=v},acc:{get:()=>owner.acceleration??0},yaw:{get:()=>owner.pathYaw??body.heading,set:v=>owner.pathYaw=v}});
   for(const field of [...MOTION_FIELDS,'blink'])Object.defineProperty(body,field,{get:()=>owner[field]??0,set:v=>owner[field]=v});
   body.shove=(dx,dz)=>{
