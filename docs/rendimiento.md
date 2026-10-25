@@ -54,3 +54,16 @@ El tiempo alrededor del render es CPU y envío de órdenes: **no mide el tiempo 
 ## Validación de esta entrega
 
 `npm test` completó correctamente los 47 archivos de pruebas y `npm run build` terminó sin errores. Las pruebas de navegador se intentaron con Chromium y renderizado por software: una ejecución llegó a la partida, pero los recorridos completos encontraron tiempos agotados y cierres de pestaña durante la preparación gráfica. No se consideran una suite E2E aprobada ni una medición de FPS en GPU real. Se corrigió una expectativa antigua de la nota inicial que exigía créditos actualmente ocultos, manteniendo intacta esa nota.
+
+## Línea base de la ciudad sola (rama cambio-de-prueba-de-ciudad)
+
+Medida con `?perf` en X 209.48, Z 38.65 (tercera persona, mediodía, calidad baja bloqueada, panel DEV con carros, TransMilenio, peatones, palomas, Chato, árboles, lluvia, luces, sombras y efectos apagados). El tiempo es el de CPU de `Renderer.render` (mediana de las llamadas del bucle del juego), que no depende de la velocidad del panel integrado.
+
+| Qué se oculta | Dibujos | CPU de render |
+| --- | --- | --- |
+| nada | 1018 | 19,9 ms |
+| `Edificios agrupados en tercera persona` | 701 | 15,3 ms |
+| todos los `Sector x,z` estáticos | 157 | 7,4 ms |
+
+- Cada dibujo cuesta 14–20 µs de CPU; con ~1000 dibujos el cuadro supera los 30 ms sin que los triángulos (≈400 mil, la mayoría en objetos sueltos y semáforos) ni los píxeles sean el límite.
+- Los sectores estáticos suman ~550 dibujos con 146 materiales distintos y mallas diminutas (media de 20–60 triángulos): la fusión por material × chunk de 32 m produce muchos dibujos pequeños. Las calzadas, andenes y bordillos suman ~90; la vista cerrada de edificios, ~320 en tres decenas de variantes de fachada.
