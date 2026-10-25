@@ -12,6 +12,9 @@ import { AdaptiveResolution } from './AdaptiveResolution.js';
 import { FrustumCulling } from './FrustumCulling.js';
 import { paintLoadingFrame } from '../ui/LoadingScreen.js';
 import { GRAPHICS_PROFILES, effectiveQuality } from './GraphicsQuality.js';
+import { installStableSkinningNames } from './StableSkinning.js';
+
+installStableSkinningNames();
 
 export class Renderer {
   constructor(canvas) {
