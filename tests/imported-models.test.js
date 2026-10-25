@@ -10,6 +10,7 @@ mock.module('../src/world/bogota/textures.js', { namedExports: { ...textures, ra
 const { Car } = await import('../src/entities/Car.js');
 const { Cambuche } = await import('../src/entities/Cambuche.js');
 const { BusService } = await import('../src/world/bogota/BusService.js');
+mock.module('../src/utils/signs.js',{namedExports:{signTexture:()=>new THREE.Texture(),signMesh:()=>new THREE.Group()}});
 const { TrafficSignals } = await import('../src/world/bogota/TrafficSignals.js');
 const { Pickup } = await import('../src/entities/Pickup.js');
 const { instanceBatches, disposeInstanceBatches } = await import('../src/graphics/InstanceBatches.js');
@@ -139,7 +140,7 @@ test('las lentes del semáforo se iluminan sobre el GLB, sin discos flotantes ni
   const signals = new TrafficSignals();
   await signals.preloadModel();
   assert.equal(signals.poleMesh.count, signals.poles.length);
-  assert.equal(signals.group.children.length, 1);
+  assert.equal(signals.group.children.length, 3);
   const axes = signals.poleMesh.geometry.getAttribute('trafficAxis');
   assert.deepEqual([...axes.array], signals.poles.map(pole => pole.axis));
   let pointLights = 0;

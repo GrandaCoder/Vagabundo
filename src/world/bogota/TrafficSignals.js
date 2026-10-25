@@ -3,6 +3,7 @@ import {uniform,texture,uv,color,attribute,step,max,min,float,mix} from 'three/t
 import { createImportedModel } from '../../utils/ImportedModels.js';
 import { CARACAS } from './StreetLayout.js';
 import { CITY_CARRERAS as CARRERAS, CITY_CALLES as CALLES } from './CityLayout.js';
+import { signTexture } from '../../utils/signs.js';
 
 const SEM_HEIGHT = 4.3;
 
@@ -27,6 +28,8 @@ export function signalState(time, axis) {
   return phase < 14 ? 0 : phase < 17 ? 1 : 2;
 }
 
+export function intersectionPhase(signals,node,axis){return node.control==='priority'?0:signalState(signals.time,axis);}
+
 export class TrafficSignals {
   constructor() {
     this.group = new THREE.Group();
@@ -49,12 +52,29 @@ export class TrafficSignals {
         { x: node.x1 + .5, z: node.z1 + .5, hx: 0, hz: -1, axis: 1 }
       );
     }
+    const count=Math.ceil(this.nodes.length/4);
+    const ranked=[...this.nodes].sort((a,b)=>Number(b.x0<=CARACAS.lanes[1][1]*2&&b.x1>=CARACAS.lanes[0][0]*2)-Number(a.x0<=CARACAS.lanes[1][1]*2&&a.x1>=CARACAS.lanes[0][0]*2)|| (b.x1-b.x0+b.z1-b.z0)-(a.x1-a.x0+a.z1-a.z0)||a.z0-b.z0||a.x0-b.x0);
+    const selected=new Set(ranked.slice(0,count));
+    for(const node of this.nodes){node.control=selected.has(node)?'signal':'priority';node.mainAxis=node.x1-node.x0>=node.z1-node.z0?1:0;}
+    this.poles=this.poles.filter((pole,i)=>this.nodes[Math.floor(i/4)].control==='signal');
   }
 
   async preloadModel() {
     const base = await createImportedModel('semaforo');
     this._buildPoles(base);
     this.update(this.time);
+    const priority=this.nodes.filter(n=>n.control==='priority'),count=priority.length*2;
+    const map=signTexture({title:'PARE',bg:'#ad201e',fg:'#ffffff',w:256,h:256});
+    const signs=new THREE.InstancedMesh(new THREE.CircleGeometry(.45,8).rotateZ(Math.PI/8),new THREE.MeshStandardMaterial({map,side:THREE.DoubleSide,roughness:.8}),count);
+    const posts=new THREE.InstancedMesh(new THREE.CylinderGeometry(.035,.035,2,6),new THREE.MeshStandardMaterial({color:'#686b6d',roughness:.8}),count);
+    const dummy=new THREE.Object3D();let index=0;
+    for(const node of priority)for(const side of [-1,1]){
+      dummy.position.set(side<0?node.x0-.6:node.x1+.6,2,side<0?node.z0-.6:node.z1+.6);
+      dummy.rotation.set(0,node.mainAxis===1?side*Math.PI/2:side<0?0:Math.PI,0);dummy.updateMatrix();signs.setMatrixAt(index,dummy.matrix);
+      dummy.position.y=1;dummy.rotation.set(0,0,0);dummy.updateMatrix();posts.setMatrixAt(index++,dummy.matrix);
+    }
+    signs.name='Señales PARE agrupadas';posts.name='Postes PARE agrupados';signs.instanceMatrix.needsUpdate=posts.instanceMatrix.needsUpdate=true;
+    this.group.add(signs,posts);this.stopSigns=[signs,posts];
   }
 
   update(time) {
@@ -67,9 +87,8 @@ export class TrafficSignals {
 
   blocks(point, direction, current, length = 0, vehicle = null, nodes = this.nodes) {
     const axis = Math.abs(direction.x) >= Math.abs(direction.z) ? 0 : 1;
-    const red = signalState(this.time, axis) !== 0;
-    if (!red && !vehicle) return false;
     for (const node of nodes) {
+      const red=intersectionPhase(this,node,axis)!==0;
       const claim = this.reservations.get(node);
       if (vehicle && (claim?.owners.get(vehicle)?.entered||claim?.owners.get(vehicle)?.committed)) continue;
       // Quien ya está en el cruce lo despeja aunque cambie la luz.
@@ -91,9 +110,9 @@ export class TrafficSignals {
 
   busClearance(position, length, direction = -1) {
     if (position.y > 3) return Infinity;
-    const red = signalState(this.time, 1) !== 0;
     let clearance = Infinity;
     for (const node of this.nodes) {
+      const red=intersectionPhase(this,node,1)!==0;
       if (!red && !this.reservations.get(node)?.busBlocked) continue;
       if (position.x < node.x0 || position.x > node.x1) continue;
       if (direction < 0 && position.z > node.z1) clearance = Math.min(clearance, Math.max(0, position.z - node.z1 - length / 2 - .8));
@@ -149,5 +168,6 @@ export class TrafficSignals {
   dispose() {
     this.group.removeFromParent();
     this.poleMesh?.geometry.dispose(); this.poleMesh?.material.dispose();
+    for(const mesh of this.stopSigns??[]){mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose();mesh.dispose();}
   }
 }

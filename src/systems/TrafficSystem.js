@@ -4,9 +4,10 @@ import {weightedMove} from '../vehicles/SlopDynamics.js';
 import {BogotaRoadNetwork} from '../vehicles/BogotaRoadNetwork.js';
 import * as THREE from 'three';
 import { Car } from '../entities/Car.js';
-import { signalState } from '../world/bogota/TrafficSignals.js';
+import { intersectionPhase } from '../world/bogota/TrafficSignals.js';
 import { PLAYER_RADIUS } from '../utils/constants.js';
 import { SpatialGrid } from '../core/SpatialGrid.js';
+import {trafficVariant} from '../vehicles/VehicleTypes.js';
 
 const GAP = 1.8;
 const PROBE_STEP = 0.5;
@@ -36,7 +37,7 @@ export class TrafficSystem {
       for (let i = 0; i < count; i++) {
         const distance = (i + 0.4) * route.length / count;
         route.sample(distance, this._position, this._direction);
-        const car = new Car(scene, this._position, Math.atan2(-this._direction.z, this._direction.x), { traffic: true });
+        const car = new Car(scene, this._position, Math.atan2(-this._direction.z, this._direction.x), { traffic: true, variant:trafficVariant(random) });
         const cruiseSpeed = 10 + random() * 4;
         this.vehicles.push({ car, route, distance, speed: 0, cruiseSpeed, nextDistance: distance, nextSpeed: 0,
           driver:{...CAR_DRIVER},v0:cruiseSpeed,acceleration: 0, accelerationLimit:CAR_DRIVER.a, braking:9,
@@ -163,7 +164,7 @@ export class TrafficSystem {
         const overlaps = this._overlapsNode(vehicle.car, node);
         claim.entered ||= overlaps;
         if ((claim.entered && !overlaps) || (!claim.entered &&
-          ((signalState(this.signals.time, claim.plan.axis) !== 0&&!claim.committed) || !candidates.includes(vehicle)))) state.owners.delete(vehicle);
+          ((intersectionPhase(this.signals,node,claim.plan.axis) !== 0&&!claim.committed) || !candidates.includes(vehicle)))) state.owners.delete(vehicle);
       }
       for (const vehicle of state.plans.keys()) if (!candidates.includes(vehicle) && !state.owners.has(vehicle)) state.plans.delete(vehicle);
       for (const vehicle of candidates) if (!state.plans.has(vehicle)) state.plans.set(vehicle, this._crossingPlan(vehicle, node));
@@ -172,7 +173,7 @@ export class TrafficSystem {
       const busCrossingX = bus?.pathX?.(node.z1, bus.laneX) ?? bus?.position.x;
       const busApproaching = bus?.group.visible && bus.position.y < 3 && bus.position.z > node.z1 &&
         bus.position.z < node.z1 + bus.length / 2 + 15 && busCrossingX >= node.x0 && busCrossingX <= node.x1;
-      const busClaims = busInside || (busApproaching && signalState(this.signals.time, 1) === 0);
+      const busClaims = busInside || (busApproaching && intersectionPhase(this.signals,node,1) === 0);
       if (bus && !state.busPlan) {
         state.busPlan = { width: bus.width, points: [], axis: 1 };
         for (let z = node.z1 + bus.length / 2; z >= node.z0 - bus.length / 2; z -= .75) state.busPlan.points.push({ x: bus.pathX?.(z, bus.laneX) ?? bus.position.x, z });
@@ -187,9 +188,16 @@ export class TrafficSystem {
       for (const vehicle of ordered) {
         if (state.owners.has(vehicle)) continue;
         const plan = state.plans.get(vehicle), entered = this._overlapsNode(vehicle.car, node);
-        const phase=signalState(this.signals.time,plan.axis);
+        const phase=intersectionPhase(this.signals,node,plan.axis);
         const distance=this._stopDistance(vehicle,node,plan),stoppable=canStopBefore({speed:vehicle.speed,v0:vehicle.cruiseSpeed,driver:vehicle.driver??CAR_DRIVER},distance,phase===0?'green':phase===1?'amber':'red');
         const committed=phase===1&&!stoppable;
+        // Slop's unsignalized-corner rule: yield on the minor road, reserve only a clear exit.
+        // A stopped minor-road car eventually competes by waiting age instead of starving forever.
+        if(node.control==='priority'&&!entered&&plan.axis!==node.mainAxis){
+          if(distance>1||vehicle.speed>.3)continue;
+          const mainApproaching=candidates.some(other=>other!==vehicle&&state.plans.get(other)?.axis===node.mainAxis&&this._stopDistance(other,node,state.plans.get(other))<Math.max(3,other.speed*2));
+          if(mainApproaching&&(vehicle.waitAge??0)<4)continue;
+        }
         if(!entered&&(phase===2||(phase===1&&!committed)))continue;
         if(!entered&&!this._exitClear(vehicle,plan))continue;
         const blocked = (busClaims && this._pathsConflict(plan, state.busPlan)) ||
