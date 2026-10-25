@@ -33,6 +33,7 @@ SOFTWARE.
 The vehicle TSL material graph in src/vehicles/SlopMaterial.js is also adapted from js/actor-models.js at the revision above. Foreign liveries were removed, local plate and TAXI labels were added, and wheel/braking/night state was connected to BAZUKO entities.
 
 Additional adapted modules at the same Slop New York revision: src/graphics/Atmosphere.js (sky, environment and cascaded-sun arrangement), src/graphics/PostProcessing.js (TSL color grading and bloom), and src/graphics/VisualPipeline.js (MRT and SSR arrangement). They are adjusted to BAZUKO's scale, clock, weather and quality profiles. These adaptations are covered by the MIT notice above.
+The time-of-day profiles (`golden`, `midday`, `blue-hour`, `night`) in `src/graphics/Atmosphere.js` are adapted from `js/lighting.js` and remain driven by BAZUKO's Bogotá clock.
 
 ## Slop New York — traffic, vehicle contacts and crash effects
 

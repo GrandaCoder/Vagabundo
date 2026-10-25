@@ -5,11 +5,36 @@ import {SunLight} from 'three/addons/lights/SunLight.js';
 import {SunLightNode} from 'three/addons/lights/SunLightNode.js';
 import {uniform,mix,vec4,float} from 'three/tsl';
 import {cityUniforms} from './GraphicsState.js';
-export function atmosphericState(hour,wetness=0){
-  const h=((hour%24)+24)%24,day=THREE.MathUtils.smoothstep(h,5.5,8)*(1-THREE.MathUtils.smoothstep(h,17.5,19.5));
-  const warm=Math.max(0,1-Math.min(Math.abs(h-6.5),Math.abs(h-18))/1.8);
-  return {day,warm,night:1-day,clouds:THREE.MathUtils.clamp(.3+wetness*.55,0,1),sun:day*(5.5-wetness*2.4)+.22,ambient:.55+day*.9};
+
+// Time-of-day profiles adapted from Slop New York's lighting.js (MIT,
+// revision 1b54e165ddc26b3e951d5614d56a88995da1da38). The Bogotá clock
+// selects these continuously; they are profiles, not hard scene swaps.
+const TIME_PROFILES = Object.freeze({
+  golden: { id:'golden', label:'Golden hour', sunColor:'#ffca92', sunIntensity:3.8, ambient:1.05, sky:'#8b7892', fog:'#8f7d7b', night:0.08, wetness:0.36, clouds:.42 },
+  midday: { id:'midday', label:'Midday', sunColor:'#fff5e8', sunIntensity:5.2, ambient:1.42, sky:'#a9c8e5', fog:'#9eb5c7', night:0, wetness:.10, clouds:.28 },
+  'blue-hour': { id:'blue-hour', label:'Blue hour', sunColor:'#ff9466', sunIntensity:1.8, ambient:.72, sky:'#3d527f', fog:'#3b4562', night:.58, wetness:.50, clouds:.48 },
+  night: { id:'night', label:'Night', sunColor:'#93b9ef', sunIntensity:.55, ambient:.48, sky:'#101b35', fog:'#101827', night:1, wetness:.62, clouds:.34 }
+});
+const PROFILE_KEYS = Object.freeze([
+  [0,'night'], [5,'night'], [6.5,'blue-hour'], [8,'midday'], [16,'midday'],
+  [18,'golden'], [19.5,'blue-hour'], [21,'night'], [24,'night']
+]);
+const PROFILE_HOURS = Object.freeze({ golden:18, midday:12, 'blue-hour':20, night:23 });
+function profileAt(hour, wetness=0) {
+  const h=((hour%24)+24)%24;
+  let i=0; while(i<PROFILE_KEYS.length-2 && h>PROFILE_KEYS[i+1][0]) i++;
+  const [ha,ka]=PROFILE_KEYS[i], [hb,kb]=PROFILE_KEYS[i+1];
+  const a=TIME_PROFILES[ka], b=TIME_PROFILES[kb], t=THREE.MathUtils.clamp((h-ha)/(hb-ha),0,1);
+  const lerp=(x,y)=>x+(y-x)*t;
+  const color=(x,y)=>new THREE.Color(x).lerp(new THREE.Color(y),t);
+  return { id:t<.5?a.id:b.id, label:t<.5?a.label:b.label, sunColor:color(a.sunColor,b.sunColor), sunIntensity:lerp(a.sunIntensity,b.sunIntensity), ambient:lerp(a.ambient,b.ambient), sky:color(a.sky,b.sky), fog:color(a.fog,b.fog), night:lerp(a.night,b.night), wetness:Math.max(wetness,lerp(a.wetness,b.wetness)), clouds:THREE.MathUtils.clamp(lerp(a.clouds,b.clouds)+wetness*.35,0,1), progress:t };
 }
+export function atmosphericState(hour,wetness=0){
+  const p=profileAt(hour,wetness),day=1-p.night;
+  const h=((hour%24)+24)%24,warm=Math.max(0,1-Math.min(Math.abs(h-6.5),Math.abs(h-18))/1.8);
+  return {day,warm,night:p.night,clouds:p.clouds,sun:p.sunIntensity,ambient:p.ambient,profile:p.id,profileLabel:p.label};
+}
+export {TIME_PROFILES, profileAt};
 export class Atmosphere {
   constructor(scene,renderer,ambient){
     this.scene=scene;this.renderer=renderer;this.ambient=ambient;this.envScene=new THREE.Scene();
@@ -23,19 +48,25 @@ export class Atmosphere {
     scene.add(this.sky);this.pmrem=new THREE.PMREMGenerator(renderer);this.target=null;this.quality='alta';
   }
   update(hour,wetness=0){
-    const p=atmosphericState(hour,wetness);this.hour=hour;this.wetness=wetness;
+    const p=profileAt(hour,wetness);this.hour=hour;this.wetness=wetness;this.profile=p.id;this.profileLabel=p.label;
     this.night.value=p.night;cityUniforms.night.value=p.night;cityUniforms.uInteriorGlow.value=.25+p.night;cityUniforms.wetness.value=wetness;cityUniforms.clouds.value=p.clouds;
-    this.day=p.day;this.sun.castShadow=this.quality!=='baja'&&p.day>.05;
-    this.sun.intensity=p.sun;this.sun.color.set('#fff1d9').lerp(new THREE.Color('#ffb26d'),p.warm).lerp(new THREE.Color('#93b9ef'),p.night);
+    this.day=1-p.night;this.sun.castShadow=this.quality!=='baja'&&p.night<.95;
+    this.sun.intensity=p.sunIntensity;this.sun.color.copy(p.sunColor);
     const angle=(hour-6)/24*Math.PI*2;this.sun.position.set(Math.cos(angle)*.7,Math.max(.18,Math.sin(angle)),.45).normalize();this.sun.updateMatrixWorld();
-    this.ambient.intensity=p.ambient;this.ambient.color.set('#a9c9ed');this.ambient.groundColor.set('#846b52');
+    this.ambient.intensity=p.ambient;this.ambient.color.copy(p.sky);this.ambient.groundColor.set('#846b52');
     this.sky.sunPosition.value.copy(this.sun.position);this.sky.cloudCoverage.value=p.clouds;this.sky.cloudDensity.value=.3+wetness*.35;
-    this.scene.environmentIntensity=.3+p.day*.4;
-    const fog=new THREE.Color('#142337').lerp(new THREE.Color('#a8bdca'),p.day).lerp(new THREE.Color('#b59a87'),p.warm*.35);
-    this.scene.background.copy(fog);this.scene.fog.color.copy(fog);
-    this.scene.fog.near=35+p.day*30;this.scene.fog.far=(this.quality==='baja'?145:this.quality==='media'?200:280)*(1-wetness*.12);
+    this.scene.environmentIntensity=.3+(1-p.night)*.4;
+    this.scene.background.copy(p.sky);this.scene.fog.color.copy(p.fog);
+    this.scene.fog.near=35+(1-p.night)*30;this.scene.fog.far=(this.quality==='baja'?145:this.quality==='media'?200:280)*(1-wetness*.12);
     const bucket=Math.floor(hour*2)+Math.floor(wetness*4)*100;
     if(this.bucket!==bucket){this.bucket=bucket;this.bake();}
+  }
+  updateProfile(profileId, wetness=0){
+    const hour=PROFILE_HOURS[profileId];
+    if(hour===undefined) return false;
+    this.update(hour,wetness);
+    this.profile=profileId;this.profileLabel=TIME_PROFILES[profileId].label;
+    return true;
   }
   bake(){
     const started=performance.now();

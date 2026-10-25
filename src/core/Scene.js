@@ -57,7 +57,7 @@ export class SceneManager {
   }
 
   setTimeOfDay(hour) {
-    if(this.atmosphere){this._hour=hour;this.atmosphere.update(hour,this.wetness??0);return;}
+    if(this.atmosphere){this._hour=hour;if(this._timeProfileOverride){this.atmosphere.updateProfile(this._timeProfileOverride,this.wetness??0);}else this.atmosphere.update(hour,this.wetness??0);return;}
     this._hour = hour;
     const day = THREE.MathUtils.smoothstep(hour, 6.5, 8.5) * (1 - THREE.MathUtils.smoothstep(hour, 17.0, 19.0));
     const dawn = Math.max(0, 1 - Math.abs(hour - 6.2) / 1.3);
@@ -89,6 +89,14 @@ export class SceneManager {
       this.scene.fog.far = 150 + day * 80;
       this._limitFog();
     }
+  }
+
+  /** Selector temporal de desarrollo: no cambia el reloj ni se guarda. */
+  setTimeProfile(profileId = null) {
+    const valid = ['golden','midday','blue-hour','night'];
+    this._timeProfileOverride = profileId && valid.includes(profileId) ? profileId : null;
+    if (this.atmosphere) this.setTimeOfDay(this._hour ?? 22);
+    return this._timeProfileOverride;
   }
 
   setQuality(level = 'alta') {

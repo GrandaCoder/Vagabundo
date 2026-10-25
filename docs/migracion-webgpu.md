@@ -4,6 +4,10 @@ Rama: `pruebas-slop-newyork`. Solo WebGPU, Three.js 0.186.1 fijado. No se ha int
 
 La base técnica procede de Slop New York, revisión `1b54e165ddc26b3e951d5614d56a88995da1da38`: geometría y materiales de vehículos, organización de cielo/entorno/sol y flujo MRT, SSR, bloom y ajuste de color. Ver [avisos MIT](../THIRD_PARTY_NOTICES.md). Las adaptaciones permanecen en el repositorio; no se carga su CDN `dev` ni se depende del clon en `work/`.
 
+## Perfiles de hora
+
+La atmósfera adopta los cuatro perfiles de iluminación del donante: `golden` (golden hour), `midday`, `blue-hour` y `night`. El reloj de Bogotá los interpola de forma continua —no cambia de escena ni de materiales— y la lluvia suma nubosidad, humedad y reflejos sin perder el inicio nocturno configurado. `Atmosphere.profile` y `Atmosphere.profileLabel` exponen el perfil activo para diagnóstico y futuras interfaces.
+
 ## Arquitectura y calidad
 
 El renderizador y el creador se inicializan de forma asíncrona y rechazan el respaldo WebGL. Una pérdida de dispositivo pausa la partida y ofrece recarga; bloquea el guardado mientras la GPU esté perdida.
