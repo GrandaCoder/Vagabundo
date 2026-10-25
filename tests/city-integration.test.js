@@ -136,7 +136,6 @@ test('los semáforos cubren todos los cruces de la ciudad ampliada con cuatro ac
   assert.equal(signals.nodes.length, CITY_CALLES.length * vertical.length);
   assert.equal(signals.poles.length, signals.nodes.length * 4);
   for (const [za, zb] of CITY_CALLES) for (const [xa, xb] of vertical) {
-    const detour = xa === CARACAS.lanes[0][0] && xb === CARACAS.lanes[1][1] && (za === 72 || za === 94);
-    assert.ok(signals.nodes.some(node => node.x0 === xa * 2 - 1 && node.x1 === xb * 2 + 1 + (detour ? 32 : 0) && node.z0 === za * 2 - 1 && node.z1 === zb * 2 + 1));
+    assert.ok(signals.nodes.some(node => node.x0 === xa * 2 - 1 && node.x1 === xb * 2 + 1 && node.z0 === za * 2 - 1 && node.z1 === zb * 2 + 1));
   }
 });

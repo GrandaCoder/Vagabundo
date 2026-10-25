@@ -724,3 +724,6 @@ body.is-loading #minimap-container { visibility: hidden; }
   .loading-art-layer, .loading-art-layer img { animation: none; transition: none; transform: none; }
   .loading-art-scene, .loading-art-scene.is-leaving { animation-duration: .01s; }
 }
+
+#driving-controls{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);z-index:12;max-width:90vw;padding:8px 14px;background:#111c;color:#ffdf75;border-radius:5px;font:600 13px monospace;pointer-events:none;text-align:center}
+#driving-controls:empty{display:none}

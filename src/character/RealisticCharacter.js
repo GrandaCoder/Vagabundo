@@ -1,3 +1,4 @@
+import {tagAssetTextures} from '../core/TextureBudget.js';
 // src/character/RealisticCharacter.js
 // Personaje realista armado por piezas: cuerpo de MakeHuman/MPFB2 (esqueleto Mixamo) + pelo, barba,
 // ropa y calzado exportados por tools/personaje/exportar_variantes.py, con animaciones Mixamo.
@@ -24,7 +25,7 @@ export const REAL_DEFAULT = {
 const loader = new GLTFLoader();
 const cache = new Map();
 const load = (url) => {
-  if (!cache.has(url)) cache.set(url, loader.loadAsync(url));
+  if (!cache.has(url)) cache.set(url, loader.loadAsync(url).then(tagAssetTextures));
   return cache.get(url);
 };
 

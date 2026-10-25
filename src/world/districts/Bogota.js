@@ -510,7 +510,7 @@ export class Bogota {
         const flush = () => {
           let i = 0;
           while (i < run.length) {
-            const wTiles = Math.min(run.length - i, 2 + Math.floor(Math.random() * 3));
+            const wTiles = Math.min(run.length - i, 2 + ((Math.imul(run[i][0]+17,31)^Math.imul(run[i][1]+11,73))>>>0)%3);
             this._house(run.slice(i, i + wTiles), dx, dz, face, alongX, isB, map, sideMat, roofMat, tileRoof, covered);
             i += wTiles;
           }
@@ -550,6 +550,9 @@ export class Bogota {
   }
 
   _house(tiles, dx, dz, face, alongX, isB, map, sideMat, roofMat, tileRoof, covered) {
+    let seed=(Math.imul(tiles[0][0]+41,73856093)^Math.imul(tiles[0][1]+73,19349663)^face)>>>0;
+    const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+    const range=(min,max)=>min+(max-min)*random();
     const ruin = tiles.some(([x, z]) => map[z][x] === 'ruin');
     // Profundidad: hasta 3 tiles hacia adentro, sin invadir casas ya construidas.
     let depth = 1;
@@ -562,14 +565,14 @@ export class Bogota {
     const widthM = tiles.length * T;
     const floors = skylineFloors(tiles[0][0], tiles[0][1], ruin);
     const h = floors * 3;
-    const style = ruin ? 'ruina' : Math.random() < 0.55 ? 'ladrillo' : 'pintada';
+    const style = ruin ? 'ruina' : random() < 0.55 ? 'ladrillo' : 'pintada';
     // el ladrillo necesita más resolución para que cada ladrillo (36 × 12 cm) se distinga
     // Variantes compartidas: ampliar el barrio no triplica las texturas de fachada en la GPU.
-    const variant = Math.floor(Math.random() * 2);
+    const variant = Math.floor(random() * 2);
     const textureKey = `${widthM}:${floors}:${style}:${variant}`;
     let tex = this._facadeTextures.get(textureKey);
     if (!tex) {
-      tex = TX.facade({ seed: Math.floor(Math.random() * 1e6), width: widthM, floors, pxPerM: style === 'pintada' ? 28 : 40, shopFront: true, style });
+      tex = TX.facade({ seed: Math.floor(random() * 1e6), width: widthM, floors, pxPerM: style === 'pintada' ? 28 : 40, shopFront: true, style });
       this._facadeTextures.set(textureKey, tex);
     }
     for (const t of [tex.map, tex.emissiveMap, tex.bumpMap]) { t.anisotropy = 8; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; }
@@ -588,7 +591,7 @@ export class Bogota {
     const cz = (W(z0) + W(z1)) / 2 - dz * (depth - 1) * T / 2;
     const sx = alongX ? widthM : depth * T;
     const sz = alongX ? depth * T : widthM;
-    const clay = Math.random() < 0.4 || ruin;
+    const clay = random() < 0.4 || ruin;
     const mats = [sideMat, sideMat, clay ? tileRoof : roofMat, roofMat, sideMat, sideMat];
     mats[face] = facadeMat;
     const U = this._uvUnits;
@@ -606,7 +609,7 @@ export class Bogota {
     const yaw = Math.atan2(dx, dz);
 
     // aviso de local en el primer piso
-    if (!ruin && Math.random() < 0.55) {
+    if (!ruin && random() < 0.55) {
       const [title, sub] = pick(SHOP_NAMES);
       const map = signTexture({ title, sub, bg: pick(['#0b4fa3', '#c0392b', '#1f6b3a', '#f2c600', '#ffffff', '#6a1b9a']), fg: '#ffffff', w: 768, h: 192 });
       if (map) {
@@ -618,7 +621,7 @@ export class Bogota {
       }
     }
     // balcón de madera en las casas viejas (Cartucho) o en algunas de ladrillo
-    if ((ruin && Math.random() < 0.6) || (style === 'ladrillo' && Math.random() < 0.2)) {
+    if ((ruin && random() < 0.6) || (style === 'ladrillo' && random() < 0.2)) {
       const wood = new THREE.MeshStandardMaterial({ color: ruin ? '#4a3626' : '#5a3d24', roughness: 0.9 });
       const bal = new THREE.Group();
       const bw = Math.min(widthM * 0.7, 3.5);
@@ -638,9 +641,9 @@ export class Bogota {
       shell.walls.get(face).add(bal);
     }
     // tanque de agua negro en la terraza
-    if (!ruin && Math.random() < 0.35) {
+    if (!ruin && random() < 0.35) {
       const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.45, 0.9, 12), new THREE.MeshStandardMaterial({ color: '#1c1f22', roughness: 0.6 }));
-      tank.position.set(rand(-0.5, 0.5), h + 0.45, rand(-0.5, 0.5));
+      tank.position.set(range(-0.5, 0.5), h + 0.45, range(-0.5, 0.5));
       tank.castShadow = true;
       shell.roof.add(tank);
     }

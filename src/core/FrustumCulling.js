@@ -25,9 +25,10 @@ export class FrustumCulling {
   apply(camera, shadowLights = []) {
     this.restore();
     camera.updateMatrixWorld();
-    this.frustum.setFromProjectionMatrix(this.matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    this.frustum.setFromProjectionMatrix(this.matrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),camera.coordinateSystem,camera.reversedDepth);
     this.shadowFrustums.length = 0;
     for (const light of shadowLights) {
+      if(light.isSunLight&&light.visible&&light.castShadow){light.shadow.updateMatrices(light,camera);this.shadowFrustums.push(light.shadow.getFrustum(0),light.shadow.getFrustum(1));continue;}
       if (!light.visible || !light.castShadow || !light.isDirectionalLight) continue;
       light.updateWorldMatrix(true, false);
       light.target.updateWorldMatrix(true, false);

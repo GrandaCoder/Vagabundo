@@ -228,3 +228,13 @@ Las antiguas franjas rojas a nivel del suelo bajo el viaducto se convierten en p
 Veinte solares de casas genéricas se sustituyen por edificios de 3 a 30 pisos, repartidos entre los sectores de la ciudad. Se conservan las casas bajas y los hitos existentes. Los cinco diseños combinan ladrillo con balcones, concreto con bandas horizontales, marcos verticales, coronaciones retranqueadas y esquinas acristaladas, con iluminación nocturna en ventanas. Las torres de mayor altura ocupan solares de al menos 12 × 12 metros; no invaden calles, parques ni el viaducto.
 
 La distribución es determinista. Sus colisiones llegan a la altura de cada edificio y conservan el sistema de ocultación de paredes, la agrupación por sectores y texturas pequeñas compartidas, sin nuevas luces dinámicas.
+
+## Experimento de vehículos
+
+La rama `pruebas-slop-newyork` incorpora sedán y taxi procedurales adaptados a WebGL. En pausa, el selector **Vehículos: actuales / nuevos** permite compararlos en la misma partida. [Implementación, capturas y mediciones](docs/adaptacion-slop-newyork.md). Procedencia y licencia en [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Migración WebGPU en la rama experimental
+
+`pruebas-slop-newyork` usa WebGPU y TSL, con iluminación agrupada, sombras en cascada y efectos escalonados por calidad. Conserva Bogotá y sus mecánicas. Requiere un equipo y navegador con WebGPU; no tiene respaldo WebGL. [Arquitectura, corrección de la carga y validación](docs/migracion-webgpu.md).
+
+El tráfico experimental adapta del mismo código fuente el seguimiento IDM, frenado y velocidad en curvas, junto con impulsos de choque, carambolas y recuperación del carril. Mantiene la red de Bogotá y el servicio de TransMilenio. [Comportamiento, procedencia y pruebas](docs/trafico-slop.md).

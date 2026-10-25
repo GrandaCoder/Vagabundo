@@ -212,7 +212,7 @@ export class CameraRig {
       );
       // Acorta el brazo de cámara antes de una pared; el margen protege el plano cercano.
       this._ray.set(this._look, this._direction);
-      let distance = this.distance;
+      let distance = this.driving?Math.max(8.5,this.distance):this.distance;
       const endX = this._look.x + this._direction.x * distance, endZ = this._look.z + this._direction.z * distance;
       const candidates = collisions?.queryStatic?.(Math.min(this._look.x, endX) - .2, Math.min(this._look.z, endZ) - .2,
         Math.max(this._look.x, endX) + .2, Math.max(this._look.z, endZ) + .2) ?? collisions?.colliders ?? [];

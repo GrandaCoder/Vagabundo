@@ -1,3 +1,4 @@
+import {Atmosphere} from '../graphics/Atmosphere.js';
 import * as THREE from 'three';
 
 const _NIGHT = new THREE.Color(0x0c131d);     // Noche azul oscuro fría
@@ -50,7 +51,13 @@ export class SceneManager {
    * - Día (8:00-17:00): cielo nublado bogotano con luz clara
    * - Atardecer (17:30-19:00): tonos cálidos ocres y ámbar
    */
+  initializeAtmosphere(renderer){
+    this.sun.removeFromParent();this.sun.target.removeFromParent();this.sun.dispose();
+    this.atmosphere=new Atmosphere(this.scene,renderer,this.ambient);this.sun=this.atmosphere.sun;this.atmosphere.setQuality(this.quality);
+  }
+
   setTimeOfDay(hour) {
+    if(this.atmosphere){this._hour=hour;if(this._timeProfileOverride){this.atmosphere.updateProfile(this._timeProfileOverride,this.wetness??0);}else this.atmosphere.update(hour,this.wetness??0);return;}
     this._hour = hour;
     const day = THREE.MathUtils.smoothstep(hour, 6.5, 8.5) * (1 - THREE.MathUtils.smoothstep(hour, 17.0, 19.0));
     const dawn = Math.max(0, 1 - Math.abs(hour - 6.2) / 1.3);
@@ -84,9 +91,18 @@ export class SceneManager {
     }
   }
 
+  /** Selector temporal de desarrollo: no cambia el reloj ni se guarda. */
+  setTimeProfile(profileId = null) {
+    const valid = ['golden','midday','blue-hour','night'];
+    this._timeProfileOverride = profileId && valid.includes(profileId) ? profileId : null;
+    if (this.atmosphere) this.setTimeOfDay(this._hour ?? 22);
+    return this._timeProfileOverride;
+  }
+
   setQuality(level = 'alta') {
     this.quality = ['baja', 'media', 'alta'].includes(level) ? level : 'alta';
     level = this.quality;
+    if(this.atmosphere){this.atmosphere.setQuality(level);this.setTimeOfDay(this._hour??22);return;}
     const size = level === 'media' ? 1024 : 2048;
     if (this.sun.shadow.mapSize.x !== size) {
       this.sun.shadow.map?.dispose();
@@ -124,6 +140,7 @@ export class SceneManager {
 
   /** El sol (y su caja de sombras) sigue al jugador para sombras nítidas en un mapa grande */
   followTarget(pos) {
+    if(this.atmosphere){this.atmosphere.followTarget(pos);return;}
     this.sun.target.position.copy(pos);
     this.sun.position.set(pos.x + 30, 60, pos.z + 18);
   }

@@ -85,6 +85,46 @@ export function openPauseMenu(game) {
       )
     );
 
+    // Herramienta temporal para revisar los perfiles de Slop sin cambiar el reloj guardado.
+    const profile = game.sceneMgr?.atmosphere?.profile;
+    const timeSection = game.sceneMgr?.setTimeProfile ? el('div', { class: 'pause-section' },
+      el('h3', { class: 'pause-section-title', text: '🌅 Hora del día · desarrollo' }),
+      el('div', { class: 'pause-actions' },
+        ...[
+          ['golden', '🌇 Golden hour'], ['midday', '☀️ Midday'],
+          ['blue-hour', '🌆 Blue hour'], ['night', '🌙 Night']
+        ].map(([id, label]) => button(profile === id ? `${label} ✔` : label, {
+          class: profile === id ? 'btn btn--primary btn--small' : 'btn btn--ghost btn--small',
+          onClick: () => { game.sceneMgr.setTimeProfile(id); game.menu?.refresh(); }
+        })),
+        button(game.sceneMgr._timeProfileOverride ? '🕒 Seguir reloj' : '🕒 Automático', {
+          class: !game.sceneMgr._timeProfileOverride ? 'btn btn--primary btn--small' : 'btn btn--ghost btn--small',
+          onClick: () => { game.sceneMgr.setTimeProfile(null); game.menu?.refresh(); }
+        })
+      )
+    ) : null;
+
+    const vehicleSelect=el('select',{'aria-label':'Vehículos',disabled:!!game.vehicleVisualChanging},
+      el('option',{value:'actual',text:'Actuales',selected:game.vehicleVisualMode==='actual'}),
+      el('option',{value:'slop',text:'Nuevos · prueba',selected:game.vehicleVisualMode!=='actual'})
+    );
+    const vehicleStatus=el('span',{role:'status',text:''});
+    // Recuperar el selector si se reabre la pausa durante una preparación.
+    if(game.vehicleVisualChanging)game._vehicleVisualChange?.then(()=>{
+      vehicleSelect.value=game.vehicleVisualMode;
+    },()=>{}).finally(()=>{vehicleSelect.disabled=false;});
+    vehicleSelect.addEventListener('change',async()=>{
+      const mode=vehicleSelect.value;
+      vehicleSelect.disabled=true;vehicleStatus.textContent='Preparando vehículos…';
+      try {await game.setVehicleVisualMode(mode);vehicleStatus.textContent='Vehículos listos.';}
+      catch(error){vehicleSelect.value=game.vehicleVisualMode;vehicleStatus.textContent='No se pudieron cambiar los vehículos. Se conserva la versión anterior.';console.error('[Vehículos]',error);}
+      finally {vehicleSelect.disabled=false;}
+    });
+    const vehicleSection=game.setVehicleVisualMode?el('div',{class:'pause-section'},
+      el('h3',{class:'pause-section-title',text:'Vehículos · comparación temporal'}),
+      el('div',{class:'pause-row'},el('label',{text:'Vehículos: '}),vehicleSelect,vehicleStatus)
+    ):null;
+
     // 3. Estado del jugador
     const h = Math.floor(clock.hour).toString().padStart(2, '0');
     const m = Math.floor((clock.hour % 1) * 60).toString().padStart(2, '0');
@@ -158,6 +198,8 @@ export function openPauseMenu(game) {
     const body = el('div', { class: 'pause-menu-body' },
       audioSection,
       qualitySection,
+      timeSection,
+      vehicleSection,
       stateSection,
       actionsSection,
       controlsSection

@@ -1,0 +1,52 @@
+# Third-party code
+
+## Slop New York — vehicle geometry
+
+Source: https://github.com/mrdoob/slop-newyork
+
+Revision: 1b54e165ddc26b3e951d5614d56a88995da1da38, js/actor-models.js.
+
+Adaptation in src/vehicles/SlopGeometry.js: extracted CPU loft geometry, replaced imports with pinned Three.js 0.186.1, excluded integrated mirrors by default. WebGL materials and the BAZUKO vehicle adapter are implemented separately. No geographic datasets are included.
+
+MIT License
+
+Copyright (c) 2026 Mr.doob
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+The vehicle TSL material graph in src/vehicles/SlopMaterial.js is also adapted from js/actor-models.js at the revision above. Foreign liveries were removed, local plate and TAXI labels were added, and wheel/braking/night state was connected to BAZUKO entities.
+
+Additional adapted modules at the same Slop New York revision: src/graphics/Atmosphere.js (sky, environment and cascaded-sun arrangement), src/graphics/PostProcessing.js (TSL color grading and bloom), and src/graphics/VisualPipeline.js (MRT and SSR arrangement). They are adjusted to BAZUKO's scale, clock, weather and quality profiles. These adaptations are covered by the MIT notice above.
+The time-of-day profiles (`golden`, `midday`, `blue-hour`, `night`) in `src/graphics/Atmosphere.js` are adapted from `js/lighting.js` and remain driven by BAZUKO's Bogotá clock.
+
+## Slop New York — traffic, vehicle contacts and crash effects
+
+The following adaptations use the same pinned revision
+`1b54e165ddc26b3e951d5614d56a88995da1da38` and MIT notice above:
+
+- `src/vehicles/SlopTrafficAI.js`: IDM following, stopping, bend-speed approach and MOBIL gap/braking safety from `js/traffic.js`.
+- `src/vehicles/SlopCollisionPhysics.js`: oriented SAT, player/traffic impulses, chain impacts, steering, lateral recovery and suspension/yaw coefficients from `js/traffic.js`; wall response from `js/controllers.js`.
+- `src/vehicles/CollisionSparks.js`: collision spark distribution and bounded particle pool from `js/traffic.js`, rendered with WebGPU node materials.
+- `src/vehicles/SlopCrashAudio.js`: body, metal and debris synthesis from `js/audio-events.js`; contact debounce and severity layering adapted from `js/audio-system.js` and `js/audio-events.js`.
+
+BAZUKO's adapters retain its Car entities, dimensions, +X local front, road network,
+bridge heights, traffic lights, TransMilenio service and gameplay. They connect these
+algorithms to shared vehicle batches, steerable wheels and Howler's master output.
+Vertical contact filtering and bus route constraints are local additions. Geographic
+data, New York routes and additional driving modes are not imported.

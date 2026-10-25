@@ -71,7 +71,7 @@ test('carros comparten el GLB, conservan rumbo y robo, y eliminar uno conserva e
   const scene = new THREE.Scene();
   const cars = [new Car(scene, new THREE.Vector3(5, .1, 6), .7), new Car(scene, new THREE.Vector3(12, 0, 6))];
   cars.forEach(car => { car.modelKind = 'car1'; });
-  await Promise.all(cars.map(car => car.preloadModel()));
+  await Promise.all(cars.map(car => car.setVisualMode('actual')));
   assert.equal(loads.get('car1.opt.glb'), 1);
   const first = cars[0].importedModel.children[0].children[0].children[0];
   const second = cars[1].importedModel.children[0].children[0].children[0];
@@ -146,12 +146,9 @@ test('las lentes del semáforo se iluminan sobre el GLB, sin discos flotantes ni
   const before = signals.lensStates.value.clone();
   signals.update(25);
   assert.ok(!signals.lensStates.value.equals(before));
-  const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.standard.vertexShader, fragmentShader: THREE.ShaderLib.standard.fragmentShader };
-  signals.poleMesh.material.onBeforeCompile(shader);
-  assert.equal(shader.uniforms.trafficStates, signals.lensStates);
-  assert.ok(shader.vertexShader.includes('vTrafficAxis = trafficAxis;'));
-  assert.ok(shader.fragmentShader.includes('totalEmissiveRadiance += trafficLensColor * trafficLensOn'));
-  assert.ok(shader.fragmentShader.includes('redLens'));
+  assert.equal(signals.poleMesh.material.isMeshStandardNodeMaterial,true);
+  assert.equal(signals.poleMesh.material.userData.trafficStates.value,signals.lensStates.value);
+  assert.ok(signals.poleMesh.material.colorNode);assert.ok(signals.poleMesh.material.emissiveNode);
   const bounds = new THREE.Box3().setFromObject(signals.group);
   assert.ok(Number.isFinite(bounds.min.x));
   assert.ok(bounds.max.y > 4);

@@ -1,15 +1,20 @@
+import {createDrivingVisual} from '../vehicles/DrivingVisual.js';
 // src/entities/Car.js
 import * as THREE from 'three';
 import { COLORS, CAR_COOLDOWN } from '../utils/constants.js';
 import { makeVehicle } from '../world/bogota/vehicles.js';
-import { createImportedModel, disposeImportedInstance } from '../utils/ImportedModels.js';
+import { createVehicleVisual } from '../vehicles/VehicleVisuals.js';
 
 export class Car {
-  constructor(scene, position, rotation = 0, { traffic = false } = {}) {
+  constructor(scene, position, rotation = 0, { traffic = false, visualMode = 'slop', visualFactory = createVehicleVisual } = {}) {
     this.scene = scene;
     this.used = false;
     this.cooldown = 0;
     this.traffic = traffic;
+    this.controller=traffic?'traffic':'parked';
+    this.visualMode = visualMode;
+    this._visualFactory = visualFactory;
+    this._visualToken = 0;
 
     this.group = new THREE.Group();
     this.group.position.copy(position);
@@ -19,12 +24,21 @@ export class Car {
     // Carro realista (portado de rebusque): particular o taxi amarillo, frente hacia +X local
     const kind = Math.random() < 0.3 ? 'taxi' : 'carro';
     this.modelKind = kind === 'taxi' ? 'car2' : 'car1';
-    const v = makeVehicle(kind, Math.floor(Math.random() * 8), { beams: false });
+    this.visualSeed = Math.floor(Math.random() * 8);
+    const v = makeVehicle(kind, this.visualSeed, { beams: false });
     this.vehicle = v;
     this.length = v.length;
     this.width = v.width;
     v.group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.group.add(v.group);
+
+    // Faros físicos: el gestor global selecciona sus proxies según distancia y calidad.
+    this.headlights=[];
+    for(const side of [-1,1]){
+      const light=new THREE.SpotLight('#fff3d6',0,30,.2,.85,2);light.position.set(this.length/2-.03,.65,side*.6);light.target.position.set(12,-.35,side*.65);light.castShadow=false;
+      light.userData.dynamicLight=true;
+      this.group.add(light,light.target);this.headlights.push(light);
+    }
 
     // Retrovisores (lo que se roba): a los lados, en la base del parabrisas
     const mirrorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.4 });
@@ -60,15 +74,42 @@ export class Car {
   get position() { return this.group.position; }
 
   preloadModel() {
-    return this._modelPromise ??= createImportedModel(this.modelKind).then(model => {
-      if (this._disposed) { disposeImportedInstance(model); return; }
-      this.group.remove(this.vehicle.group);
-      this.vehicle.dispose();
-      this.importedModel = model;
-      this.group.add(model);
-      // Las ruedas del GLB están integradas en una sola malla texturizada.
-      this.vehicle = { group: model, wheels: [], tailMat: null, dispose() { disposeImportedInstance(model); } };
-    });
+    return this._modelPromise ??= this.setVisualMode(this.visualMode).then(()=>{if(!this.traffic&&!this._disposed)this.prepareDrivingVisual();});
+  }
+
+  async prepareVisualMode(mode) {
+    if(!['actual','slop'].includes(mode))throw new Error('Representación de vehículo no válida');
+    if(this._disposed)return {commit:()=>false,release(){}};
+    const token=++this._visualToken;
+    if(this.vehicle.mode===mode)return {commit:()=>true,release(){}};
+    const next=await this._visualFactory(mode,{variant:this.modelKind==='car2'?'taxi':'sedan',seed:this.visualSeed,length:this.length,width:this.width,scene:this.scene,mirrors:this.mirrors});
+    next.mode=mode;
+    let settled=false;
+    const release=()=>{if(!settled){settled=true;next.dispose();}};
+    return {release,commit:()=>{
+      if(settled)return false;
+      if(this._disposed||token!==this._visualToken){release();return false;}
+      next.setNight?.(this._night);
+      next.updateMotion?.(this._travelled??0,this._braking??false);
+      this.group.add(next.group);
+      const previous=this.vehicle;
+      this.vehicle=next;this.visualMode=mode;
+      this.importedModel=mode==='actual'?next.group:undefined;
+      this.group.remove(previous.group);previous.dispose();next.activate?.();
+      this.syncHeadlights();
+      settled=true;return true;
+    }};
+  }
+
+  async setVisualMode(mode) {
+    const prepared=await this.prepareVisualMode(mode);
+    return prepared.commit();
+  }
+
+  setNight(night) {
+    if(this._night===!!night)return;
+    this._night=!!night;this.vehicle.setNight?.(this._night);
+    for(const light of this.headlights)light.intensity=this._night?650:0;
   }
 
   /**
@@ -109,17 +150,60 @@ export class Car {
     }
   }
 
+  prepareDrivingVisual(){if(!this.drivingVisual){this.drivingVisual=createDrivingVisual(this);this.group.add(this.drivingVisual.group);}return this.drivingVisual;}
+  setControlled(enabled){
+    this.marker.visible=!enabled&&!this.traffic&&!this.used;
+    this.vehicle.suspended=enabled;this.vehicle.group.visible=!enabled;
+    if(this.drivingVisual)this.drivingVisual.group.visible=enabled;
+    for(const mirror of this.mirrors)for(const child of mirror.children)child.visible=enabled||this.visualMode!=='slop';
+    if(!enabled&&this.drivingVisual){this.drivingVisual.update(0,0,0,0);}
+    this.syncHeadlights();
+  }
+
+  syncHeadlights(){
+    const visual=this.controller==='player'?this.drivingVisual:this.vehicle;
+    const frame=visual?.headlightFrame,spec=visual?.headlightSpec;
+    if(frame&&spec){
+      frame.updateWorldMatrix(true,false);
+      this._headlightMatrix??=new THREE.Matrix4();this._headlightInverse??=new THREE.Matrix4();
+      this._headlightMatrix.multiplyMatrices(this._headlightInverse.copy(this.group.matrixWorld).invert(),frame.matrixWorld);
+    }
+    this.headlights.forEach((light,i)=>{
+      const side=i===0?-1:1;
+      if(frame&&spec){
+        light.position.set(side*spec.headlight[0],spec.headlight[1],spec.zFront+.02).applyMatrix4(this._headlightMatrix);
+        light.target.position.set(side*spec.headlight[0],spec.headlight[1]-.8,spec.zFront+12).applyMatrix4(this._headlightMatrix);
+      }else{
+        light.position.set(this.length/2-.03,.65,side*.6);light.target.position.set(12,-.35,side*.65);
+      }
+    });
+  }
+
+  setPose(pitch,roll,heave=0){
+    this.vehicle.setPose?.(pitch,roll,heave);
+    if(!this.vehicle.setPose){this.vehicle.group.rotation.x=roll;this.vehicle.group.rotation.z=-pitch;this.vehicle.group.position.y=heave;}
+    this.syncHeadlights();
+  }
+  setSteering(angle,signal=0){this.steerAngle=angle;this.turnSignal=signal;this.vehicle.setSteering?.(angle,signal);}
+
   animateDrive(distance, braking) {
+    this._travelled=(this._travelled??0)+distance;
+    this.vehicle.updateMotion?.(distance,braking);
+    if(this.drivingVisual){const state=this.drivingVisual.material.userData.vehicleState;state.braking.value=braking?1:0;state.night.value=this._night?1:0;}
+    const wasBraking=this._braking; this._braking=braking;
     for (const wheel of this.vehicle.wheels) wheel.rotation.z -= distance / 0.33;
-    if (this.vehicle.tailMat && braking !== this._braking) {
+    if (this.vehicle.tailMat && braking !== wasBraking) {
       this.vehicle.tailMat.color.set('#ff1a12').multiplyScalar(braking ? 3 : 1.4);
-      this._braking = braking;
     }
   }
 
   dispose() {
+    if(this._disposed)return;
     this._disposed = true;
+    this.drivingVisual?.dispose();
+    this._visualToken++;
     this.scene.remove(this.group);
+    for(const light of this.headlights)light.dispose();
     this.group.remove(this.vehicle.group);
     this.vehicle.dispose();
     const geometries = new Set(), materials = new Set();
