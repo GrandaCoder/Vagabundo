@@ -36,6 +36,7 @@ import { TERMINAL, inTerminal, terminalGroundHeight, buildTransitTerminal } from
 import { LAKE_PARK, onLakeBridge, bridgeHeight, buildLakeWater } from '../bogota/LakePark.js';
 import { PigeonFlock } from '../../entities/PigeonFlock.js';
 import { geometryChunk, mergeByChunk, freezeStaticTransforms, createRenderSectors, MaterialDeduper } from '../bogota/StaticGeometry.js';
+import { buildShadowProxies } from '../../graphics/ShadowProxies.js';
 import { CITY_WIDTH, CITY_HEIGHT, CITY_AREA_MULTIPLIER, CITY_CARRERAS as CARRERAS,
   CITY_CALLES as CALLES, ORIGINAL_CITY_WIDTH, ORIGINAL_CITY_HEIGHT, EXTENSION_PARKS,
   expandCity } from '../bogota/CityLayout.js';
@@ -205,6 +206,7 @@ export class Bogota {
       ...createRenderSectors(this.group, new Set([closedView, ...this.busServices.map(bus => bus.group)])),
       ...createRenderSectors(closedView)
     ];
+    this._buildShadowProxies(closedView);
     scene.add(this.group);
     freezeStaticTransforms(this.group, new Set(this.busServices.map(bus => bus.group)));
     this.signals = new TrafficSignals();
@@ -916,6 +918,31 @@ export class Bogota {
    * Junta en una sola malla todo lo estático que comparte material (postes de balcón, dulces,
    * gajos de paraguas, bolsas…): pasa de miles de llamadas de dibujo a unos cientos.
    */
+  /**
+   * Sombras de los inmuebles estáticos por celdas (scene-culling.js de Slop). Los edificios se
+   * sustituyen desde sus piezas y proyectan igual en ambas cámaras: el corte isométrico es una
+   * ayuda de la vista, el edificio sigue ahí. Lo animado y lo no fusionable conserva su sombra.
+   */
+  _buildShadowProxies(closedView) {
+    const city = [], parts = [];
+    const visit = (o) => {
+      if (o === closedView || o.userData.update || o.userData.noMerge) return;
+      if (o.isMesh) city.push(o);
+      for (const c of o.children) visit(c);
+    };
+    for (const c of this.group.children) visit(c);
+    for (const building of this.buildingVisibility?.buildings ?? []) for (const part of building.parts) {
+      part.object.traverse(o => { if (o.isMesh) parts.push(o); });
+    }
+    const casters = parts.filter(mesh => mesh.castShadow).length;
+    const cityProxies = buildShadowProxies(city, this.group, { name: 'Sombras de la ciudad por celdas' });
+    const buildingProxies = buildShadowProxies(parts, this.group, { name: 'Sombras de edificios por celdas', allowFade: true });
+    // La vista cerrada se arma con las mismas piezas: si todas quedaron sustituidas, tampoco proyecta.
+    if (buildingProxies.replaced === casters) closedView?.traverse(o => { if (o.isMesh) o.castShadow = false; });
+    this.shadowProxyStats = { city: cityProxies.replaced, buildings: buildingProxies.replaced, buildingCasters: casters,
+      proxies: cityProxies.proxies + buildingProxies.proxies };
+  }
+
   /** Materiales que se cambian en partida (noche, humedad, cortes, props con estado): nunca se unifican. */
   _liveMaterials() {
     const live = new Set([...(this.facadeMats ?? []), ...(this.towerLights ?? []),

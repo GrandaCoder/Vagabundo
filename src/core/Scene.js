@@ -1,5 +1,6 @@
 import {Atmosphere} from '../graphics/Atmosphere.js';
 import {setShadowActive,setShadowResolution,shadowResolutionFor} from '../graphics/ShadowState.js';
+import {enableShadowProxyLayer} from '../graphics/ShadowProxies.js';
 import * as THREE from 'three';
 
 const _NIGHT = new THREE.Color(0x0c131d);     // Noche azul oscuro fría
@@ -37,6 +38,7 @@ export class SceneManager {
     this.sun.shadow.camera.bottom = -45;
     this.sun.shadow.bias = -0.0002;
     this.sun.shadow.normalBias = 0.035;
+    enableShadowProxyLayer(this.sun);
     this.scene.add(this.sun);
 
     this.sun.target.position.set(0, 0, 0);

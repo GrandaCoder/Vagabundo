@@ -6,6 +6,7 @@ import {SunLightNode} from 'three/addons/lights/SunLightNode.js';
 import {uniform,mix,vec4,float} from 'three/tsl';
 import {cityUniforms} from './GraphicsState.js';
 import {setShadowActive,setShadowResolution,shadowResolutionFor} from './ShadowState.js';
+import {enableShadowProxyLayer} from './ShadowProxies.js';
 
 // Time-of-day profiles adapted from Slop New York's lighting.js (MIT,
 // revision 1b54e165ddc26b3e951d5614d56a88995da1da38). The Bogotá clock
@@ -40,7 +41,7 @@ export class Atmosphere {
   constructor(scene,renderer,ambient){
     this.scene=scene;this.renderer=renderer;this.ambient=ambient;this.envScene=new THREE.Scene();
     renderer.library.addLight(SunLightNode,SunLight);
-    this.sun=new SunLight(0xffedce,4);this.sun.castShadow=true;this.sun.shadow.camera.far=140;this.sun.shadow.normalBias=.05;
+    this.sun=new SunLight(0xffedce,4);this.sun.castShadow=true;this.sun.shadow.camera.far=140;this.sun.shadow.normalBias=.05;enableShadowProxyLayer(this.sun);
     scene.add(this.sun);
     this.sky=new SkyMesh();this.sky.name='Cielo atmosférico de Bogotá';this.sky.scale.setScalar(200000);this.sky.frustumCulled=false;
     this.sky.cloudScale.value=.00018;this.sky.cloudSpeed.value=.000015;this.sky.turbidity.value=8;this.sky.rayleigh.value=2.5;

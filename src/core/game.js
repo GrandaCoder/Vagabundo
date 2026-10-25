@@ -936,6 +936,9 @@ export class Game {
     rig.mode = mode; rig.camera.userData.cameraMode = mode; rig._snap = true;
     rig.follow(this.player.position, 0, this.collisions);
     this.world.update(0, this.player.position, rig.camera, this.traffic?.vehicles ?? []);
+    // De noche la sombra está pausada; una pasada forzada (intensidad 0) compila sus pipelines
+    // en la carga para que el primer amanecer no lo haga en partida.
+    if (this.sceneMgr.sun?.shadow) this.sceneMgr.sun.shadow.needsUpdate = true;
     return mode;
   }
 
