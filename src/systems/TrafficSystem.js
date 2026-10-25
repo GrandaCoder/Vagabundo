@@ -1,4 +1,6 @@
-import {idmAcceleration,weightedMove} from '../vehicles/SlopDynamics.js';
+import {CAR_DRIVER,LOOKAHEAD,acceleration as slopAcceleration,laneSafe,laneAcceleration,canStopBefore} from '../vehicles/SlopTrafficAI.js';
+import {TrafficCollisionWorld} from '../vehicles/TrafficCollisionWorld.js';
+import {weightedMove} from '../vehicles/SlopDynamics.js';
 import {BogotaRoadNetwork} from '../vehicles/BogotaRoadNetwork.js';
 import * as THREE from 'three';
 import { Car } from '../entities/Car.js';
@@ -7,8 +9,6 @@ import { PLAYER_RADIUS } from '../utils/constants.js';
 import { SpatialGrid } from '../core/SpatialGrid.js';
 
 const GAP = 1.8;
-const ACCELERATION = 1.8;
-const BRAKING = 2;
 const PROBE_STEP = 0.5;
 
 export class TrafficSystem {
@@ -17,6 +17,7 @@ export class TrafficSystem {
     this.random = random;
     this.routes = routes.alternatives ?? routes;
     this.network=new BogotaRoadNetwork(this.routes);
+    this.physics=new TrafficCollisionWorld(scene);this.physics.network=this.network;
     this._position = new THREE.Vector3();
     this._direction = new THREE.Vector3();
     this._probePosition = new THREE.Vector3();
@@ -38,8 +39,8 @@ export class TrafficSystem {
         const car = new Car(scene, this._position, Math.atan2(-this._direction.z, this._direction.x), { traffic: true });
         const cruiseSpeed = 10 + random() * 4;
         this.vehicles.push({ car, route, distance, speed: 0, cruiseSpeed, nextDistance: distance, nextSpeed: 0,
-          acceleration: 0, accelerationLimit: 1.8 + random() * .7, braking: 2.2 + random() * .6,
-          reactionTime: .18 + random() * .35, resumeDelay: 0, stopped: false,
+          driver:{...CAR_DRIVER},v0:cruiseSpeed,acceleration: 0, accelerationLimit:CAR_DRIVER.a, braking:9,
+          reactionTime:0,resumeDelay:0,stopped:false,
           routeTimer: 3 + random() * 5, recentRoutes: [route.key], routeChanges: 0 });
       }
     }
@@ -70,7 +71,7 @@ export class TrafficSystem {
   setParkedCars(cars) { this.parkedCars = cars.map(car => ({ car })); }
 
   _chooseRoute(vehicle) {
-    if ((vehicle.crossingNode&&!vehicle.replanWaiting)||vehicle.laneChange) return false;
+    if ((vehicle.crossingNode&&!vehicle.replanWaiting)||Math.abs(vehicle.dl??0)>.5) return false;
     if (this.routes.length < 2) return false;
     this.network??=new BogotaRoadNetwork(this.routes);
     const options=this.network.continuations(vehicle).filter(o=>!vehicle.recentRoutes.includes(o.route.key));
@@ -85,17 +86,27 @@ export class TrafficSystem {
   }
 
   _tryLaneChange(vehicle){
-    if(vehicle.laneChange||vehicle.crossingNode||vehicle.speed>vehicle.cruiseSpeed*.7)return false;
+    if(vehicle.crossingNode||Math.abs(vehicle.dl??0)>.5||vehicle.speed<=2)return false;
+    const v={speed:vehicle.speed,v0:vehicle.cruiseSpeed,driver:vehicle.driver??CAR_DRIVER};
+    let best=laneAcceleration(v,Number.isFinite(vehicle.leaderGap)?{speed:vehicle.leaderSpeed}:null,vehicle.leaderGap)+.6,pick=null;
     for(const option of this.network?.laneChanges(vehicle)??[]){
       const target=new THREE.Vector3(),direction=new THREE.Vector3();option.route.sample(option.distance,target,direction);
-      const safe=[...this.vehicles,...(this.parkedCars??[]),...(this.busVehicles??[])].every(other=>{
-        if(other===vehicle||Math.abs(other.car.position.y-target.y)>2)return true;
-        const delta=other.car.position.clone().sub(target),along=delta.dot(direction),side=delta.x*-direction.z+delta.z*direction.x;
-        return Math.abs(side)>vehicle.car.width+1||Math.abs(along)>Math.max(15,vehicle.speed*2,(other.speed??0)*2);
-      });
-      if(!safe)continue;
-      vehicle.laneChange={...option,travel:0,time:0};return true;
-    }return false;
+      let lead=null,back=null,leadGap=Infinity,backGap=Infinity;
+      for(const other of [...this.vehicles,...(this.parkedCars??[]),...(this.busVehicles??[])]){
+        if(other===vehicle||Math.abs(other.car.position.y-target.y)>2)continue;
+        const dx=other.car.position.x-target.x,dz=other.car.position.z-target.z,along=dx*direction.x+dz*direction.z,side=dx*-direction.z+dz*direction.x;
+        if(Math.abs(side)>vehicle.car.width+.4)continue;
+        const gap=Math.abs(along)-(vehicle.car.length+other.car.length)/2;
+        const driver={speed:other.speed??0,v0:other.cruiseSpeed??12,driver:other.driver??CAR_DRIVER};
+        if(along>=0&&gap<leadGap){lead=driver;leadGap=gap;}else if(along<0&&gap<backGap){back=driver;backGap=gap;}
+      }
+      if(!laneSafe(v,lead,leadGap,back,backGap,-3))continue;
+      const gain=laneAcceleration(v,lead,leadGap);if(gain>best){best=gain;pick=option;}
+    }
+    if(!pick)return false;
+    const p=new THREE.Vector3(),d=new THREE.Vector3();pick.route.sample(pick.distance,p,d);
+    vehicle.dl=(vehicle.car.position.z-p.z)*d.x-(vehicle.car.position.x-p.x)*d.z;
+    vehicle.route=pick.route;vehicle.distance=pick.distance;return true;
   }
 
   _carInPath(other, car) {
@@ -152,7 +163,7 @@ export class TrafficSystem {
         const overlaps = this._overlapsNode(vehicle.car, node);
         claim.entered ||= overlaps;
         if ((claim.entered && !overlaps) || (!claim.entered &&
-          (signalState(this.signals.time, claim.plan.axis) !== 0 || !candidates.includes(vehicle)))) state.owners.delete(vehicle);
+          ((signalState(this.signals.time, claim.plan.axis) !== 0&&!claim.committed) || !candidates.includes(vehicle)))) state.owners.delete(vehicle);
       }
       for (const vehicle of state.plans.keys()) if (!candidates.includes(vehicle) && !state.owners.has(vehicle)) state.plans.delete(vehicle);
       for (const vehicle of candidates) if (!state.plans.has(vehicle)) state.plans.set(vehicle, this._crossingPlan(vehicle, node));
@@ -176,16 +187,34 @@ export class TrafficSystem {
       for (const vehicle of ordered) {
         if (state.owners.has(vehicle)) continue;
         const plan = state.plans.get(vehicle), entered = this._overlapsNode(vehicle.car, node);
-        if (!entered && signalState(this.signals.time, plan.axis) !== 0) continue;
+        const phase=signalState(this.signals.time,plan.axis);
+        const distance=this._stopDistance(vehicle,node,plan),stoppable=canStopBefore({speed:vehicle.speed,v0:vehicle.cruiseSpeed,driver:vehicle.driver??CAR_DRIVER},distance,phase===0?'green':phase===1?'amber':'red');
+        const committed=phase===1&&!stoppable;
+        if(!entered&&(phase===2||(phase===1&&!committed)))continue;
+        if(!entered&&!this._exitClear(vehicle,plan))continue;
         const blocked = (busClaims && this._pathsConflict(plan, state.busPlan)) ||
           [...state.owners.values()].some(claim => this._pathsConflict(plan, claim.plan)) ||
           waiting.some(earlier => this._pathsConflict(plan, earlier));
         if (blocked && !entered) waiting.push(plan);
-        else state.owners.set(vehicle, { entered, plan });
+        else state.owners.set(vehicle, { entered, plan,committed });
       }
       state.busBlocked = !!state.busPlan && [...state.owners.values()].some(claim => this._pathsConflict(claim.plan, state.busPlan));
       for (const vehicle of state.queue) vehicle.crossingNode ??= node;
     }
+  }
+
+  _stopDistance(vehicle,node,plan){
+    const p=vehicle.car.position,pad=vehicle.car.length/2+.8;
+    return Math.max(0,(plan.axis===0?(plan.hx>0?node.x0-p.x:p.x-node.x1):(plan.hz>0?node.z0-p.z:p.z-node.z1))-pad);
+  }
+  _exitClear(vehicle,plan){
+    const p=plan.points.at(-1),previous=plan.points.at(-2);if(!p||!previous)return true;
+    const length=Math.hypot(p.x-previous.x,p.z-previous.z)||1,tx=(p.x-previous.x)/length,tz=(p.z-previous.z)/length;
+    for(const other of [...this.vehicles,...(this.parkedCars??[]),...(this.busVehicles??[])]){
+      if(other===vehicle||Math.abs(other.car.position.y-vehicle.car.position.y)>2||other.speed>.5)continue;
+      const dx=other.car.position.x-p.x,dz=other.car.position.z-p.z,along=dx*tx+dz*tz,side=dx*-tz+dz*tx;
+      if(along>=0&&along<vehicle.car.length+other.car.length/2+2&&Math.abs(side)<(vehicle.car.width+other.car.width)/2+.2)return false;
+    }return true;
   }
 
   _crossingPlan(vehicle, node) {
@@ -237,7 +266,7 @@ export class TrafficSystem {
       vehicle.hardClearance = hardClearance;
       return Math.min(hardClearance, vehicle.playerClearance);
     };
-    let clearance = Infinity;vehicle.leaderSpeed=0;vehicle.leaderGap=Infinity;
+    let clearance = Infinity;vehicle.leaderSpeed=0;vehicle.leaderGap=Infinity;vehicle.stopDistance=Infinity;vehicle.obstacleGap=Infinity;vehicle.obstacleSpeed=0;
     for (const other of this._routeVehicles.get(route) ?? []) {
       if (other === vehicle || other.route !== route) continue;
       const gap = (other.distance - distance + route.length) % route.length;
@@ -246,7 +275,7 @@ export class TrafficSystem {
       clearance = Math.min(clearance, Math.max(0, bumperGap-GAP));
     }
     // Mira también alrededor de los giros; no solo en línea recta frente al carro.
-    const lookAhead = Math.max(7, speed * speed / (2 * (vehicle.braking ?? BRAKING)) + speed * .8 + 2);
+    const lookAhead = LOOKAHEAD;
     // Descarte amplio y conservador una vez por carro, no por cada muestra de su ruta.
     // Incluye toda la diagonal de la carrocería y el trayecto hasta el punto de frenado.
     const radius = lookAhead + Math.hypot(car.length / 2 + 0.8, car.width / 2 + 0.55);
@@ -273,18 +302,21 @@ export class TrafficSystem {
     // La señal corresponde al acceso actual, no al rumbo futuro tras doblar.
     const signalDirection = this._signalDirection ??= new THREE.Vector3();
     if (this.signals) route.sample(distance, this._probePosition, signalDirection);
+    const signalNodes=this.signals?.nodes?.filter(n=>car.position.x+radius>=n.x0&&car.position.x-radius<=n.x1&&car.position.z+radius>=n.z0&&car.position.z-radius<=n.z1);
     for (let ahead = 0; ahead <= Math.min(lookAhead, clearance); ahead += PROBE_STEP) {
       route.sample(distance + ahead, this._probePosition, this._probeDirection);
-      if (this.signals?.blocks(this._probePosition, signalDirection, car.position, car.length, vehicle)) return finish(Math.max(0, ahead - PROBE_STEP));
+      if (this.signals?.blocks(this._probePosition, signalDirection, car.position, car.length, vehicle,signalNodes)){vehicle.stopDistance=Math.max(0,ahead-PROBE_STEP);return finish(vehicle.stopDistance);}
       if (player && vehicle.playerClearance === Infinity && this._personInCar(player, car)) {
         vehicle.personBlocked ||= ahead <= 10;
         vehicle.playerClearance = Math.max(0, ahead - PROBE_STEP);
       }
-      for (const other of nearbyCars) if (this._carInPath(other, car)) return finish(Math.max(0, ahead - PROBE_STEP));
+      for (const other of nearbyCars) if (this._carInPath(other, car)) {
+        const clearance=Math.max(0,ahead-PROBE_STEP);vehicle.obstacleGap=clearance+GAP;vehicle.obstacleSpeed=Math.abs(other.car.controller==='player'?(other.car.physics?.speed??0):(other.speed??0));return finish(clearance);
+      }
       for (const pedestrian of nearby) {
         if (this._personInCar(pedestrian.position, car)) {
           vehicle.personBlocked ||= ahead <= 10;
-          return finish(Math.max(0, ahead - PROBE_STEP));
+          vehicle.stopDistance=Math.max(0,ahead-PROBE_STEP);return finish(vehicle.stopDistance);
         }
       }
     }
@@ -336,8 +368,9 @@ export class TrafficSystem {
     vehicle.playerContact = contact;
   }
 
-  update(dt, { player = null, pedestrians = [], onPlayerHit = null } = {}) {
+  update(dt, { player = null, pedestrians = [], onPlayerHit = null, driving=null, collisions=null, onCollision=null } = {}) {
     if (dt <= 0) return;
+    this.physics.onCollision=onCollision;
     this._coordinateIntersections();
     for (const vehicle of this.vehicles) {
       vehicle.waitAge=vehicle.speed<.05?(vehicle.waitAge??0)+Math.min(dt,.5):0;
@@ -346,6 +379,7 @@ export class TrafficSystem {
         if(this._chooseRoute(vehicle))for(const state of this.signals?.reservations?.values()??[]){state.plans.delete(vehicle);state.owners.delete(vehicle);}
         vehicle.replanWaiting=false;vehicle.waitAge=0;
       }
+      vehicle.laneTimer=(vehicle.laneTimer??0)-Math.min(dt,.5);if(vehicle.laneTimer<=0){vehicle.laneTimer=.4+this.random()*.3;this._tryLaneChange(vehicle);}
       vehicle.routeTimer -= Math.min(dt, .5);
       if (vehicle.routeTimer <= 0) {
         const changed = this._chooseRoute(vehicle);
@@ -362,11 +396,7 @@ export class TrafficSystem {
       try {
         for (const vehicle of this.vehicles) {
           const clearance = this._clearance(vehicle, player, pedestrians);
-          const braking = vehicle.braking ?? BRAKING;
-          // Anticipa la respuesta gradual del conductor; el peatón no es una pared
-          // capaz de eliminar la velocidad restante en un solo subpaso.
-          const brakingClearance = Math.min(clearance, Math.max(0, vehicle.playerClearance - vehicle.speed));
-          let desiredSpeed = Math.min(vehicle.cruiseSpeed, Math.sqrt(2 * braking * brakingClearance));
+          let desiredSpeed = Infinity;
           if (vehicle.impactStop) {
             desiredSpeed = 0;
             if (vehicle.speed < .1) {
@@ -380,8 +410,8 @@ export class TrafficSystem {
             if (segment.radius) {
               const ahead = ((start - vehicle.distance) % vehicle.route.length + vehicle.route.length) % vehicle.route.length;
               const inCurve = vehicle.distance >= start && vehicle.distance < start + segment.length;
-              const turnSpeed = Math.sqrt(segment.radius * 3.5);
-              desiredSpeed = Math.min(desiredSpeed, Math.sqrt(turnSpeed ** 2 + 2 * braking * (inCurve ? 0 : ahead)));
+              const turnSpeed = Math.sqrt(segment.radius * (vehicle.driver?.aLat??CAR_DRIVER.aLat));
+              desiredSpeed = Math.min(desiredSpeed, Math.sqrt(turnSpeed ** 2 + 5 * (inCurve ? 0 : ahead)));
             }
             start += segment.length;
           }
@@ -389,14 +419,14 @@ export class TrafficSystem {
           if (vehicle.stopped && clearance > .5) {
             vehicle.resumeDelay = vehicle.reactionTime; vehicle.stopped = false;
           }
-          if (vehicle.resumeDelay > 0) { vehicle.resumeDelay -= stepTime; desiredSpeed = 0; }
-          const leaderGap=vehicle.leaderGap??Infinity;
-          const obstacleGap=Number.isFinite(brakingClearance)?brakingClearance+GAP:Infinity;
-          const following=leaderGap<=obstacleGap;
-          const targetAcceleration = desiredSpeed===0&&vehicle.speed<.01 ? -braking : THREE.MathUtils.clamp(idmAcceleration(vehicle.speed,Math.max(.1,desiredSpeed),following?leaderGap:obstacleGap,following?vehicle.leaderSpeed:0,{a:vehicle.accelerationLimit??ACCELERATION,b:braking,s0:following?GAP:0,T:following?1.1:0}),-braking,vehicle.accelerationLimit??ACCELERATION);
-          vehicle.acceleration = THREE.MathUtils.clamp(targetAcceleration, vehicle.acceleration - 3 * stepTime, vehicle.acceleration + 3 * stepTime);
+
+          vehicle.driver??={...CAR_DRIVER};vehicle.v0=vehicle.cruiseSpeed;
+          const obstacleCloser=(vehicle.obstacleGap??Infinity)<(vehicle.leaderGap??Infinity);
+          const gap=obstacleCloser?vehicle.obstacleGap:vehicle.leaderGap;
+          const leaderSpeed=obstacleCloser?vehicle.obstacleSpeed:vehicle.leaderSpeed;
+          vehicle.acceleration=slopAcceleration(vehicle,{gap,leaderSpeed,stopDistance:vehicle.stopDistance,cap:desiredSpeed,playerGap:vehicle.playerClearance,playerSpeed:0});
           const candidateSpeed = THREE.MathUtils.clamp(vehicle.speed + vehicle.acceleration * stepTime, 0, vehicle.cruiseSpeed);
-          const speed = desiredSpeed === 0 && candidateSpeed < .01 ? 0 : candidateSpeed;
+          const speed = candidateSpeed < .01 ? 0 : candidateSpeed;
           const travel = Math.min(Math.max(0, speed * stepTime), vehicle.hardClearance);
           vehicle.nextDistance = (vehicle.distance + travel) % vehicle.route.length;
           vehicle.nextSpeed = travel / stepTime;
@@ -413,26 +443,20 @@ export class TrafficSystem {
         vehicle.speed = vehicle.nextSpeed;
         this._checkPlayerImpact(vehicle, player, startDistance, travel, onPlayerHit);
         vehicle.route.sample(vehicle.distance, this._position, this._direction);
-        if(vehicle.laneChange){
-          const change=vehicle.laneChange;change.travel+=travel;change.time+=stepTime;
-          const t=Math.min(1,change.time/3),blend=t*t*t*(10+t*(-15+6*t));
-          const target=new THREE.Vector3(),direction=new THREE.Vector3();change.route.sample(change.distance+change.travel,target,direction);
-          this._position.lerp(target,blend);
-          const lateral=30*t*t*(1-t)*(1-t)/3*3.2*change.side;
-          this._direction.add(new THREE.Vector3(-this._direction.z,0,this._direction.x).multiplyScalar(lateral/Math.max(2,vehicle.speed))).normalize();
-          if(t===1){vehicle.route=change.route;vehicle.distance=(change.distance+change.travel)%change.route.length;vehicle.laneChange=null;}
-        }
         vehicle.car.position.copy(this._position);
         vehicle.car.group.rotation.y = Math.atan2(-this._direction.z, this._direction.x);
-        const edge=this.network?.locate(vehicle.route,vehicle.distance),radius=edge?.segment.radius;
-        vehicle.car.setSteering?.(radius?Math.atan(2.6/radius):0,vehicle.laneChange?.side??(radius?1:0));
-        vehicle.car.animateDrive(vehicle.speed * stepTime, vehicle.acceleration < -.2);
+        this.physics.routePose(vehicle,stepTime);
+        vehicle.car.animateDrive(vehicle.speed * stepTime, vehicle.acceleration < -.8||vehicle.speed<.3);
       }
+      this.physics.step(this.vehicles,this.parkedCars,this.busVehicles,driving,stepTime,collisions);
       remaining -= stepTime;
     }
   }
 
+  collideDrivenCar(car,driver){this.physics.collideDriver(car,driver);}
+
   dispose() {
+    this.physics.dispose();
     this.signals?.reservations?.clear();
     for (const { car } of this.vehicles) car.dispose();
     this.vehicles.length = 0;

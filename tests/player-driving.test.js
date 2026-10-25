@@ -24,7 +24,7 @@ test('la conduccion avanza sobre +X, frena antes de retroceder y gira sin cambia
  const x=f.car.position.x;for(let i=0;i<20;i++)f.driving.update(.1,f.input('KeyW','KeyA'));assert.notEqual(f.car.group.rotation.y,0);assert.ok(f.car.position.x>x);assert.equal(f.car.length,4.3);
 });
 test('subpasos impiden atravesar muros y respeta la altura del puente',()=>{
- const f=fixture();f.walls.push({box:new THREE.Box3(new THREE.Vector3(5,-1,-10),new THREE.Vector3(6,5,10))});f.driving.enter();f.driving.speed=36;f.driving.update(1,f.input('KeyW'));assert.ok(f.car.position.x<3);assert.equal(f.driving.speed,0);
+ const f=fixture();f.walls.push({box:new THREE.Box3(new THREE.Vector3(5,-1,-10),new THREE.Vector3(6,5,10))});f.driving.enter();f.driving.speed=36;f.driving.update(1,f.input('KeyW'));assert.ok(f.car.position.x<3);assert.ok(f.driving.speed<0);
  f.car.position.set(0,7.82,0);f.driving.speed=10;f.driving.update(.1,f.input('KeyW'));assert.ok(f.car.position.x>0);assert.equal(f.car.position.y,7.82);
 });
 test('no permite salir entre paredes y cancelar restaura el jugador sin guardar',()=>{

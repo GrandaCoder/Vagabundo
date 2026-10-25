@@ -159,7 +159,7 @@ export class Game {
     this.dealer = null;
     this.craftingStation = null;
     this.dog = null;
-    this.driving=new PlayerDriving({player:this.player,cars:()=>this.cars,collisions:this.collisions,district:()=>this.world.active,audio:this.audio,notify:text=>window.dispatchEvent(new CustomEvent('toast',{detail:{text,type:'info'}}))});
+    this.driving=new PlayerDriving({player:this.player,cars:()=>this.cars,collisions:this.collisions,district:()=>this.world.active,audio:this.audio,contacts:(car,driver)=>this.traffic?.collideDrivenCar(car,driver),onCollision:event=>this.traffic?.physics.report(event),notify:text=>window.dispatchEvent(new CustomEvent('toast',{detail:{text,type:'info'}}))});
     this.drivingHUD=el('div',{id:'driving-controls'});document.body.appendChild(this.drivingHUD);
 
     // Estado
@@ -846,7 +846,9 @@ export class Game {
     this.profiler?.mark('sistemas');
     this.world.update(dt, this.player.position, this.cameraRig.camera, this.traffic?.vehicles ?? []);
     this.profiler?.mark('mundoNPC');
-    this.traffic?.update(dt, { player: this.player.position, pedestrians: this.world.active?.trafficPedestrians ?? this.world.active?.npcs ?? [], onPlayerHit: this._onVehicleImpact });
+    this.traffic?.update(dt, { player: this.driving?.car?null:this.player.position, pedestrians: this.world.active?.trafficPedestrians ?? this.world.active?.npcs ?? [], onPlayerHit: this._onVehicleImpact,driving:this.driving,collisions:this.collisions,onCollision:event=>this.audio.collisionAudio?.play(event) });
+    if(this.driving?.car)this.driving._follow();
+    this._syncVehicleColliders();
     this.profiler?.mark('trafico');
     if (this._handleDeath()) return;
 

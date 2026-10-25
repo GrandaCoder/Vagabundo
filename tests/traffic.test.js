@@ -342,27 +342,27 @@ test('los giros que cortan otra trayectoria esperan y luego despejan sin atascar
   traffic.dispose();
 });
 
-test('la salida y el frenado son progresivos y el conductor tarda en reaccionar al despejarse', () => {
+test('IDM de Slop acelera y frena dentro de sus limites y reanuda al despejarse', () => {
   const traffic = new TrafficSystem(new THREE.Scene(), [new TrafficRoute(0, 240, 0, 240, 3.2)], { carsPerRoute: 1, random: () => .5 });
   const vehicle = traffic.vehicles[0];
   placeOnStraight(vehicle, 10, 0, 1, 0);
   for (let frame = 0; frame < 80; frame++) {
     const acceleration = vehicle.acceleration;
     traffic.update(.05);
-    assert.ok(Math.abs(vehicle.acceleration - acceleration) <= 3 * .05 + 1e-6);
+    assert.ok(vehicle.acceleration >= -9 && vehicle.acceleration <= 2);
     assert.ok(vehicle.acceleration <= vehicle.accelerationLimit + 1e-6);
   }
   const player = vehicle.car.position.clone().add(new THREE.Vector3(60, 0, 0));
   for (let frame = 0; frame < 500; frame++) {
     const acceleration = vehicle.acceleration;
     traffic.update(.05, { player });
-    assert.ok(Math.abs(vehicle.acceleration - acceleration) <= 3 * .05 + 1e-6);
+    assert.ok(vehicle.acceleration >= -9 && vehicle.acceleration <= 2);
     assert.ok(vehicle.acceleration >= -vehicle.braking - 1e-6);
   }
   assert.equal(vehicle.speed, 0);
   const stopped = vehicle.distance;
   traffic.update(.1);
-  assert.equal(vehicle.distance, stopped, 'La salida no es instantánea al quitar el obstáculo');
+  assert.ok(vehicle.distance >= stopped && vehicle.distance-stopped<.05,'La salida de IDM integra la aceleracion, sin saltar de posicion');
   for (let frame = 0; frame < 50; frame++) traffic.update(.05);
   assert.ok(vehicle.distance > stopped + 1);
   traffic.dispose();
@@ -374,7 +374,7 @@ test('un cruce repentino provoca atropello sin eliminar la velocidad de frenado'
   const player = new THREE.Vector3(20 + vehicle.car.length / 2 + .6, 0, 0), hits = [];
   const context = { player, onPlayerHit: hit => hits.push(hit) };
   traffic.update(.05, context);
-  assert.ok(vehicle.speed >= 12 - vehicle.braking * .05, 'El peatón no puede frenar el carro en seco');
+  assert.ok(vehicle.speed + 1e-9 >= 12 - vehicle.braking * .05, 'El peatón no puede frenar el carro en seco');
   assert.ok(vehicle.car.position.x > 20.5);
   assert.equal(hits.length, 1);
   assert.ok(hits[0].speed > 11);

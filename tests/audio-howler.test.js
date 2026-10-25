@@ -33,7 +33,10 @@ class Context {
   createGain() { return audioNode(); }
   createPanner() { return audioNode(); }
   createBufferSource() { return audioNode(); }
-  createBuffer() { return {}; }
+  createBuffer(channels, length, rate) {
+    const samples=Array.from({length:channels},()=>new Float32Array(length));
+    return {duration:length/rate,getChannelData:channel=>samples[channel]};
+  }
   decodeAudioData(bytes, done) {
     const { duration } = audioMetadata(Buffer.from(bytes));
     setTimeout(() => done({ duration }), 0);

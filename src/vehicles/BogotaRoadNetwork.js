@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 /** Directed lanes/connectors over the existing Bogotá routes; no imported NY geography. */
 export class BogotaRoadNetwork {
- constructor(routes){this.routes=routes;this.edges=[];this.p=new THREE.Vector3();this.d=new THREE.Vector3();
-  for(const route of routes){let start=0;for(const segment of route.segments){this.edges.push({route,segment,start,end:start+segment.length});start+=segment.length;}}
+ constructor(routes){this.routes=routes;this.edges=[];this.byRoute=new Map();this.p=new THREE.Vector3();this.d=new THREE.Vector3();
+  for(const route of routes){let start=0;const list=[];for(const segment of route.segments){const edge={route,segment,start,end:start+segment.length};this.edges.push(edge);list.push(edge);start+=segment.length;}this.byRoute.set(route,list);}
  }
- locate(route,distance){const s=((distance%route.length)+route.length)%route.length;return this.edges.find(e=>e.route===route&&s>=e.start&&s<=e.end);}
+ locate(route,distance){const s=((distance%route.length)+route.length)%route.length;return this.byRoute.get(route)?.find(e=>s>=e.start&&s<=e.end);}
  continuations(vehicle){
   const {route,distance,car}=vehicle;route.sample(distance,this.p,this.d);const out=[],margin=car.length/2+1;
   if(Math.min(Math.abs(this.d.x),Math.abs(this.d.z))>1e-6)return out;

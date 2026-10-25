@@ -17,3 +17,14 @@ test('los retrovisores agrupados siguen ocultación y reposición sin alterar su
  const car=createSlopVehicle({scene,mirrors});anchor.add(car.group);car.activate();const bank=vehicleBatches(scene);bank.sync(new THREE.Camera());assert.equal(bank.mirrors[0].count,2);assert.ok(mirrors.every(m=>m.visible&&m.children.every(c=>!c.visible)));
  mirrors.forEach(m=>m.visible=false);bank.sync(new THREE.Camera());assert.equal(bank.mirrors[0].count,0);mirrors.forEach(m=>m.visible=true);bank.sync(new THREE.Camera());assert.equal(bank.mirrors[0].count,2);car.dispose();assert.ok(mirrors.every(m=>m.children.every(c=>c.visible)));disposeVehicleBatches(scene);
 });
+
+test('ruedas delanteras orientables y carroceria inclinada comparten raiz fisica',()=>{
+ const scene=new THREE.Scene(),car=createSlopVehicle({scene});scene.add(car.group);car.activate();
+ const bank=vehicleBatches(scene),camera=new THREE.Camera();bank.sync(camera);const type=bank.types.get('sedan'),wheel=type.wheels[0].mesh;
+ const rear=new THREE.Matrix4(),front=new THREE.Matrix4();wheel.getMatrixAt(0,rear);wheel.getMatrixAt(1,front);const buffer=wheel.instanceMatrix.array;
+ car.setSteering(.4,1);car.setPose(.1,.12,0);bank.sync(camera);
+ const nextRear=new THREE.Matrix4(),nextFront=new THREE.Matrix4();wheel.getMatrixAt(0,nextRear);wheel.getMatrixAt(1,nextFront);
+ assert.deepEqual(nextRear.elements,rear.elements);assert.notDeepEqual(nextFront.elements,front.elements);assert.equal(wheel.instanceMatrix.array,buffer);assert.equal(wheel.count,2);
+ const body=new THREE.Matrix4();type.near.getMatrixAt(0,body);assert.ok(Math.abs(body.elements[1])>.001||Math.abs(body.elements[6])>.001);
+ car.dispose();disposeVehicleBatches(scene);
+});

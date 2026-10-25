@@ -65,13 +65,13 @@ export class TrafficSignals {
     this.lensStates.value.set(states[0], states[1]);
   }
 
-  blocks(point, direction, current, length = 0, vehicle = null) {
+  blocks(point, direction, current, length = 0, vehicle = null, nodes = this.nodes) {
     const axis = Math.abs(direction.x) >= Math.abs(direction.z) ? 0 : 1;
     const red = signalState(this.time, axis) !== 0;
     if (!red && !vehicle) return false;
-    for (const node of this.nodes) {
+    for (const node of nodes) {
       const claim = this.reservations.get(node);
-      if (vehicle && claim?.owners.get(vehicle)?.entered) continue;
+      if (vehicle && (claim?.owners.get(vehicle)?.entered||claim?.owners.get(vehicle)?.committed)) continue;
       // Quien ya está en el cruce lo despeja aunque cambie la luz.
       if (current.x >= node.x0 && current.x <= node.x1 && current.z >= node.z0 && current.z <= node.z1) continue;
       // Solo obedece quien se acerca a ese acceso. Al salir, la cola del

@@ -1,3 +1,4 @@
+import {SlopCrashAudio} from '../vehicles/SlopCrashAudio.js';
 // src/systems/AudioSystem.js
 import { Howl, Howler } from 'howler';
 import { VehicleAudio } from './VehicleAudio.js';
@@ -59,6 +60,7 @@ export class AudioSystem {
     this._theftVoices = new Map();
     this.vehicles = new VehicleAudio(this.vehicleSounds, Math.random, this.driverSounds);
     this._carAlarms = new Map();
+    this.collisionAudio=new SlopCrashAudio(howler,()=>this._listenerPosition,()=>this.muted||this._paused);
 
     // El audio es opcional: un archivo ausente o bloqueado no impide jugar.
     this.ready = Promise.all([...Object.values(this.sounds), ...Object.values(this.vehicleSounds), ...this.driverSounds, ...this.theftSounds].map(sound => new Promise(resolve => {
@@ -72,7 +74,7 @@ export class AudioSystem {
       const timer = setTimeout(done, 5000);
       sound.once('load', done);
       sound.once('loaderror', done);
-    })));
+    }))).then(()=>this.collisionAudio.prepare());
 
     this._stepsPlaying = false;
     this._boostPlaying = false;
@@ -244,6 +246,7 @@ export class AudioSystem {
     this._paused = paused;
     this._syncRain();
     this.vehicles.setPaused(paused);
+    if(paused)this.collisionAudio.stop();
     if (paused) {
       for (const voice of this._theftVoices.values()) voice.sound.stop(voice.id);
       this._theftVoices.clear();
@@ -289,6 +292,7 @@ export class AudioSystem {
   }
 
   dispose() {
+    this.collisionAudio.stop();
     this._theftVoices.clear();
     this._carAlarms.clear();
     this.eventTarget?.removeEventListener('dog-bark', this._dogBark);

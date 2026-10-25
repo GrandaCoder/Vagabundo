@@ -157,6 +157,10 @@ export class Car {
     if(!enabled&&this.drivingVisual){this.drivingVisual.update(0,0,0,0);}
   }
 
+  setPose(pitch,roll,heave=0){
+    this.vehicle.setPose?.(pitch,roll,heave);
+    if(!this.vehicle.setPose){this.vehicle.group.rotation.x=roll;this.vehicle.group.rotation.z=-pitch;this.vehicle.group.position.y=heave;}
+  }
   setSteering(angle,signal=0){this.steerAngle=angle;this.turnSignal=signal;this.vehicle.setSteering?.(angle,signal);}
 
   animateDrive(distance, braking) {

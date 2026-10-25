@@ -236,3 +236,5 @@ La rama `pruebas-slop-newyork` incorpora sedán y taxi procedurales adaptados a 
 ## Migración WebGPU en la rama experimental
 
 `pruebas-slop-newyork` usa WebGPU y TSL, con iluminación agrupada, sombras en cascada y efectos escalonados por calidad. Conserva Bogotá y sus mecánicas. Requiere un equipo y navegador con WebGPU; no tiene respaldo WebGL. [Arquitectura, corrección de la carga y validación](docs/migracion-webgpu.md).
+
+El tráfico experimental adapta del mismo código fuente el seguimiento IDM, frenado y velocidad en curvas, junto con impulsos de choque, carambolas y recuperación del carril. Mantiene la red de Bogotá y el servicio de TransMilenio. [Comportamiento, procedencia y pruebas](docs/trafico-slop.md).
