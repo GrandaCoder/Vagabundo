@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { isShadowActive } from '../graphics/ShadowState.js';
+import { advanceShadowCadence } from '../graphics/ShadowCadence.js';
 
 /** Descarte por grupos durante el render; nunca modifica la simulación ni la visibilidad de juego. */
 export class FrustumCulling {
@@ -40,7 +41,10 @@ export class FrustumCulling {
     for (const light of shadowLights) {
       // Una sombra pausada (calidad baja o noche) no mantiene objetos solo por proyectar sombra.
       if (!light.visible || !isShadowActive(light)) continue;
-      if(light.isSunLight){light.shadow.updateMatrices(light,camera);this.shadowFrustums.push(light.shadow.getFrustum(0),light.shadow.getFrustum(1));continue;}
+      if(light.isSunLight){
+        // La cascada lejana se redibuja un cuadro de cada dos: en los otros nadie necesita conservar lo que solo ella ve.
+        const far = advanceShadowCadence(light);
+        light.shadow.updateMatrices(light,camera);this.shadowFrustums.push(light.shadow.getFrustum(0));if(far)this.shadowFrustums.push(light.shadow.getFrustum(1));continue;}
       if (!light.isDirectionalLight) continue;
       light.updateWorldMatrix(true, false);
       light.target.updateWorldMatrix(true, false);

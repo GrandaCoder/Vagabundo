@@ -4,10 +4,12 @@
  * (segundos de CPU). Como en Slop New York, la sombra del sol se deja siempre declarada y solo
  * se pausa su pasada y se anula su intensidad, que son valores de ejecución.
  */
+import { requestFullShadowUpdate } from './ShadowCadence.js';
+
 export function setShadowActive(light, active) {
   light.castShadow = true;
   const shadow = light.shadow;
-  if (active && shadow.autoUpdate === false) shadow.needsUpdate = true;
+  if (active && shadow.autoUpdate === false) { shadow.needsUpdate = true; requestFullShadowUpdate(light); }
   shadow.autoUpdate = active;
   shadow.intensity = active ? 1 : 0;
 }
@@ -24,6 +26,7 @@ export function setShadowResolution(light, size) {
   if ('mapPass' in shadow) shadow.mapPass = null;
   shadow.mapSize.set(size, size);
   shadow.needsUpdate = true;
+  requestFullShadowUpdate(light);
   return true;
 }
 
