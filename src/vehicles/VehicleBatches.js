@@ -45,6 +45,7 @@ export class VehicleBatches {
     });
   }
   sync(camera){
+    const skip=this.scene.userData.skipEmptyBatches===true;
     for(const type of this.types.values()){type.near.count=0;type.far.count=0;for(const wheel of type.wheels)wheel.mesh.count=0;}
     camera?.getWorldPosition(this.position);this._p??=new THREE.Vector3();
     for(const mesh of this.mirrors??[])mesh.count=0;
@@ -73,10 +74,11 @@ export class VehicleBatches {
         marker.updateWorldMatrix(true,false);if(camera&&this.position.distanceToSquared(this._p.setFromMatrixPosition(marker.matrixWorld))>280*280)continue;
         batch.setMatrixAt(batch.count++,marker.matrixWorld);
       }
-      batch.instanceMatrix.needsUpdate=true;
+      batch.instanceMatrix.needsUpdate=true;batch.visible=!skip||batch.count>0;
     }
-    for(const mesh of this.mirrors??[])mesh.instanceMatrix.needsUpdate=true;
-    for(const type of this.types.values())for(const mesh of [type.near,type.far]){for(const wheel of type.wheels)wheel.mesh.instanceMatrix.needsUpdate=true;mesh.instanceMatrix.needsUpdate=true;for(const key of ['paintColor','carState','wheelAngle','carNight'])mesh.geometry.attributes[key].needsUpdate=true;}
+    for(const mesh of this.mirrors??[]){mesh.visible=!skip||mesh.count>0;mesh.instanceMatrix.needsUpdate=true;}
+    // Un lote sin instancias no se dibuja: antes costaba un dibujo vacío por vista y cascada de sombra.
+    for(const type of this.types.values())for(const mesh of [type.near,type.far]){for(const wheel of type.wheels){wheel.mesh.visible=!skip||wheel.mesh.count>0;wheel.mesh.instanceMatrix.needsUpdate=true;}mesh.visible=!skip||mesh.count>0;mesh.instanceMatrix.needsUpdate=true;for(const key of ['paintColor','carState','wheelAngle','carNight'])mesh.geometry.attributes[key].needsUpdate=true;}
   }
   dispose(){if(this._disposed)return;this._disposed=true;this.root.removeFromParent();for(const type of this.types.values()){type.near.dispose();type.far.dispose();type.near.geometry.dispose();type.far.geometry.dispose();type.material.dispose();for(const wheel of type.wheels){wheel.mesh.dispose();wheel.mesh.geometry.dispose();}for(const m of type.wheelMaterials)m.dispose();}for(const mesh of [...(this.mirrors??[]),this.markerMesh].filter(Boolean)){mesh.dispose();mesh.geometry.dispose();mesh.material.dispose();}for(const marker of this.markers??[])marker.layers.enable(0);this.markers?.clear();this.types.clear();this.entries.clear();banks.delete(this.scene);}
 }

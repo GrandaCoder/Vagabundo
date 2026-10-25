@@ -10,7 +10,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  * de las cascadas; los originales dejan de proyectar. Cada celda cuesta un dibujo por cascada.
  */
 export const SHADOW_PROXY_LAYER = 3;
-export const SHADOW_PROXY_CELL = 64;
+// Celdas amplias, como las de 500 m de Slop New York: cada celda cuesta un dibujo por cascada y sus triángulos son pocos.
+export const SHADOW_PROXY_CELL = 160;
 
 const proxyMaterials = new Map();
 const toParent = new THREE.Matrix4();

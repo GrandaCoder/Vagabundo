@@ -70,6 +70,10 @@ import {
   INVENTORY_MAX_WEIGHT, WITHDRAWAL
 } from '../utils/constants.js';
 
+// Distancia máxima a la que los objetos pequeños proyectan sombra del sol (la cascada cercana cubre ~70 m).
+const SMALL_SHADOW_RANGE = 60;
+const STATIC_PLACES = new Set(['SellPoint', 'DrugDealer', 'CraftingStation', 'Shop', 'TrashContainer']);
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -300,6 +304,7 @@ export class Game {
       await this.renderer.waitForGPU();
       await this.renderer.verifyPrepared?.(this.sceneMgr.scene,this.cameraRig.camera,this.player.root,[this.sceneMgr.sun],views);
     } finally { this._setCameraView(startMode); }
+    this.sceneMgr.scene.userData.skipEmptyBatches = true;
     this.renderer.startupStats={...this.renderer.startupStats,assetsMs,warmupMs:performance.now()-warmupStarted,totalMs:performance.now()-(this.startupStarted??performance.now())};
     console.info('[WebGPU] Carga completa '+JSON.stringify(this.renderer.startupStats));
     await loading.stage('Todo listo', 5);
@@ -1114,7 +1119,9 @@ export class Game {
     for (const sector of district?.renderSectors ?? []) culling.register(sector);
     if (district?.signals) culling.register(district.signals.group);
     for (const pickup of this.pickups) culling.register(pickup.group, { dynamic: true, margin: .2 });
-    for (const object of district?.animated ?? []) culling.register(object, { margin: 1 });
+    for (const object of district?.animated ?? []) culling.register(object, { margin: 1, shadowRange: SMALL_SHADOW_RANGE });
+    // Los lugares de interacción son grupos estáticos que antes se dibujaban siempre, también en las sombras lejanas.
+    for (const target of this.interaction.targets) if (STATIC_PLACES.has(target.constructor.name) && target.group?.parent) culling.register(target.group, { margin: 1.5, shadowRange: SMALL_SHADOW_RANGE });
     for (const bus of district?.busServices ?? [district?.busService].filter(Boolean)) culling.register(bus.group, { dynamic: true, margin: .5 });
     for (const car of this.cars) culling.register(car.group, { dynamic: true, margin: .5 });
     for (const { car } of this._activeTraffic()) culling.register(car.group, { dynamic: true, margin: .5 });

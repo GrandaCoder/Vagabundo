@@ -139,10 +139,11 @@ test('el cambuche permanece oculto hasta construir base y techo y conserva las m
 test('las lentes del semáforo se iluminan sobre el GLB, sin discos flotantes ni luces dinámicas', async () => {
   const signals = new TrafficSignals();
   await signals.preloadModel();
-  assert.equal(signals.poleMesh.count, signals.poles.length);
+  assert.equal(signals.poleMeshes.reduce((sum, mesh) => sum + mesh.count, 0), signals.poles.length);
+  assert.ok(signals.poleMeshes.length > 1, 'los semáforos se reparten por celdas para que el descarte y las sombras los separen');
   assert.equal(signals.group.children.length, 3);
-  const axes = signals.poleMesh.geometry.getAttribute('trafficAxis');
-  assert.deepEqual([...axes.array], signals.poles.map(pole => pole.axis));
+  const axes = signals.poleMeshes.flatMap(mesh => [...mesh.geometry.getAttribute('trafficAxis').array]);
+  assert.deepEqual(axes.sort(), signals.poles.map(pole => pole.axis).sort());
   let pointLights = 0;
   signals.group.traverse(object => { if (object.isLight) pointLights++; });
   assert.equal(pointLights, 0);
@@ -190,4 +191,22 @@ test('bolsas y contenedores se dibujan en lotes que siguen recogida, reaparició
   assert.equal(bagModel.layers.mask, 1);assert.equal(lot(bags[1].mesh.getObjectByProperty('isMesh', true)).count, 1);
   bags[1].dispose();bin.dispose();disposeInstanceBatches(scene);
   assert.equal(batches.root.parent, null);
+});
+
+test('los objetos sueltos lejanos se dibujan sin sombra y los lotes vacíos se ocultan tras el calentamiento', () => {
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
+  const mesh = (x) => { const m = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial()); m.castShadow = true; m.position.x = x; scene.add(m); m.updateMatrixWorld(); return m; };
+  const nearOne = mesh(5), farOne = mesh(200);
+  const batches = instanceBatches(scene);
+  batches.add(nearOne, 'k');batches.add(farOne, 'k');
+  batches.sync(camera);
+  const group = [...batches.groups.values()][0];
+  assert.equal(group.mesh.count, 1);assert.equal(group.mesh.castShadow, true);
+  assert.equal(group.far.count, 1);assert.equal(group.far.castShadow, false, 'el lejano se dibuja sin sombra');
+  assert.equal(group.far.visible, true, 'durante el calentamiento los lotes se dibujan aunque estén vacíos');
+  scene.userData.skipEmptyBatches = true;
+  farOne.visible = false;
+  batches.sync(camera);
+  assert.equal(group.far.visible, false, 'tras el calentamiento un lote vacío no cuesta dibujo');
+  disposeInstanceBatches(scene);
 });

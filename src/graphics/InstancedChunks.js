@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { SHADOW_PROXY_CELL } from './ShadowProxies.js';
 
 /**
  * Instancias por celdas, adaptadas de chunkInstancedMesh en scene-culling.js de Slop New York (MIT).
@@ -8,11 +7,13 @@ import { SHADOW_PROXY_CELL } from './ShadowProxies.js';
  * celda del mapa: comparte geometría y material (el mismo programa) y cada celda se descarta por el
  * frustum de la vista y de cada cascada. Antes cada copia era un dibujo en cada pasada.
  */
+/** Celda por omisión de los lotes instanciados (faroles, postes): su descarte necesita ser más fino que el de las sombras. */
+export const INSTANCE_CELL = 64;
 const relative = new THREE.Matrix4();
 const world = new THREE.Matrix4();
 
 /** `transforms` son matrices de mundo de cada copia; se conserva la transformación propia de `model`. */
-export function instanceModelByCells(model, transforms, { cell = SHADOW_PROXY_CELL, name = 'Instancias por celdas' } = {}) {
+export function instanceModelByCells(model, transforms, { cell = INSTANCE_CELL, name = 'Instancias por celdas' } = {}) {
   model.updateMatrixWorld(true);
   const inverse = model.parent ? model.parent.matrixWorld.clone().invert() : new THREE.Matrix4(), parts = [];
   model.traverse(o => {

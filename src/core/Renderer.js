@@ -21,7 +21,9 @@ export class Renderer {
     this.instance = createWebGPURenderer({
       canvas,
       antialias: true,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      // Solo con ?perf: consultas de tiempo de GPU para repartir el cuadro entre CPU y GPU.
+      trackTimestamp: globalThis.location?.search?.includes('perf') === true
     });
     this.resolution = new AdaptiveResolution(window.devicePixelRatio);
     this.instance.setPixelRatio(this.resolution.ratio);
@@ -65,7 +67,7 @@ export class Renderer {
   async prepare(scene, camera, extraModels = []) {
     const started=performance.now();
     console.info('[WebGPU] Preparando recursos');
-    syncVehicleBatches(scene,camera);syncInstanceBatches(scene);
+    syncVehicleBatches(scene,camera);syncInstanceBatches(scene,camera);
     const budget=await prepareSceneTextures([scene,...extraModels]);
     const textures=budget.textures;this.textureStats={unique:textures.size,resized:budget.resized,reused:budget.reused,prepareMs:performance.now()-started};
     console.info('[WebGPU] Texturas únicas',this.textureStats);
@@ -225,7 +227,7 @@ export class Renderer {
     this.instance.info.reset();
     this.culling.apply(camera, shadowLights);
     // Después del descarte: los recogibles fuera de vista y sombra no entran en su lote.
-    syncInstanceBatches(scene);
+    syncInstanceBatches(scene,camera);
     try {
       if(this.instance.backend?.isWebGPUBackend){
       this._ensurePipeline(scene,camera);
