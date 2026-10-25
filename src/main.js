@@ -13,6 +13,7 @@ try {
   await loading.stage('Preparando el juego…', 0);
   const { Game } = await import('./core/game.js');
   const game = new Game(document.getElementById('game-canvas'));
+  if (new URLSearchParams(location.search).has('perf')) (await import('./core/PerfProbe.js')).installPerfProbe(game);
   await game.start(loading);
   startControlsHelp();
   if (SHOW_DEVELOPER_NOTE) openDeveloperNote(game);

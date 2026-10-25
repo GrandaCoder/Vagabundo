@@ -904,7 +904,9 @@ export class Game {
     return {
       environment:{bakeMs:this.sceneMgr.atmosphere?.lastBakeMs,bakes:this.sceneMgr.atmosphere?.bakeCount},diagnostics:this.renderer.diagnostics?.events, cpu: this.profiler.report(), frames: this.performanceHUD.metrics.recentStats(),
       graphics: { selected: this.renderer.quality, effective: this.renderer.effectiveQuality,
-        pixelRatio: this.renderer.instance.getPixelRatio(), ...this.renderer.instance.info.render }
+        pixelRatio: this.renderer.instance.getPixelRatio(), ...this.renderer.instance.info.render },
+      work: this.renderer.diagnostics?.snapshot?.(), startup: this.renderer.startupStats,
+      memoryMB: globalThis.performance?.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null
     };
   }
 
@@ -926,6 +928,7 @@ export class Game {
     for(const car of this.cars??[])car.setNight?.(this.clock.isNight);
     for(const vehicle of this.traffic?.vehicles??[])vehicle.car.setNight?.(this.clock.isNight);
     if (this._effectiveQuality !== quality) {
+      this.renderer.diagnostics?.record('quality',0,{from:this._effectiveQuality,to:quality,pressure:this.renderer.resolution.pressure});
       this._effectiveQuality = quality;
       this.sceneMgr.setQuality(quality);
       this.cameraRig.setQuality?.(quality);

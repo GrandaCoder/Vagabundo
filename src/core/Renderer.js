@@ -139,7 +139,7 @@ export class Renderer {
   async initialize() {
     return this._initialization ??= initializeWebGPU(this.instance).then(()=>{
       this.instance.onDeviceLost=info=>this.onDeviceLost?.(info);
-      this.diagnostics.attach(this.instance.backend);
+      this.diagnostics.attach(this.instance.backend);this.diagnostics.attachRenderer(this.instance);
       this.instance.lighting=new ClusteredLighting(256,32,28,48);
       return this;
     });
@@ -206,7 +206,10 @@ export class Renderer {
   }
 
   adaptResolution(frameMs) {
+    // La sonda `?perf` puede fijar la calidad para medir sin cambios automáticos.
+    if (this.adaptiveLocked) return;
     if (this.resolution.sample(frameMs)) {
+      this.diagnostics?.record('resolution',frameMs,{ratio:this.resolution.ratio,pressure:this.resolution.pressure,quality:this.effectiveQuality});
       if (this.instance.getPixelRatio() !== this.resolution.ratio) this.instance.setPixelRatio(this.resolution.ratio);
       const shadows = this.effectiveQuality !== 'baja';
       if (this.instance.shadowMap.enabled !== shadows) {
