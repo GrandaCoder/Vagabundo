@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import { SubstanceEffects } from '../src/systems/SubstanceEffects.js';
+import * as THREE from 'three';
+import { SubstanceEffects, filterCss } from '../src/systems/SubstanceEffects.js';
 
 let clock, sound, events;
 
@@ -132,4 +133,147 @@ test('tintico no activa nada y el evento substance-consumed sí', () => {
   events.dispatchEvent(new CustomEvent('substance-consumed', { detail: { id: 'hierba' } }));
   assert.equal(fx.active, false);
   assert.deepEqual(sound.onsets, ['pegante']);
+});
+
+// ===== Imagen =====
+
+function fakeCanvas() {
+  const draws = [];
+  const ctx2d = { globalAlpha: 1, drawImage(...args) { draws.push(args); }, clearRect() {} };
+  const doc = {
+    createElement: (tag) => ({
+      tag, style: { cssText: '' }, width: 0, height: 0, removed: false,
+      getContext: () => ctx2d, remove() { this.removed = true; }
+    })
+  };
+  const canvas = { style: { filter: '' }, ownerDocument: doc, inserted: [], after(...els) { this.inserted.push(...els); } };
+  return { canvas, draws };
+}
+
+function visualFixture(opts = {}) {
+  const { canvas, draws } = fakeCanvas();
+  const fx = effects({ canvas, ...opts });
+  const [trail, overlay] = canvas.inserted;
+  return { fx, canvas, draws, trail, overlay, camera: new THREE.PerspectiveCamera(55) };
+}
+
+test('filterCss arma el filtro en orden y omite blur cuando se pide', () => {
+  assert.equal(filterCss({ hueRotate: 55, blur: 1.6, sepia: 0.35 }), 'blur(1.6px) sepia(0.35) hue-rotate(55deg)');
+  assert.equal(filterCss({ contrast: 1.12, saturate: 2.3, brightness: 0.9 }), 'saturate(2.3) brightness(0.9) contrast(1.12)');
+  assert.equal(filterCss({ hueRotate: 12.34567 }), 'hue-rotate(12.346deg)');
+  assert.equal(filterCss({ blur: 1.6, sepia: 0.35 }, { blur: false }), 'sepia(0.35)');
+  assert.equal(filterCss({}), '');
+});
+
+test('las capas quedan sobre el juego y bajo el HUD', () => {
+  const { canvas, trail, overlay } = visualFixture();
+  assert.equal(canvas.inserted.length, 2);
+  assert.equal(trail.tag, 'canvas');
+  assert.equal(overlay.tag, 'div');
+  for (const el of [trail, overlay]) {
+    assert.match(el.style.cssText, /z-index:0/);
+    assert.match(el.style.cssText, /pointer-events:none/);
+  }
+});
+
+test('mientras dura el efecto el canvas lleva el filtro de la receta y al terminar se limpia', () => {
+  const { fx, canvas, overlay, trail, camera } = visualFixture();
+  fx.consume('pegante');
+  fx.update(3);
+  fx.beforeRender(camera); fx.afterRender(camera);
+  assert.match(canvas.style.filter, /blur\(/);
+  assert.match(canvas.style.filter, /sepia\(/);
+  assert.equal(overlay.style.mixBlendMode, 'multiply');
+  fx.end();
+  clock += 1100;
+  fx.beforeRender(camera); fx.afterRender(camera);
+  assert.equal(canvas.style.filter, '');
+  assert.equal(overlay.style.opacity, '0');
+  assert.equal(trail.style.opacity, '0');
+});
+
+test('sin efecto no toca el filtro de otros sistemas', () => {
+  const { fx, canvas, camera } = visualFixture();
+  canvas.style.filter = 'contrast(140%)'; // la psicosis lo escribe en cada cuadro
+  fx.beforeRender(camera); fx.afterRender(camera);
+  assert.equal(canvas.style.filter, 'contrast(140%)');
+});
+
+test('si otro sistema borra el filtro, el siguiente cuadro lo repone', () => {
+  const { fx, canvas, camera } = visualFixture();
+  fx.consume('hierba');
+  fx.update(3);
+  fx.beforeRender(camera); fx.afterRender(camera);
+  canvas.style.filter = '';
+  fx.beforeRender(camera); fx.afterRender(camera);
+  assert.match(canvas.style.filter, /sepia\(/);
+});
+
+test('en calidad baja no hay estela ni blur', () => {
+  const { fx, canvas, trail, draws, camera } = visualFixture();
+  fx.consume('pegante');
+  fx.update(3);
+  fx.beforeRender(camera, { quality: 'baja' });
+  fx.afterRender(camera);
+  assert.doesNotMatch(canvas.style.filter, /blur\(/);
+  assert.match(canvas.style.filter, /sepia\(/);
+  assert.equal(trail.style.opacity, '0');
+  assert.equal(draws.length, 0);
+  fx.beforeRender(camera, { quality: 'alta' });
+  fx.afterRender(camera);
+  assert.equal(draws.length, 1);
+});
+
+test('la cámara se distorsiona solo durante el render y vuelve a su lugar', () => {
+  const { fx, camera } = visualFixture();
+  camera.rotation.z = 0.01;
+  fx.consume('pegante');
+  fx.update(3);
+  fx.beforeRender(camera);
+  assert.notEqual(camera.fov, 55);
+  assert.notEqual(camera.rotation.z, 0.01);
+  fx.afterRender(camera);
+  assert.equal(camera.fov, 55);
+  assert.equal(camera.rotation.z, 0.01);
+});
+
+test('con movimiento reducido la cámara se mueve al 20 %', () => {
+  const offset = (reducedMotion) => {
+    const { fx, camera } = visualFixture({ reducedMotion });
+    fx.consume('pegante');
+    fx.update(3);
+    fx.beforeRender(camera);
+    return camera.fov - 55;
+  };
+  const full = offset(false), calm = offset(true);
+  assert.ok(Math.abs(full) > 0.5);
+  assert.ok(Math.abs(calm - 0.2 * full) < 1e-9);
+});
+
+test('la estela sigue el tamaño de la ventana', () => {
+  const { fx, trail, draws, camera } = visualFixture();
+  globalThis.innerWidth = 1280; globalThis.innerHeight = 720;
+  try {
+    fx.consume('pastilla');
+    fx.update(3);
+    fx.beforeRender(camera); fx.afterRender(camera);
+    assert.deepEqual([trail.width, trail.height], [640, 360]);
+    globalThis.innerWidth = 800; globalThis.innerHeight = 600;
+    fx.beforeRender(camera); fx.afterRender(camera);
+    assert.deepEqual([trail.width, trail.height], [400, 300]);
+    assert.deepEqual(draws.at(-1).slice(1), [0, 0, 400, 300]);
+  } finally {
+    delete globalThis.innerWidth; delete globalThis.innerHeight;
+  }
+});
+
+test('dispose quita las capas y limpia el filtro', () => {
+  const { fx, canvas, trail, overlay, camera } = visualFixture();
+  fx.consume('pegante');
+  fx.update(3);
+  fx.beforeRender(camera); fx.afterRender(camera);
+  fx.dispose();
+  assert.equal(canvas.style.filter, '');
+  assert.equal(trail.removed, true);
+  assert.equal(overlay.removed, true);
 });
