@@ -88,7 +88,7 @@ En PowerShell, si una política de ejecución impide usar `npm`, ejecuta los mis
 | `M` | Alternar entre el personaje realista y el modelo liviano. |
 | `Esc` o botón Pausa | Abrir ajustes de pausa; cerrar primero el panel activo y liberar el cursor. |
 | `N` | Mostrar u ocultar el radar. |
-| `R` en la calle | Abrir o cerrar la radio AM/FM; permite sintonizar emisoras y cambiar pilas. |
+| `R` en la calle | Abrir o cerrar la radio AM/FM; permite sintonizar emisoras y cambiar pilas. En 890 AM se escuchan boletines de lluvia y de la ciudad. |
 | `X` en la calle | Lanzar si llevas munición; de lo contrario, hacer popó. |
 | `Z` en la calle | Hacer popó. |
 | Clic en comida o bebida del inventario | Consumir el objeto. |
