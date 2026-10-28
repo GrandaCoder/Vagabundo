@@ -9,11 +9,11 @@ beforeEach(() => {
   clock = 0;
   events = new EventTarget();
   sound = {
-    onsets: [], sustains: [], stops: 0, disposed: 0,
+    onsets: [], sustains: [], stops: 0, disposed: 0, updates: [],
     playOnset(id) { this.onsets.push(id); },
     startSustain(id) { this.sustains.push(id); },
     stopSustain() { this.stops++; },
-    update() {},
+    update(intensity, opts) { this.updates.push([intensity, opts]); },
     dispose() { this.disposed++; }
   };
 });
@@ -276,4 +276,34 @@ test('dispose quita las capas y limpia el filtro', () => {
   assert.equal(canvas.style.filter, '');
   assert.equal(trail.removed, true);
   assert.equal(overlay.removed, true);
+});
+
+test('repetir la misma sustancia no hace saltar la cámara ni los colores', () => {
+  const { fx, canvas, camera } = visualFixture();
+  fx.consume('pastilla');
+  fx.update(3);
+  fx.update(10);
+  fx.beforeRender(camera);
+  const before = { fov: camera.fov, filter: canvas.style.filter };
+  fx.afterRender(camera);
+  fx.consume('pastilla');
+  fx.beforeRender(camera);
+  assert.equal(camera.fov, before.fov);
+  assert.equal(canvas.style.filter, before.filter);
+  fx.afterRender(camera);
+});
+
+test('al ocultar la pestaña la capa sostenida calla aunque el juego deje de dibujar', () => {
+  const doc = Object.assign(new EventTarget(), { hidden: false });
+  const canvas = { style: { filter: '' }, ownerDocument: doc };
+  const fx = effects({ canvas });
+  fx.consume('pegante');
+  fx.update(3);
+  doc.hidden = true;
+  doc.dispatchEvent(new Event('visibilitychange'));
+  assert.deepEqual(sound.updates.at(-1), [1, { paused: true }]);
+  fx.dispose();
+  const count = sound.updates.length;
+  doc.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(sound.updates.length, count);
 });

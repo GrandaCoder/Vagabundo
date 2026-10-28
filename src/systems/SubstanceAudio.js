@@ -12,12 +12,15 @@ const SOUNDS = {
   pastilla: {
     onset(s) {
       // Un trago y un brillo que sube.
+      // Cada barrido parte de `s.now`: sin ese punto, la rampa se contaría desde el inicio del contexto.
       const gulp = s.osc('sine', 140);
+      gulp.frequency.setValueAtTime(140, s.now);
       gulp.frequency.exponentialRampToValueAtTime(60, s.now + 0.12);
       gulp.connect(s.env(0.25, 0.01, 0.02, 0.12)).connect(s.out);
       for (const [f, cents] of [[400, 0], [600, 7]]) {
         const rise = s.osc('triangle', f);
         rise.detune.value = cents;
+        rise.frequency.setValueAtTime(f, s.now);
         rise.frequency.exponentialRampToValueAtTime(f * 4, s.now + 1.4);
         rise.connect(s.env(0.06, 0.3, 0.6, 0.8)).connect(s.out);
       }
@@ -38,6 +41,7 @@ const SOUNDS = {
     onset(s) {
       // Inhalación dentro de la bolsa.
       const bp = s.filter('bandpass', 400, 1.5);
+      bp.frequency.setValueAtTime(400, s.now);
       bp.frequency.exponentialRampToValueAtTime(1500, s.now + 1.1);
       s.noise().connect(bp).connect(s.env(0.25, 0.9, 0.1, 0.3)).connect(s.out);
     },

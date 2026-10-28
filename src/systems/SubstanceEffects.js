@@ -35,7 +35,8 @@ export class SubstanceEffects {
     this.now = now;
     this.calm = reducedMotion ? 0.2 : 1;
 
-    this._effect = null;  // { id, recipe, elapsed, intensity }
+    // `elapsed` mide la duración y se renueva; `phase` mueve colores y cámara y nunca se reinicia.
+    this._effect = null;  // { id, recipe, elapsed, phase, intensity }
     this._fade = null;    // { id, recipe, from, start, t }: efecto que se desvanece en tiempo real
     this._queued = null;  // sustancia que espera a que termine el desvanecido
     this._shown = false;  // el cuadro anterior dibujó el efecto
@@ -59,6 +60,10 @@ export class SubstanceEffects {
 
     this._onConsumed = (e) => this.consume(e.detail?.id);
     eventTarget?.addEventListener?.('substance-consumed', this._onConsumed);
+    // Con la pestaña oculta el juego deja de dibujar: sin esto, la capa sostenida seguiría sonando.
+    this._doc = doc;
+    this._onVisibility = () => { if (doc.hidden) this.sound.update(this.intensity, { paused: true }); };
+    doc?.addEventListener?.('visibilitychange', this._onVisibility);
   }
 
   get active() {
@@ -100,6 +105,7 @@ export class SubstanceEffects {
     const fx = this._effect;
     if (!fx) return;
     fx.elapsed += dt;
+    fx.phase += dt;
     if (fx.elapsed >= fx.recipe.seconds) {
       this._effect = null;
       this.sound.stopSustain();
@@ -177,6 +183,7 @@ export class SubstanceEffects {
 
   dispose() {
     this.eventTarget?.removeEventListener?.('substance-consumed', this._onConsumed);
+    this._doc?.removeEventListener?.('visibilitychange', this._onVisibility);
     this._effect = this._fade = this._queued = null;
     this._clearVisuals();
     this._trail?.remove?.();
@@ -189,7 +196,7 @@ export class SubstanceEffects {
     if (this._fade) {
       return { recipe: this._fade.recipe, intensity: this.intensity, t: this._fade.t + (this.now() - this._fade.start) / 1000 };
     }
-    if (this._effect) return { recipe: this._effect.recipe, intensity: this._effect.intensity, t: this._effect.elapsed };
+    if (this._effect) return { recipe: this._effect.recipe, intensity: this._effect.intensity, t: this._effect.phase };
     return null;
   }
 
@@ -205,14 +212,14 @@ export class SubstanceEffects {
   }
 
   _start(id) {
-    this._effect = { id, recipe: SUBSTANCE_EFFECTS[id], elapsed: 0, intensity: 0 };
+    this._effect = { id, recipe: SUBSTANCE_EFFECTS[id], elapsed: 0, phase: 0, intensity: 0 };
     this.sound.startSustain(id);
   }
 
   _fadeOut() {
     if (!this._effect) return;
-    const { id, recipe, elapsed, intensity } = this._effect;
-    this._fade = { id, recipe, from: intensity, start: this.now(), t: elapsed };
+    const { id, recipe, phase, intensity } = this._effect;
+    this._fade = { id, recipe, from: intensity, start: this.now(), t: phase };
     this._effect = null;
   }
 

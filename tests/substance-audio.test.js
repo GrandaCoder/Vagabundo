@@ -100,3 +100,18 @@ test('tintico no crea sonido y dispose restaura el audio general', () => {
   assert.deepEqual(master.connections, [destination]);
   assert.equal(sound.bus, null);
 });
+
+test('los barridos de los sonidos de consumir parten del instante en que suenan', () => {
+  // Sin un valor inicial, una rampa se cuenta desde el inicio del contexto y, minutos después, ya llegó a su destino.
+  for (const id of ['pastilla', 'pegante', 'hierba']) {
+    const { ctx, created, sound } = fixture();
+    ctx.currentTime = 300;
+    sound.playOnset(id);
+    for (const node of created) {
+      for (const key of ['frequency', 'gain', 'detune', 'Q']) {
+        const first = node[key]?.events[0];
+        if (first) assert.notEqual(first.type, 'ramp', `${id}: ${node.kind}.${key} empieza con una rampa`);
+      }
+    }
+  }
+});

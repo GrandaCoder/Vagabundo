@@ -2,12 +2,14 @@
 // Los parámetros toman el valor final de cada programación: las pruebas miran el destino, no la curva.
 
 function param(value) {
+  const schedule = (type) => function (v, time) { this.events.push({ type, value: v, time }); this.value = v; return this; };
   return {
     value,
-    setValueAtTime(v) { this.value = v; return this; },
-    linearRampToValueAtTime(v) { this.value = v; return this; },
-    exponentialRampToValueAtTime(v) { this.value = v; return this; },
-    setTargetAtTime(v) { this.value = v; return this; }
+    events: [],
+    setValueAtTime: schedule('set'),
+    linearRampToValueAtTime: schedule('ramp'),
+    exponentialRampToValueAtTime: schedule('ramp'),
+    setTargetAtTime: schedule('target')
   };
 }
 
