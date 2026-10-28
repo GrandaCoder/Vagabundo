@@ -8,7 +8,8 @@ import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js
 import { buildCharacterClips } from './actionforge.js';
 import { PALETTES } from './look.js';
 import { addGrime, addHairTone } from './weathering.js';
-import { attachAccessories } from './props.js';
+import { attachAccessories, attachWeapon } from './props.js';
+import { createMeleeOverlay } from './melee.js';
 import { addHatClip, hatEdgeProfile } from './hatFit.js';
 
 const BASE = '/models/personaje/';
@@ -250,7 +251,7 @@ async function buildInstance(catalog, look, lod = false) {
     actions[name].setEffectiveWeight(name === 'idle' ? 1 : 0);
   }
   if (useLod) root.traverse((o) => { if (o.isMesh) o.castShadow = false; }); // lejos: sin sombra propia
-  return { root, mixer, actions, real, accessories, ownedGeometries: bodyMesh ? [bodyMesh.geometry] : [] };
+  return { root, bones, mixer, actions, real, accessories, ownedGeometries: bodyMesh ? [bodyMesh.geometry] : [] };
 }
 
 /** Solo recursos de instancia; los modelos y texturas del banco siguen compartidos. */
@@ -283,6 +284,14 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
   let token = 0;
   let disposed = false;
   const weights = {};
+  let weaponId = null; // arma en mano (cuchillo, botella_picada) o null
+
+  function syncWeapon() {
+    if (!inst || inst.weaponId === weaponId) return;
+    inst.weapon?.dispose();
+    inst.weapon = weaponId ? attachWeapon(inst.root, inst.bones, weaponId) : null;
+    inst.weaponId = weaponId;
+  }
 
   async function setLook(l) {
     if (disposed) return;
@@ -292,6 +301,7 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
     disposeRealisticInstance(inst);
     inst = next;
     group.add(inst.root);
+    syncWeapon();
     for (const k of Object.keys(weights)) delete weights[k];
     for (const k of Object.keys(inst.actions)) weights[k] = k === 'idle' ? 1 : 0;
   }
@@ -302,13 +312,15 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
     group,
     get look() { return look; },
     setLook(l) { look = l; return setLook(l); },
+    /** Arma visible en la mano derecha; null para ir con las manos vacías */
+    setWeapon(id) { weaponId = id || null; syncWeapon(); },
     dispose() {
       if (disposed) return;
       disposed = true; token++;
       disposeRealisticInstance(inst); inst = null;
       group.removeFromParent();
     },
-    update(dt, { speed = 0, running = false, action = null } = {}) {
+    update(dt, { speed = 0, running = false, action = null, attack = null } = {}) {
       if (!inst) return;
       const a = inst.actions;
       // destino: acción especial si existe el clip; si no, idle / caminar / correr según la velocidad
@@ -337,6 +349,8 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
       if (a.walk) a.walk.timeScale = THREE.MathUtils.clamp(speed / 1.4, 0.6, 1.6);
       if (a.run) a.run.timeScale = THREE.MathUtils.clamp(speed / 3.5, 0.7, 1.4);
       inst.mixer.update(dt);
+      // el golpe se suma sobre la pose del mixer, también caminando; se crea al primer ataque
+      if (attack || inst.melee?.active) (inst.melee ??= createMeleeOverlay(inst.bones, inst.root)).apply(dt, attack);
       inst.accessories?.update();
     }
   };

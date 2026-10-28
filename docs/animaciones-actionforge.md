@@ -19,6 +19,14 @@ Cada cuerpo recibe clips adaptados y guardados en caché, también para su versi
 
 Dormir y saludar mantienen las animaciones anteriores. Si el banco nuevo no carga, se utilizan los clips anteriores. El personaje liviano conserva su animación procedural y los atropellos mantienen el ragdoll.
 
+## Combate cuerpo a cuerpo
+
+El banco no trae clips de pelea, así que los golpes del personaje realista son procedurales: `src/character/melee.js` suma, después de que el mezclador anima el cuerpo, un giro por hueso (columna, hombros y antebrazos) según la fase del golpe. Funciona también caminando y se desvanece al terminar, sin tocar los clips compartidos. Las armas (`src/data/weapons.js`) fijan daño, alcance, arco, tiempos de preparación, impacto y recuperación, y largo del combo. El daño se aplica una vez, al llegar el impacto. El cuchillo y la botella picada se dibujan con primitivas atadas a la mano derecha (`src/character/props.js`) y solo se ven equipados; el modelo procedural liviano varía la pose de golpe pero no muestra el arma.
+
+Los peatones tienen 100 de salud. Cada golpe los sacude y los hace huir; a 0 caen de espaldas, quedan tendidos de 6 a 8 segundos sin caminar ni recibir más daño, y se levantan con la salud completa huyendo. Nunca desaparecen. La pose tendida se conserva al cambiar entre el modelo liviano y el completo.
+
+Las pruebas (`tests/melee.test.js`) cubren fases, combos, daño, KO y la dirección de los huesos sobre un esqueleto de prueba. Cómo se ve cada golpe, el agarre del arma en la mano y la caída hay que revisarlos jugando.
+
 Para regenerar el banco, guardar la descarga como `work/exportaciones/animaciones-actionforge.glb` y ejecutar `tools/personaje/preparar_actionforge.py` con Python. `exportar_actionforge.py` genera el personaje para subirlo al editor y requiere Pillow. Los archivos grandes de intercambio en `work/` no se publican.
 
 Las pruebas comprueban carga, esqueleto, selección de clips, ausencia de recursos visuales duplicados, valores finitos, movimiento en el sitio y conservación del cuerpo original. La apariencia y las transiciones deben revisarse jugando en el navegador.
