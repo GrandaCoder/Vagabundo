@@ -115,3 +115,15 @@ test('los barridos de los sonidos de consumir parten del instante en que suenan'
     }
   }
 });
+
+test('el volumen de la categoría Efectos del menú también manda', () => {
+  const { ctx, master } = createFakeAudioContext();
+  let effects = 0.5;
+  const sound = new SubstanceAudio({ howler: { ctx, masterGain: master }, getMix: (c) => (c === 'effects' ? effects : 1) });
+  master.gain.value = 0.8;
+  sound.startSustain('hierba');
+  assert.ok(Math.abs(sound.out.gain.value - 0.4) < 1e-9);
+  effects = 0;
+  sound.update(0.5, { paused: false });
+  assert.equal(sound.out.gain.value, 0);
+});

@@ -1,6 +1,8 @@
 // src/systems/SubstanceAudio.js
 // Sonidos de los efectos de consumo, sintetizados con Web Audio como el latido de la psicosis.
-// `out` copia el volumen general (y el silencio); `bus` sigue la intensidad del efecto.
+// `out` copia el volumen general (y el silencio) por la categoría Efectos; `bus` sigue la intensidad.
+// A diferencia de `_fx()`, `out` sale a los parlantes después del pasa-bajos del pegante: así el
+// pitido de oídos tapados no queda ahogado por el mismo filtro que apaga la ciudad.
 
 const ONSET_GAP = 0.25;    // s: consumir varias veces seguidas no apila el sonido
 const ONSET_LENGTH = 2.5;  // s: el sonido de consumir más largo (inhalar hierba) dura 2,4 s
@@ -112,6 +114,11 @@ export class SubstanceAudio {
     return !!(this._ctx && this._master && this._ctx.state === 'running');
   }
 
+  /** Volumen general por la categoría Efectos del menú de pausa. */
+  _volume() {
+    return this._master.gain.value * (this.audioSystem?.getMix?.('effects') ?? 1);
+  }
+
   /** Sonido de consumir: suena aunque el juego esté en pausa, como el de recoger objetos. */
   playOnset(id) {
     const sound = SOUNDS[id];
@@ -136,7 +143,7 @@ export class SubstanceAudio {
     const ctx = this._ctx, master = this._master;
     if (!ctx || !master || !this.out) return;
     const now = ctx.currentTime;
-    this.out.gain.setTargetAtTime(master.gain.value, now, 0.05);
+    this.out.gain.setTargetAtTime(this._volume(), now, 0.05);
     this.bus?.gain.setTargetAtTime(paused ? 0 : intensity, now, 0.1);
     this.muffle?.frequency.setTargetAtTime(MUFFLE_OPEN * (MUFFLE_CLOSED / MUFFLE_OPEN) ** intensity, now, 0.1);
   }
@@ -185,7 +192,7 @@ export class SubstanceAudio {
   _output() {
     if (!this.out) {
       this.out = this._ctx.createGain();
-      this.out.gain.value = this._master.gain.value;
+      this.out.gain.value = this._volume();
       this.out.connect(this._ctx.destination);
     }
     return this.out;
