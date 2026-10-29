@@ -6,20 +6,39 @@ import {tagAssetTextures} from '../core/TextureBudget.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { buildCharacterClips } from './actionforge.js';
+import { ACTIONFORGE_CLIPS, buildCharacterClips } from './actionforge.js';
+import { locomotionBlend, measureLocomotion } from './locomotion.js';
 import { PALETTES } from './look.js';
+import { addGrime, addHairTone } from './weathering.js';
+import { attachAccessories, attachWeapon, FAR_ACCESSORIES } from './props.js';
+import { attachCigaretteToHand, createSmokeOverlay, emberGlow } from './smoking.js';
+import { attachBasucoProps, createBasucoOverlay } from './pipe.js';
+import { rotateInFrame } from './melee.js';
+import { findBone } from './props.js';
+import { createMeleeOverlay } from './melee.js';
+import { createPointOverlay } from './pointing.js';
+import { addHatClip, hatEdgeProfile } from './hatFit.js';
 
-const BASE = '/models/personaje/';
+const MODEL_BASE = `${import.meta.env?.BASE_URL ?? '/'}models/`;
+const BASE = `${MODEL_BASE}personaje/`;
 // Banco existente de respaldo; ActionForge sigue aportando los clips principales.
-const ANIM_URL = '/models/animaciones-prueba.glb';
+const ANIM_URL = MODEL_BASE + 'animaciones-prueba.glb';
 
 // El modelo mide ~1,7 m; el mundo usa la escala del personaje procedural (~1,85 m)
 export const REALISTIC_SCALE = 1.08;
 
-const ACTIONFORGE_URL = '/models/animaciones-actionforge.glb';
+const ACTIONFORGE_URL = `${MODEL_BASE}animaciones-actionforge.glb`;
+
+// Peso compartido de caminar y correr; su reparto lo decide la velocidad.
+const LOCOMOTION = 'locomocion';
+// Acciones sin clip propio: clip sustituto y velocidad de reproducción.
+const ACTION_FALLBACKS = {
+  cagar: ['buscar'], lanzar: ['pedir'], saludo: ['pedir'],
+  golpear: ['lanzar', 2] // el brazo baja dentro de los 0,38 s del golpe
+};
 
 export const REAL_DEFAULT = {
-  sexo: 'hombre', edad: 'adulto', pelo: 'desordenado', barba: 'descuidada', ropa: 'chaqueta', calzado: 'tenis-rotos'
+  sexo: 'hombre', edad: 'adulto', pelo: 'desordenado', barba: 'descuidada', ropa: 'chaqueta', calzado: 'tenis-rotos', cabeza: 'sin-sombrero'
 };
 
 const loader = new GLTFLoader();
@@ -36,9 +55,12 @@ export function loadCatalog() {
   return catalogPromise;
 }
 
+// Categorías de piezas; `cabeza` puede faltar en catálogos exportados antes de que existiera
+const PART_CATS = ['pelo', 'barba', 'ropa', 'calzado', 'cabeza'];
+
 /** Piezas válidas para un sexo */
 export function optionsFor(catalog, cat, sexo) {
-  return catalog.piezas[cat].filter((p) => !p.sexo || p.sexo === sexo);
+  return (catalog.piezas[cat] ?? []).filter((p) => !p.sexo || p.sexo === sexo);
 }
 
 /** Corrige una apariencia realista para que todas sus piezas existan en ese cuerpo. */
@@ -46,9 +68,9 @@ export function normalizeReal(catalog, raw = {}) {
   const r = { ...REAL_DEFAULT, ...(raw || {}) };
   if (!['hombre', 'mujer'].includes(r.sexo)) r.sexo = REAL_DEFAULT.sexo;
   if (!['joven', 'adulto', 'mayor'].includes(r.edad)) r.edad = REAL_DEFAULT.edad;
-  for (const cat of ['pelo', 'barba', 'ropa', 'calzado']) {
+  for (const cat of PART_CATS) {
     const opts = optionsFor(catalog, cat, r.sexo);
-    if (!opts.some((o) => o.id === r[cat])) r[cat] = opts[0].id;
+    if (!opts.some((o) => o.id === r[cat])) r[cat] = opts[0]?.id ?? REAL_DEFAULT[cat];
   }
   if (r.sexo === 'mujer') r.barba = 'ninguna';
   return r;
@@ -61,7 +83,8 @@ export function randomReal(catalog, base = {}) {
   const pick = (cat) => any(optionsFor(catalog, cat, sexo)).id;
   return normalizeReal(catalog, {
     sexo, edad: any(['joven', 'adulto', 'mayor']),
-    pelo: pick('pelo'), barba: Math.random() < 0.3 ? 'ninguna' : pick('barba'), ropa: pick('ropa'), calzado: pick('calzado')
+    pelo: pick('pelo'), barba: Math.random() < 0.3 ? 'ninguna' : pick('barba'), ropa: pick('ropa'), calzado: pick('calzado'),
+    cabeza: Math.random() < 0.6 ? REAL_DEFAULT.cabeza : optionsFor(catalog, 'cabeza', sexo).length ? pick('cabeza') : REAL_DEFAULT.cabeza
   });
 }
 
@@ -82,8 +105,13 @@ async function clipsForBody(bodyId, bodyGltf) { // bodyId incluye el nivel de de
         console.warn('No se pudo cargar ActionForge; se usarán las animaciones anteriores.', error);
         return null;
       });
-      const [anims, actionforge] = await Promise.all([loadAnimations(), actionforgePromise]);
-      return buildCharacterClips(bodyGltf, anims, actionforge);
+      const actionforge = await actionforgePromise;
+      // El banco anterior (2 MB con mallas y texturas) solo se descarga si falta locomoción.
+      const complete = actionforge && ['idle', 'walk', 'run']
+        .every(key => actionforge.animations.some(clip => clip.name === ACTIONFORGE_CLIPS[key]));
+      const clips = buildCharacterClips(bodyGltf, complete ? null : await loadAnimations(), actionforge);
+      if (clips.walk) clips.walk.userData.locomotion = measureLocomotion(bodyGltf.scene, clips.walk, clips.run);
+      return clips;
     })());
   }
   return clipCache.get(bodyId);
@@ -169,12 +197,14 @@ async function buildInstance(catalog, look, lod = false) {
   const folder = `${BASE}${body.id}/`;
   // LOD: cuerpo proxy y piezas simplificadas (si el catálogo las trae)
   const useLod = lod && body.piezas[real.ropa]?.lod;
-  const bodyGltf = await load(folder + (useLod ? 'lod/cuerpo.gltf' : 'cuerpo.gltf'));
-  const parts = ['pelo', 'barba', 'ropa', 'calzado']
+  const parts = PART_CATS
     .map((cat) => ({ cat, info: body.piezas[real[cat]] }))
     .filter((p) => p.info?.file);
-  const [clips, ...partGltfs] = await Promise.all([
-    clipsForBody(body.id + (useLod ? ':lod' : ''), bodyGltf),
+  // Las prendas no dependen de descargar el cuerpo: iniciar todo en paralelo.
+  const bodyPromise = load(folder + (useLod ? 'lod/cuerpo.gltf' : 'cuerpo.gltf'));
+  const [bodyGltf, clips, ...partGltfs] = await Promise.all([
+    bodyPromise,
+    bodyPromise.then(gltf => clipsForBody(body.id + (useLod ? ':lod' : ''), gltf)),
     ...parts.map((p) => load(folder + (useLod && p.info.lod ? p.info.lod : p.info.file)))
   ]);
 
@@ -191,19 +221,47 @@ async function buildInstance(catalog, look, lod = false) {
 
   const skinTone = new THREE.Color(PALETTES.piel[look.piel] ?? PALETTES.piel[2]).lerp(new THREE.Color(1, 1, 1), 0.25);
   const hairTone = new THREE.Color(PALETTES.pelo[look.peloColor] ?? PALETTES.pelo[0]).lerp(new THREE.Color(1, 1, 1), 0.15);
-  if (bodyMesh) bodyMesh.material.color.copy(skinTone);
+  const wear = look.desgaste ?? 0;
+  const seed = Math.random() * 100;
+  if (bodyMesh) {
+    bodyMesh.material.color.copy(skinTone);
+    addGrime(bodyMesh.material, wear, { skin: true, seed });
+  }
 
   const hidden = new Set();
+  const hair = [], hatPositions = [];
+  const uniform = look.uniforme ? new THREE.Color(look.uniforme) : null;
   parts.forEach((p, i) => {
     if (!useLod) for (const v of p.info.oculta) hidden.add(v);
     partGltfs[i].scene.traverse((o) => {
       if (!o.isSkinnedMesh) return;
       const mesh = attachPart(o, bones, bodyMesh?.parent ?? root, p.cat);
-      if (p.cat === 'pelo' || p.cat === 'barba') mesh.material.color.copy(hairTone);
+      if (p.cat === 'pelo' || p.cat === 'barba') {
+        mesh.material.color.copy(hairTone);
+        addHairTone(mesh.material);
+        if (p.cat === 'pelo') hair.push(mesh);
+      } else if (uniform && p.cat !== 'barba') {
+        // uniforme: la prenda entera de un color (la textura conserva costuras y pliegues)
+        mesh.material.color.copy(uniform);
+      } else {
+        addGrime(mesh.material, wear, { seed });
+      }
+      if (p.cat === 'cabeza') for (const v of mesh.geometry.attributes.position.array) hatPositions.push(v);
     });
   });
+  // el pelo que quedaría por fuera del sombrero se recorta en su borde
+  if (hatPositions.length) {
+    const profile = hatEdgeProfile(hatPositions);
+    for (const mesh of hair) addHatClip(mesh.material, profile);
+  }
   // cejas del color del pelo
-  root.traverse((o) => { if (o.isSkinnedMesh && /eyebrow/.test(o.name.toLowerCase())) o.material.color.copy(hairTone); });
+  root.traverse((o) => {
+    if (!o.isSkinnedMesh || !/eyebrow/.test(o.name.toLowerCase())) return;
+    o.material.color.copy(hairTone);
+    addHairTone(o.material);
+  });
+  const worn = (look.accesorios ?? []).filter((id) => !useLod || FAR_ACCESSORIES.has(id));
+  const accessories = worn.length ? attachAccessories(root, bones, worn, wear) : null;
   if (bodyMesh) hideCovered(bodyMesh, bodyGltf.scene.getObjectByName(bodyMesh.name)?.geometry.index ?? bodyMesh.geometry.index, hidden);
 
   const mixer = new THREE.AnimationMixer(root);
@@ -214,11 +272,13 @@ async function buildInstance(catalog, look, lod = false) {
       actions[name].setLoop(THREE.LoopOnce, 1);
       actions[name].clampWhenFinished = true;
     }
+    // Caminar y correr avanzan por la fase compartida de update(), no por el reloj del mezclador.
+    if (clips.walk?.userData.locomotion && (name === 'walk' || name === 'run')) actions[name].timeScale = 0;
     actions[name].play();
     actions[name].setEffectiveWeight(name === 'idle' ? 1 : 0);
   }
   if (useLod) root.traverse((o) => { if (o.isMesh) o.castShadow = false; }); // lejos: sin sombra propia
-  return { root, mixer, actions, real, ownedGeometries: bodyMesh ? [bodyMesh.geometry] : [] };
+  return { root, bones, mixer, actions, real, accessories, phase: 0, runShare: 0, ownedGeometries: bodyMesh ? [bodyMesh.geometry] : [] };
 }
 
 /** Solo recursos de instancia; los modelos y texturas del banco siguen compartidos. */
@@ -251,6 +311,29 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
   let token = 0;
   let disposed = false;
   const weights = {};
+  let weaponId = null; // arma en mano (cuchillo, botella_picada) o null
+  let smoking = null;   // qué se fuma en la mano izquierda ('cigarrillo', 'hierba') o null
+  let basuco = false;   // pipa en la izquierda y encendedor en la derecha
+
+  function syncWeapon() {
+    if (!inst || inst.weaponId === weaponId) return;
+    inst.weapon?.dispose();
+    inst.weapon = weaponId ? attachWeapon(inst.root, inst.bones, weaponId) : null;
+    inst.weaponId = weaponId;
+  }
+
+  function syncCigarette() {
+    if (!inst || (inst.cigarette?.kind ?? null) === smoking) return;
+    inst.cigarette?.dispose();
+    inst.cigarette = smoking ? attachCigaretteToHand(inst.root, inst.bones, smoking) : null;
+    if (inst.cigarette) inst.cigarette.kind = smoking;
+  }
+
+  function syncBasuco() {
+    if (!inst || !!inst.basucoProps === basuco) return;
+    inst.basucoProps?.dispose();
+    inst.basucoProps = basuco ? attachBasucoProps(inst.root, inst.bones) : null;
+  }
 
   async function setLook(l) {
     if (disposed) return;
@@ -260,8 +343,11 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
     disposeRealisticInstance(inst);
     inst = next;
     group.add(inst.root);
+    syncWeapon();
+    syncCigarette();
+    syncBasuco();
     for (const k of Object.keys(weights)) delete weights[k];
-    for (const k of Object.keys(inst.actions)) weights[k] = k === 'idle' ? 1 : 0;
+    for (const k of [...Object.keys(inst.actions), LOCOMOTION]) if (k !== 'walk' && k !== 'run') weights[k] = k === 'idle' ? 1 : 0;
   }
 
   await setLook(look);
@@ -270,41 +356,87 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
     group,
     get look() { return look; },
     setLook(l) { look = l; return setLook(l); },
+    /** Arma visible en la mano derecha; null para ir con las manos vacías */
+    setWeapon(id) { weaponId = id || null; syncWeapon(); },
+    /** Cigarrillo (o porro, con kind = 'hierba') en la mano izquierda */
+    setSmoking(on, kind = 'cigarrillo') { smoking = on ? kind : null; syncCigarette(); },
+    /** Brasa del cigarrillo en el mundo, o null si no está fumando */
+    cigaretteTip(target) { return inst?.cigarette ? inst.cigarette.tip.getWorldPosition(target) : null; },
+    /** Pipa de basuco y encendedor en las manos */
+    setBasuco(on) { basuco = !!on; syncBasuco(); },
+    /** Cazoleta de la pipa en el mundo, o null si no la tiene */
+    pipeBowl(target) { return inst?.basucoProps ? inst.basucoProps.pipe.top.getWorldPosition(target) : null; },
+    /** Boca en el mundo, para el humo de la calada */
+    mouth(target) { return inst ? (inst.smoke ??= createSmokeOverlay(inst.bones, inst.root)).mouth(target) : null; },
     dispose() {
       if (disposed) return;
       disposed = true; token++;
       disposeRealisticInstance(inst); inst = null;
       group.removeFromParent();
     },
-    update(dt, { speed = 0, running = false, action = null } = {}) {
+    update(dt, { speed = 0, running = false, action = null, attack = null, smoke = null, basuco: pipeT = null, look = 0, point = 0 } = {}) {
       if (!inst) return;
       const a = inst.actions;
-      // destino: acción especial si existe el clip; si no, idle / caminar / correr según la velocidad
-      let target = speed < 0.15 ? 'idle' : running && a.run ? 'run' : 'walk';
+      // destino: acción especial si existe el clip (o su sustituto); si no, reposo o locomoción
+      let target = speed < 0.15 ? 'idle' : a.walk ? LOCOMOTION : 'idle';
+      let scale = 1;
       if (action && speed < 0.15) {
-        if (a[action]) target = action;
-        else if (action === 'cagar' && a.buscar) target = 'buscar';
-        else if (action === 'lanzar' && a.pedir) target = 'pedir';
+        const [clip, clipScale = 1] = a[action] ? [action] : ACTION_FALLBACKS[action] ?? [];
+        if (a[clip]) { target = clip; scale = clipScale; }
       }
       if (inst?.root) {
-        const targetY = action === 'cagar' && !a.cagar ? -0.3 : 0;
+        // agacharse a fumar basuco baja el cuerpo lo que doblan las rodillas
+        const targetY = action === 'cagar' && !a.cagar ? -0.3 : -(inst.pipe?.drop ?? 0);
         inst.root.position.y += (targetY - inst.root.position.y) * Math.min(1, dt * 10);
       }
-      if (!a[target]) target = 'idle';
       if (target !== inst.previousTarget) {
-        if (a[target] && !['idle', 'walk', 'run'].includes(target)) a[target].reset().play();
+        if (target !== 'idle' && target !== LOCOMOTION) a[target].reset().setEffectiveTimeScale(scale).play();
         inst.previousTarget = target;
       }
       const k = Math.min(1, dt * 8);
-      for (const key of Object.keys(a)) {
+      for (const key of Object.keys(weights)) {
         weights[key] += ((key === target ? 1 : 0) - weights[key]) * k;
         if (key !== target && weights[key] < .001) weights[key] = 0;
-        a[key].enabled = weights[key] > 0 || key === target;
-        a[key].setEffectiveWeight(weights[key]);
       }
-      if (a.walk) a.walk.timeScale = THREE.MathUtils.clamp(speed / 1.4, 0.6, 1.6);
-      if (a.run) a.run.timeScale = THREE.MathUtils.clamp(speed / 3.5, 0.7, 1.4);
+      // Caminar y correr comparten fase; su mezcla depende de la velocidad para que los pies no deslicen.
+      const locomotion = a.walk?.getClip().userData.locomotion;
+      if (locomotion) {
+        const blend = locomotionBlend(speed, locomotion);
+        inst.runShare += (blend.run - inst.runShare) * k;
+        inst.phase = (inst.phase + blend.rate * dt) % 1;
+        a.walk.time = inst.phase * locomotion.walkDuration;
+        if (a.run) a.run.time = inst.phase * locomotion.runDuration;
+      } else {
+        inst.runShare += ((running && a.run ? 1 : 0) - inst.runShare) * k;
+        if (a.walk) a.walk.timeScale = THREE.MathUtils.clamp(speed / 1.4, 0.6, 1.6);
+        if (a.run) a.run.timeScale = THREE.MathUtils.clamp(speed / 3.5, 0.7, 1.4);
+      }
+      const share = { walk: 1 - inst.runShare, run: inst.runShare };
+      for (const key of Object.keys(a)) {
+        const weight = key in share ? weights[LOCOMOTION] * share[key] : weights[key];
+        a[key].enabled = weight > 0 || key === target;
+        a[key].setEffectiveWeight(weight);
+      }
       inst.mixer.update(dt);
+      // el golpe se suma sobre la pose del mixer, también caminando; se crea al primer ataque
+      if (attack || inst.melee?.active) (inst.melee ??= createMeleeOverlay(inst.bones, inst.root)).apply(dt, attack);
+      // la calada también se suma encima, así se fuma caminando
+      if (smoke || inst.smoke?.active) (inst.smoke ??= createSmokeOverlay(inst.bones, inst.root)).apply(dt, smoke);
+      inst.cigarette?.setGlow(emberGlow(smoke?.puff));
+      // el basuco: agachado con las dos manos en la boca
+      if (pipeT != null || inst.pipe?.active) (inst.pipe ??= createBasucoOverlay(inst.bones, inst.root)).apply(dt, pipeT);
+      inst.basucoProps?.update(pipeT ?? 0);
+      // señalar con el brazo estirado (el jefe de la limpieza social da la orden)
+      if (point || inst.point?.active) (inst.point ??= createPointOverlay(inst.bones, inst.root)).apply(dt, point);
+      // paranoia: la cabeza voltea a los lados (el cuello se lleva parte del giro)
+      inst.glance = (inst.glance ?? 0) + (look - (inst.glance ?? 0)) * Math.min(1, dt * 16);
+      if (Math.abs(inst.glance) > 0.002) {
+        inst.neck ??= findBone(inst.bones, 'Neck');
+        inst.head ??= findBone(inst.bones, 'Head');
+        if (inst.neck) rotateInFrame(inst.root, inst.neck, 0, inst.glance * 0.4, 0);
+        if (inst.head) rotateInFrame(inst.root, inst.head, 0, inst.glance * 0.6, 0);
+      }
+      inst.accessories?.update();
     }
   };
 }

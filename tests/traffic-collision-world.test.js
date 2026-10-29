@@ -56,7 +56,8 @@ test('los faros siguen al carro al trasladarse y girar tras registrar la ciudad 
 
 test('el haz sale de las lentes del sedan y taxi, tambien con suspension y al conducir',async()=>{
  for(const kind of ['car1','car2']){
-  const scene=new THREE.Scene(),car=new Car(scene,new THREE.Vector3(18,7.82,22));car.modelKind=kind;
+  // Con variante explícita: sin ella un carro estacionado puede salir criollo, que conserva su carrocería propia.
+  const scene=new THREE.Scene(),car=new Car(scene,new THREE.Vector3(18,7.82,22),0,{variant:kind==='car2'?'taxi':'sedan'});
   await car.preloadModel();car.group.rotation.y=1.2;
   const verify=visual=>{
    const frame=visual.headlightFrame,spec=visual.headlightSpec;frame.updateWorldMatrix(true,false);

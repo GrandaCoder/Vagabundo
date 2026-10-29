@@ -53,7 +53,8 @@ test('con la lluvia desactivada no llueve al iniciar ni en el ciclo automático'
   weather.setWeather('llovizna', false);
   weather.nextChange = 0;
   weather.update(1, new THREE.Vector3());
-  assert.equal(weather.weather, 'nublado');
+  // El ciclo de climas puede pasar a otro tiempo seco (parcial, soleado…), nunca a uno lluvioso.
+  assert.notEqual(weather.weather, 'llovizna');
   assert.equal(weather.isRaining, false);
   assert.equal(weather.rainParticles.visible, false);
   assert.equal(weather.wetness, 0);

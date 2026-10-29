@@ -4,6 +4,8 @@ import { createImportedModel } from '../../utils/ImportedModels.js';
 import { CARACAS } from './StreetLayout.js';
 import { CITY_CARRERAS as CARRERAS, CITY_CALLES as CALLES } from './CityLayout.js';
 import { signTexture } from '../../utils/signs.js';
+import { BUS_DETOUR } from './Colpatria.js';
+import { STATIC_CHUNK_SIZE } from './StaticGeometry.js';
 
 const SEM_HEIGHT = 4.3;
 
@@ -30,7 +32,6 @@ export function signalState(time, axis) {
 
 export function intersectionPhase(signals,node,axis){return node.control==='priority'?0:signalState(signals.time,axis);}
 
-const SIGNAL_CELL = 64;
 
 export class TrafficSignals {
   constructor() {
@@ -140,13 +141,13 @@ export class TrafficSignals {
     // Poste = centro de la base; la cara de las luces mira a -X local
     this.model = { poleX: cnt ? sx / cnt : 0, poleZ: cnt ? sz / cnt : 0 };
 
-    const geometry = mesh.geometry.clone();
     const material = createSignalMaterial(mesh.material, this.lensStates);
+    // Copia propia compartida por los lotes: dividir el frustum no multiplica
+    // los buffers de vértices ni libera la geometría del banco GLB al retirar la ciudad.
+    const sharedGeometry = mesh.geometry.clone();
+    const buckets = new Map();
     const M = new THREE.Matrix4(), R = new THREE.Matrix4(), T = new THREE.Matrix4();
-    // Un lote por celda de 64 m: cada vista y cada cascada de sombra dibuja solo los semáforos cercanos
-    // (un único lote con todos repetía unos 70 mil triángulos en cada pasada).
-    const cells = new Map();
-    this.poles.forEach((p) => {
+    this.poles.forEach(p => {
       const th = Math.atan2(-p.hz, p.hx); // la cara (-X local) mira al conductor (-rumbo)
       p.th = th;
       const c = Math.cos(th), s = Math.sin(th);
@@ -157,29 +158,31 @@ export class TrafficSignals {
       R.makeRotationY(th);
       T.makeTranslation(ox, 0, oz);
       M.copy(T).multiply(R).multiply(rel);
-      const key = `${Math.floor(ox / SIGNAL_CELL)},${Math.floor(oz / SIGNAL_CELL)}`;
-      if (!cells.has(key)) cells.set(key, []);
-      cells.get(key).push({ matrix: M.clone(), axis: p.axis });
+      const key = `${Math.floor(p.x / STATIC_CHUNK_SIZE)},${Math.floor(p.z / STATIC_CHUNK_SIZE)}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push({ pole: p, matrix: M.clone() });
     });
-    const root = new THREE.Group();
-    root.name = 'Semáforos por celdas';
     this.poleMeshes = [];
-    for (const [key, items] of cells) {
-      const chunk = new THREE.BufferGeometry();
-      for (const [name, attribute] of Object.entries(geometry.attributes)) chunk.setAttribute(name, attribute);
-      chunk.setIndex(geometry.index);
-      chunk.setAttribute('trafficAxis', new THREE.InstancedBufferAttribute(new Float32Array(items.map(item => item.axis)), 1));
-      const im = new THREE.InstancedMesh(chunk, material, items.length);
-      items.forEach((item, i) => im.setMatrixAt(i, item.matrix));
+    for (const entries of buckets.values()) {
+      const geometry = new THREE.BufferGeometry();
+      for (const [name, attribute] of Object.entries(sharedGeometry.attributes)) geometry.setAttribute(name, attribute);
+      geometry.setIndex(sharedGeometry.index);
+      for (const group of sharedGeometry.groups) geometry.addGroup(group.start, group.count, group.materialIndex);
+      geometry.setDrawRange(sharedGeometry.drawRange.start, sharedGeometry.drawRange.count);
+      geometry.setAttribute('trafficAxis', new THREE.InstancedBufferAttribute(new Float32Array(entries.map(entry => entry.pole.axis)), 1));
+      const im = new THREE.InstancedMesh(geometry, material, entries.length);
+      entries.forEach(({ pole, matrix }, i) => {
+        im.setMatrixAt(i, matrix);
+        pole.batchIndex = this.poleMeshes.length;
+        pole.instanceIndex = i;
+      });
       im.instanceMatrix.needsUpdate = true;
       im.castShadow = true; im.receiveShadow = true;
-      im.name = `Semáforos · celda ${key}`;
-      im.computeBoundingSphere();
-      root.add(im);
+      im.computeBoundingBox(); im.computeBoundingSphere();
+      this.group.add(im);
       this.poleMeshes.push(im);
     }
-    this.poleGeometry = geometry;
-    this.group.add(root);
+    // Alias para quien solo consulta el material compartido de las lentes.
     this.poleMesh = this.poleMeshes[0];
   }
 
@@ -187,8 +190,8 @@ export class TrafficSignals {
 
   dispose() {
     this.group.removeFromParent();
-    for (const mesh of this.poleMeshes ?? []) mesh.geometry.dispose();
-    this.poleGeometry?.dispose(); this.poleMesh?.material.dispose();
+    for (const mesh of this.poleMeshes ?? []) { mesh.dispose(); mesh.geometry.dispose(); }
+    this.poleMesh?.material.dispose();
     for(const mesh of this.stopSigns??[]){mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose();mesh.dispose();}
   }
 }

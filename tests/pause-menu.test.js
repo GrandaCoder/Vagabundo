@@ -44,22 +44,36 @@ test('openPauseMenu abre el menú con controles de audio, estado y opciones ráp
   assert.equal(rendered.foot.length, 1);
 });
 
-test('el selector temporal se bloquea al preparar y conserva la elección si falla',async()=>{
-  let config,resolve,reject;const pending=new Promise((yes,no)=>{resolve=yes;reject=no;});
-  const originalCreate=document.createElement;
-  document.createElement=tag=>{const node=originalCreate(tag);node.listeners={};node.addEventListener=(name,fn)=>{node.listeners[name]=fn;};return node;};
-  const game={stats:{},clock:{hour:12,day:1},vehicleVisualMode:'slop',setVehicleVisualMode:()=>pending,menu:{open(c){config=c;}}};
-  openPauseMenu(game);const {body}=config.render();
-  const find=node=>node.attributes?.['aria-label']==='Vehículos'?node:(node.children??[]).filter(n=>typeof n==='object').map(find).find(Boolean);
-  const select=find(body);assert.ok(select);select.value='actual';
-  const originalError=console.error;console.error=()=>{};
-  try{const change=select.listeners.change();assert.equal(select.disabled,true);reject(new Error('fallo de carga'));await change;assert.equal(select.disabled,false);assert.equal(select.value,'slop');}finally{console.error=originalError;}
-});
-
-test('reabrir pausa durante una preparación recupera el selector al terminar',async()=>{
-  let config,resolve;const pending=new Promise(yes=>resolve=yes);
-  const game={stats:{},clock:{hour:12,day:1},vehicleVisualMode:'slop',vehicleVisualChanging:true,_vehicleVisualChange:pending,setVehicleVisualMode(){},menu:{open(c){config=c;}}};
-  openPauseMenu(game);const {body}=config.render();
-  const find=node=>node.attributes?.['aria-label']==='Vehículos'?node:(node.children??[]).filter(n=>typeof n==='object').map(find).find(Boolean);
-  const select=find(body);assert.equal(select.attributes.disabled,'');game.vehicleVisualMode='actual';resolve();await pending;await Promise.resolve();await Promise.resolve();assert.equal(select.disabled,false);assert.equal(select.value,'actual');
+test('la pausa tiene pestañas, abre en la pedida y Q/E/M cambian de sección', () => {
+  let cfg = null, refreshed = 0, closed = 0;
+  const game = {
+    creator: { isOpen: false },
+    audio: { volume: 0.5, isMuted: () => false, setVolume() {}, toggleMute() {} },
+    stats: { dinero: 0, level: 1, xp: 0 }, clock: { day: 2, hour: 22 },
+    minimap: { visible: true, zoomBase: 70, setZoomBase: v => v, toggle() {} },
+    menu: {
+      isOpen: false,
+      open(c) { cfg = c; this.isOpen = true; this._render = c.render; },
+      refresh() { refreshed++; },
+      close() { closed++; this.isOpen = false; cfg.onClose?.(); }
+    }
+  };
+  openPauseMenu(game, 'ajustes');
+  assert.equal(cfg.wide, true);
+  assert.equal(game._pauseTab, 'ajustes');
+  cfg.render();
+  const press = (code) => window.dispatchEvent(Object.assign(new Event('keydown'), { code }));
+  press('KeyE');
+  assert.equal(game._pauseTab, 'controles');
+  press('KeyE');
+  assert.equal(game._pauseTab, 'mapa');
+  press('KeyQ');
+  assert.equal(game._pauseTab, 'controles');
+  assert.equal(refreshed, 3);
+  for (const tab of ['estado', 'ajustes', 'controles']) { game._pauseTab = tab; assert.ok(cfg.render().body); }
+  game._pauseTab = 'mapa';
+  press('KeyM');
+  assert.equal(closed, 1, 'M en la pestaña Mapa cierra la pausa');
+  press('KeyE');
+  assert.equal(game._pauseTab, 'mapa', 'el listener se retira al cerrar');
 });
