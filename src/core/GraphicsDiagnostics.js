@@ -1,7 +1,7 @@
 /** CPU submission timings, not GPU timings. Bounded and opt-in console output. */
 export class GraphicsDiagnostics {
   constructor(){this.events=[];this.programs=0;this.pipelines=0;this.maxRenderMs=0;this.renderObjects=0;this.discarded=0;this.nodeBuilds=0;this.nodeBuildMs=0;}
-  record(name,ms,details={}){this.events.push({name,ms:Math.round(ms*100)/100,t:Math.round(globalThis.performance?.now?.()??0),...details});if(this.events.length>128)this.events.shift();}
+  record(name,ms,details={}){this.sequence=(this.sequence??0)+1;this.events.push({sequence:this.sequence,name,ms:Math.round(ms*100)/100,t:Math.round(globalThis.performance?.now?.()??0),...details});if(this.events.length>128)this.events.shift();}
   attach(backend){
     this.restore??=[];
     for(const [method,counter] of [['createProgram','programs'],['createRenderPipeline','pipelines']]){
@@ -33,7 +33,10 @@ export class GraphicsDiagnostics {
       nodes.getForRender=function(renderObject,...args){
         if(this.get(renderObject).nodeBuilderState!==undefined)return getForRender.call(this,renderObject,...args);
         const start=performance.now();
-        try{return getForRender.call(this,renderObject,...args);}finally{stats.nodeBuilds++;stats.nodeBuildMs+=performance.now()-start;}
+        try{return getForRender.call(this,renderObject,...args);}finally{
+          const ms=performance.now()-start;stats.nodeBuilds++;stats.nodeBuildMs+=ms;
+          if(ms>15)stats.record('node-build',ms,{object:renderObject.object?.name,parent:renderObject.object?.parent?.name,material:renderObject.material?.name,camera:renderObject.camera?.type});
+        }
       };
       this.restore.push(()=>nodes.getForRender=getForRender);
     }

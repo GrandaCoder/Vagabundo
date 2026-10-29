@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import {texture,materialColor,materialEmissive,materialRoughness,materialMetalness,positionWorld,positionView,normalView,vec3,vec4,float,mix,smoothstep,sin,time,mx_noise_float,faceDirection} from 'three/tsl';
 import {cityUniforms} from './GraphicsState.js';
 import {facadeColor,facadeWindow,facadeGlow} from './FacadeNodes.js';
+import {useInstanceStorage} from './InstanceStorage.js';
 
 // Stable world-space microtexture: no geometry changes, random numbers or per-frame rebuilds.
 const grain=mx_noise_float(positionWorld.mul(12));
@@ -66,7 +67,7 @@ export class SurfaceMaterials {
     this.cache.set(source,material);this.resources.add(material);return material;
   }
   apply(root,kinds=new Map()){
-    root.traverse(object=>{if(!object.isMesh)return;const convert=m=>this.convert(m,kinds.get(m)??'surface');object.material=Array.isArray(object.material)?object.material.map(convert):convert(object.material);});
+    root.traverse(object=>{if(!object.isMesh)return;useInstanceStorage(object);const convert=m=>this.convert(m,kinds.get(m)??'surface');object.material=Array.isArray(object.material)?object.material.map(convert):convert(object.material);});
   }
   dispose(){for(const material of this.resources)material.dispose();this.resources.clear();this.cache.clear();this.graphs.clear();}
 }

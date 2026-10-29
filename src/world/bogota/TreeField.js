@@ -897,6 +897,7 @@ function createTreeField(scene, sites) {
     if (!cell) {
       const cellGroup = new THREE.Group();
       cellGroup.name = `TreeCell_${key}`;
+      cellGroup.userData.prepareWhileHidden = true;
       cellGroup.visible = false;
       group.add(cellGroup);
       cell = { group: cellGroup, trees: [], meshes: new Map() };
@@ -933,6 +934,7 @@ function createTreeField(scene, sites) {
     geo.setAttribute('aTreeData', treeData);
     const mesh = new THREE.InstancedMesh(geo, material, cap);
     mesh.name = m.name;
+    mesh.userData.prepareWhileHidden = true;
     mesh.count = 0;
     mesh.visible = false;
     mesh.castShadow = true;
@@ -985,7 +987,7 @@ function createTreeField(scene, sites) {
   const last = new V3(Infinity, Infinity, Infinity);
   const cam = new V3();
   function update(position) {
-    if(group.userData.debugDisabled)return;
+    if(group.userData.debugDisabled||group.userData.preparingGraphics)return;
     cam.copy(position);
     if (cam.distanceToSquared(last) < 16) return false;
     last.copy(cam);
@@ -1029,6 +1031,7 @@ function createTreeField(scene, sites) {
   const center = new V3();
   for (let i = 0; i < N; i++) center.x += px[i] / N, center.z += pz[i] / N;
   if (N) update(center.setY(10));
+  group.userData.prepareWhileHidden = true;
 
   // Tree placements are world-space instance matrices; the field, cells and meshes keep identity transforms.
   // Freezing both avoids recomputing thousands of dormant objects in every view and shadow pass.

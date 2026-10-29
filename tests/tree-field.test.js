@@ -2,8 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three/webgpu';
 import { buildTreeGeometries, createLeafAtlas, createTreeField, TREE_LOD, TREE_SPECIES, TREE_SPECIES_INDEX } from '../src/world/bogota/TreeField.js';
+import { withWarmupVariants, collectShaderWarmupJobs } from '../src/core/ShaderWarmup.js';
 
 const { tileMeters } = createLeafAtlas();
+
+test('prepara todos los LOD sin cambiar su distribución ni activar árboles lejanos al terminar', async () => {
+  const scene = new THREE.Scene();
+  const field = createTreeField(scene, [{ x: 0, z: 0, scale: .7, species: 0 }, { x: 300, z: 0, scale: .7, species: 2 }]);
+  scene.add(field.group);
+  field.update(new THREE.Vector3(0, 2, 10));
+  const before = field.meshes.map(m => [m.visible, m.count, [...m.instanceMatrix.array]]);
+  assert.equal(collectShaderWarmupJobs([field.group]).objects, field.meshes.length);
+  await withWarmupVariants([field.group], async () => {
+    field.update(new THREE.Vector3(300, 2, 10));
+    assert.ok(field.meshes.every(m => m.visible));
+    assert.deepEqual(field.meshes.map(m => m.count), before.map(v => v[1]));
+  });
+  assert.deepEqual(field.meshes.map(m => [m.visible, m.count, [...m.instanceMatrix.array]]), before);
+  field.update(new THREE.Vector3(300, 2, 10));
+  assert.notDeepEqual(field.meshes.map(m => m.visible), before.map(v => v[0]));
+  field.dispose();
+});
 
 test('las tres especies bogotanas crecen igual en cada carga y con su silueta propia', () => {
   assert.deepEqual(TREE_SPECIES.map(s => s.name), ['urapan', 'eucalipto', 'caucho']);

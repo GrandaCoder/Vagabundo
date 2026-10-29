@@ -13,6 +13,29 @@ const { Bogota } = await import('../src/world/districts/Bogota.js');
 const { TrafficSignals } = await import('../src/world/bogota/TrafficSignals.js');
 const { BusService } = await import('../src/world/bogota/BusService.js');
 
+test('las sondas reutilizan orientación por subpaso y respetan giros y alturas posteriores', () => {
+  const route = new TrafficRoute(0, 30, 0, 30);
+  const traffic = new TrafficSystem(new THREE.Scene(), [route], { carsPerRoute: 1 });
+  const car = traffic.vehicles[0].car;
+  car.position.set(0, 0, 0);
+  const obstacle = { car: { position: new THREE.Vector3(3, 0, 0), length: 4, width: 2, group: new THREE.Group() } };
+  let reads = 0;
+  Object.defineProperty(obstacle, 'heading', { get() { reads++; return { x: 1, z: 0 }; } });
+  traffic.parkedCars = [obstacle];
+  traffic._probePosition.set(0, 0, 0); traffic._probeDirection.set(1, 0, 0);
+  traffic._buildSpatialIndex([]); traffic._updating = true;
+  assert.equal(reads, 1);
+  for (let n = 0; n < 30; n++) assert.equal(traffic._carInPath(obstacle, car), true);
+  assert.equal(reads, 1, 'no vuelve a calcular orientación por cada sonda');
+  obstacle.car.position.y = 7.82;
+  traffic._buildSpatialIndex([]);
+  assert.equal(traffic._carInPath(obstacle, car), false, 'el bus elevado no bloquea la calle inferior');
+  traffic._updating = false;
+  obstacle.car.position.set(3, 0, 0);
+  assert.equal(traffic._carInPath(obstacle, car), true, 'fuera del subpaso consulta la posición actual');
+  traffic.parkedCars = []; traffic.dispose();
+});
+
 test('el bus completa el desvío de Colpatria con tráfico y semáforos durante diez minutos', () => {
   let seed = 12345;
   const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };

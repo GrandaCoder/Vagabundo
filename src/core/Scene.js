@@ -16,6 +16,9 @@ const _SUN_NIGHT = new THREE.Color(0x506580);
 export class SceneManager {
   constructor() {
     this.scene = new THREE.Scene();
+    // The world root never moves. An automatic identity update forced ALL frozen
+    // city branches to traverse again, including both solar shadow passes.
+    this.scene.matrixAutoUpdate = false;
     this.scene.background = new THREE.Color(0x1a222d);
 
     // Niebla atmosférica con mayor alcance para dar profundidad urbana

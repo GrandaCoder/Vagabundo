@@ -112,10 +112,14 @@ export class TrafficSystem {
   }
 
   _carInPath(other, car) {
-    if (Math.abs(other.car.position.y - car.position.y) > 3) return false;
-    const dx = other.car.position.x - this._probePosition.x, dz = other.car.position.z - this._probePosition.z;
-    const headingX = other.heading?.x ?? Math.cos(other.car.group.rotation.y);
-    const headingZ = other.heading?.z ?? -Math.sin(other.car.group.rotation.y);
+    // Every half-meter probe used to recalculate these getters and trigonometry.
+    // All drivers read the same spatial snapshot before movement in this substep.
+    const snapshot = this._updating ? other.probeSnapshot : null;
+    const position = snapshot ?? other.car.position;
+    if (Math.abs(position.y - car.position.y) > 3) return false;
+    const dx = position.x - this._probePosition.x, dz = position.z - this._probePosition.z;
+    const headingX = snapshot?.headingX ?? other.heading?.x ?? Math.cos(other.car.group.rotation.y);
+    const headingZ = snapshot?.headingZ ?? other.heading?.z ?? -Math.sin(other.car.group.rotation.y);
     const along = Math.abs(headingX * this._probeDirection.x + headingZ * this._probeDirection.z);
     const across = Math.abs(headingX * -this._probeDirection.z + headingZ * this._probeDirection.x);
     const front = dx * this._probeDirection.x + dz * this._probeDirection.z;
@@ -338,7 +342,12 @@ export class TrafficSystem {
     this._carGrid.clear(); this._personGrid.clear();
     for (const list of this._routeVehicles.values()) list.length = 0;
     const insert = other => {
-      const { x, z } = other.car.position, size = other.car.length;
+      const { x, y, z } = other.car.position, size = other.car.length;
+      const snapshot = other.probeSnapshot ??= {};
+      snapshot.x = x; snapshot.y = y; snapshot.z = z;
+      const heading = other.heading;
+      snapshot.headingX = heading?.x ?? Math.cos(other.car.group.rotation.y);
+      snapshot.headingZ = heading?.z ?? -Math.sin(other.car.group.rotation.y);
       this._carGrid.insert(other, x - size, z - size, x + size, z + size);
     };
     for (const vehicle of this.vehicles) {

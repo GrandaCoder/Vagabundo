@@ -4,9 +4,10 @@ import {pass,mrt,output,normalView,positionView,metalness,roughness,vec2,smooths
 import {ssr} from 'three/addons/tsl/display/SSRNode.js';
 import {createPostProcessing} from './PostProcessing.js';
 import {GRAPHICS_PROFILES} from '../core/GraphicsQuality.js';
+import {withFrameTransforms} from './FrameTransforms.js';
 export class VisualPipeline {
   constructor(renderer,scene,camera,quality,overlay,sharedScenePass=null,effectsEnabled=true){
-    this.renderer=renderer;this.ownsScenePass=!sharedScenePass;this.scenePass=sharedScenePass??pass(scene,camera);this.quality=quality;
+    this.renderer=renderer;this.scene=scene;this.ownsScenePass=!sharedScenePass;this.scenePass=sharedScenePass??pass(scene,camera);this.quality=quality;
     let reflections=vec4(0);
     if(!sharedScenePass){
       const fade=smoothstep(220,100,positionView.z.negate());
@@ -30,6 +31,6 @@ export class VisualPipeline {
     this.grade=createPostProcessing(renderer,this.scenePass.getTextureNode('output'),reflections,effectsEnabled&&profile.bloom,profile.bloomResolution);
     this.pipeline=new THREE.RenderPipeline(renderer,this.grade.outputNode);
   }
-  render(hour=12){this.grade.update(hour);this.pipeline.render();}
+  render(hour=12){this.grade.update(hour);withFrameTransforms(this.scene,()=>this.pipeline.render());}
   dispose(){this.pipeline.dispose();if(this.ownsScenePass)this.scenePass.dispose();this.ssr?.dispose();this.grade.bloomPass.dispose();}
 }

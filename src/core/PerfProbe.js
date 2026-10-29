@@ -22,7 +22,7 @@ function drawBreakdown(game, top) {
   const shadowCameras = sun?.shadow?.getViewportCount ? Array.from({ length: sun.shadow.getViewportCount() }, (_, i) => sun.shadow.getCamera(i)) : [];
   const count = (camera, shadow) => {
     camera.updateMatrixWorld();
-    const frustum = new THREE.Frustum().setFromProjectionMatrix(camera.projectionMatrix.clone().multiply(camera.matrixWorldInverse));
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(camera.projectionMatrix.clone().multiply(camera.matrixWorldInverse), camera.coordinateSystem, camera.reversedDepth);
     const groups = new Map();
     let total = 0;
     scene.traverseVisible(o => {
@@ -44,7 +44,7 @@ export function installPerfProbe(game, target = globalThis) {
   const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
   /** Mide intervalos de cuadro y trabajo gráfico mientras corre `step(progress)`. */
   const measure = async (name, seconds, step = () => {}) => {
-    const diagnostics = game.renderer.diagnostics, before = diagnostics.snapshot(), events = diagnostics.events.length;
+    const diagnostics = game.renderer.diagnostics, before = diagnostics.snapshot(), sequence = diagnostics.sequence ?? 0;
     const bakes = game.sceneMgr.atmosphere?.bakeCount ?? 0, intervals = [], started = performance.now();
     let last = started;
     while (last - started < seconds * 1000) {
@@ -56,7 +56,7 @@ export function installPerfProbe(game, target = globalThis) {
     }
     const info = game.renderer.instance.info.render;
     return { name, ...frameStats(intervals), meanMs:intervals.length?(last-started)/intervals.length:0,elapsedMs:last-started,work: delta(diagnostics.snapshot(), before), bakes: (game.sceneMgr.atmosphere?.bakeCount ?? 0) - bakes,
-      events: diagnostics.events.slice(events), quality: game.renderer.effectiveQuality, pixelRatio: game.renderer.instance.getPixelRatio(),
+      events: diagnostics.events.filter(event => event.sequence > sequence), quality: game.renderer.effectiveQuality, pixelRatio: game.renderer.instance.getPixelRatio(),
       drawCalls: info.drawCalls, triangles: info.triangles, memoryMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null };
   };
   const probe = {

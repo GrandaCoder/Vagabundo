@@ -9,6 +9,7 @@ Additional adaptations are pinned to revision `09361be1fe6a2efaee6ef62420a664c67
 - `traffic.js`: main-road yielding, blocked-exit checks and waiting priority adapted to Bogotá's path reservations; no geographic data imported.
 - `audio-synthesis.js`: combustion buffers, transmission and tire voices in `SlopMotorSynthesis.js`. Helicopter, bicycle and siren branches/resources are excluded. `audio-events.js` supplies horn synthesis alongside the existing crash adaptation.
 - `tsl-materials.js`: period-integrated facade filtering in `FacadeNodes.js`, adapted to local brick colors and BAZUKO night controls.
+- `main.js`: instance matrix storage and material-grouped asynchronous preparation inform `InstanceStorage.js` and `ShaderWarmup.js`. BAZUKO prepares every required binding and hidden tree LOD, using 64-object compilation batches. `ScenePassPreparation.js` and `StableInstanceShaders.js` are local compatibility adaptations for pinned Three.js 0.186.1; no library files are modified.
 
 The original revision remains recorded below for modules whose source has not changed.
 

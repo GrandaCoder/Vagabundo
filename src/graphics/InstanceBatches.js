@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {useInstanceStorage} from './InstanceStorage.js';
 
 /**
  * Lotes instanciados de objetos sueltos que aparecen y desaparecen (bolsas, contenedores, aros).
@@ -50,6 +51,7 @@ export class InstanceBatches {
     group.geometry ??= group.owned ? source.geometry.clone() : source.geometry;
     group.material ??= group.owned ? source.material.clone() : source.material;
     const mesh = new THREE.InstancedMesh(group.geometry, group.material, needed);
+    useInstanceStorage(mesh);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.name = `${source.name || source.geometry.type} · lote${far ? ' lejano' : ''}`;
     mesh.castShadow = source.castShadow && !far;

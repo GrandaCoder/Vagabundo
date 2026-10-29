@@ -1,6 +1,8 @@
 import {GraphicsDiagnostics} from './GraphicsDiagnostics.js';
 import {prepareSceneTextures} from './TextureBudget.js';
-import {collectShaderWarmupJobs,compileShaderJobs,withoutFrustumCulling} from './ShaderWarmup.js';
+import {collectShaderWarmupJobs,shaderCompilationBatches,compileShaderJobs,withoutFrustumCulling,withWarmupVariants} from './ShaderWarmup.js';
+import {compileScenePass} from '../graphics/ScenePassPreparation.js';
+import {installStableInstanceShaders} from '../graphics/StableInstanceShaders.js';
 import {syncVehicleBatches,disposeVehicleBatches} from '../vehicles/VehicleBatches.js';
 import {syncInstanceBatches,disposeInstanceBatches} from '../graphics/InstanceBatches.js';
 import {StableClusteredLighting} from '../graphics/StableClusteredLighting.js';
@@ -103,15 +105,13 @@ export class Renderer {
     console.info('[WebGPU] Familias gráficas',this.startupStats);
     this.onPrepareProgress?.(`Shaders TSL: 0/${jobs.length} familias`);
     renderer.setRenderTarget(this.pipeline.scenePass.renderTarget);renderer.setMRT(this.pipeline.scenePass.getMRT());
-    let lastYield=performance.now();
-    try{await compileShaderJobs(jobs,async family=>{
-      for(const object of family){
-        culled.push([object,object.frustumCulled]);object.frustumCulled=false;
-        // Yield by elapsed CPU budget, not once per binding (thousands of clamped timers).
-        if(performance.now()-lastYield>8){lastYield=performance.now();await new Promise(r=>setTimeout(r,0));}
-        await renderer.compileAsync(object,camera,scene);
-      }
-    },{concurrency:8,onProgress:(done,total)=>this.onPrepareProgress?.(`Shaders TSL: ${done}/${total} familias`)});}
+    scene.updateMatrixWorld();
+    for(const root of extraModels)root.updateWorldMatrix(true,true);
+    const batches=shaderCompilationBatches(jobs);
+    this.startupStats.compileBatches=batches.length;
+    for(const family of jobs)for(const object of family){culled.push([object,object.frustumCulled]);object.frustumCulled=false;}
+    try{await withWarmupVariants([scene,...extraModels],()=>compileShaderJobs(batches,batch=>compileScenePass(renderer,batch,camera,scene),
+      {concurrency:16,onProgress:(done,total)=>this.onPrepareProgress?.(`Shaders TSL: ${done}/${total} lotes`)}));}
     finally{for(const [object,value] of culled)object.frustumCulled=value;renderer.setRenderTarget(target);renderer.setMRT(targets);}
     this.startupStats.compileMs=performance.now()-started;
   }
@@ -132,7 +132,7 @@ export class Renderer {
       this._compileState={target:this.pipeline.scenePass.renderTarget,mrt:this.pipeline.scenePass.getMRT(),restoreTarget:target,restoreMRT:targets};
       try{
         this.instance.setRenderTarget(this._compileState.target);this.instance.setMRT(this._compileState.mrt);
-        await withoutFrustumCulling([root],()=>this.instance.compileAsync(root,camera,scene));
+        await withoutFrustumCulling([root],()=>compileScenePass(this.instance,root,camera,scene));
       }finally{
         this._compileState=null;
         this.instance.setRenderTarget(target);this.instance.setMRT(targets);this.compilingDynamic=false;
@@ -146,6 +146,7 @@ export class Renderer {
     return this._initialization ??= initializeWebGPU(this.instance).then(()=>{
       this.instance.onDeviceLost=info=>this.onDeviceLost?.(info);
       this.diagnostics.attach(this.instance.backend);this.diagnostics.attachRenderer(this.instance);
+      installStableInstanceShaders(this.instance);
       this.instance.lighting=new StableClusteredLighting(256,32,28,48);
       return this;
     });
@@ -193,18 +194,20 @@ export class Renderer {
     const previousEffects=this.effectsEnabled;this.effectsEnabled=effectsEnabled;
     this._overlayRoot=playerRoot;this._overlayEnabled=true;
     try{
-      await withoutFrustumCulling([scene],async()=>{
+      await withWarmupVariants([scene],()=>withoutFrustumCulling([scene],async()=>{
         for(const quality of new Set(qualities)){
           applyQuality(quality);
           for(const view of views){
             const label=view();
+            const passStarted=performance.now(),before=this.diagnostics?.snapshot();
             this.onPrepareProgress?.(`Preparando vista completa: ${quality} · ${label}`);
             this._ensurePipeline(scene,camera,quality);this.pipeline.render(this.hour??22);
             await this.waitForGPU();await paintLoadingFrame();
+            (this.startupStats.warmupPasses??=[]).push({quality,view:label,ms:performance.now()-passStarted,before,after:this.diagnostics?.snapshot()});
           }
           (this.readyQualities??=new Set()).add(quality);
         }
-      });
+      }));
     }finally{this.effectsEnabled=previousEffects;applyQuality(requested);this._ensurePipeline(scene,camera,requested);}
     this.startupStats.fullWarmupMs=performance.now()-started;
   }
