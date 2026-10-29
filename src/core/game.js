@@ -97,6 +97,7 @@ export class Game {
     // Mundo + jugador
     this.world = new World(this.sceneMgr.scene);
     this.player = new Player(this.sceneMgr.scene, this.input, this.stats, this.audio);
+    this.inventory.onChange(() => this.player.syncWeapon(this.inventory)); // sin el arma en el costal, vuelve a puños
 
     // Sistemas de nuevas mecánicas: Popó y Psicosis por abstinencia
     this.poopSystem = new PoopSystem(
@@ -593,6 +594,7 @@ export class Game {
       }
       this.built = data.built ?? {};
       this.costal = !!data.costal;
+      if (data.weapon && this.inventory.count(data.weapon) > 0) this.player.equipWeapon(data.weapon);
       this.cambuche?.setBuilt(this.built);
       if (data.look) this._applyLook(data.look);
       if (data.radio) {
@@ -624,6 +626,7 @@ export class Game {
       look: this.look,
       built: this.built,
       costal: this.costal,
+      weapon: this.player.equippedWeapon,
       radio: this.radio ? { isOn: this.radio.isOn, freq: this.radio.frequency, battery: this.radio.battery } : null,
       dog: { isFriend: !!this.dog?.isFriend, look: this.dog?.look ?? null },
       cart: this.cart ? this.cart.saveState() : null,
