@@ -142,7 +142,9 @@ test('Pedir limosna requiere transeúntes cercanos (<7m) y no consume energía s
   const stats = new StatsSystem();
   stats.energia = 50;
   const player = { position: new THREE.Vector3(0, 0, 0), playBeg: () => {} };
-  const interaction = new InteractionSystem(player, { items: [] }, stats, { play: () => {} }, null, null, null);
+  // La limosna puede regalar pan o agua al azar: el inventario debe aceptarlos.
+  const inventory = { items: [], add: () => true };
+  const interaction = new InteractionSystem(player, inventory, stats, { play: () => {} }, null, null, null);
 
   // Caso 1: Sin peatones
   interaction.setPedestrians([]);

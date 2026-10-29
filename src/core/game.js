@@ -42,6 +42,7 @@ import { RadioSystem } from '../systems/RadioSystem.js';
 import { PoopSystem } from '../systems/PoopSystem.js';
 import { PsychosisSystem } from '../systems/PsychosisSystem.js';
 import { RoadRageSystem } from '../systems/RoadRageSystem.js';
+import { SubstanceEffects } from '../systems/SubstanceEffects.js';
 import { StealSystem } from '../features/steal.js';
 import { openRadioModal } from '../ui/RadioModal.js';
 
@@ -108,6 +109,8 @@ export class Game {
     this.roadRage = new RoadRageSystem(this.sceneMgr.scene, { player: this.player, stats: this.stats, audio: this.audio });
     this.roadRage.onPlayerHurt = () => { if (this.stats.salud <= 0) this._deathCause = 'golpiza'; };
     window.addEventListener('mirror-stolen', (e) => this.roadRage?.trigger(e.detail?.car));
+    // Imagen y sonido al consumir pegante, pastilla o hierba
+    this.substanceEffects = new SubstanceEffects({ canvas, audio: this.audio });
     // Interacción
     this.interaction = new InteractionSystem(
       this.player, this.inventory, this.stats, this.audio,
@@ -637,6 +640,7 @@ export class Game {
     }
 
     this.isSleeping = true;
+    this.substanceEffects?.end();
     window.dispatchEvent(new CustomEvent('sleep-start'));
     this.dog?.restAt(this.player.position);
     this.player.playAction('dormir', 1.6);
@@ -705,6 +709,7 @@ export class Game {
     if (this.player.isRagdollActive) return false;
 
     this._deathPending = true;
+    this.substanceEffects?.end();
     this.deathCount++;
     this.input.keys = {};
     this.input.endFrame();
@@ -803,6 +808,7 @@ export class Game {
     for (const need of NEEDS) this.stats[need] = Math.max(60, this.stats[need]);
     this.diseases.cureAll();
     this.psychosis?.dispose?.();
+    this.substanceEffects?.end();
     this.poopSystem?.activeProjectiles?.forEach?.(p => p.dispose?.());
     if (this.poopSystem) this.poopSystem.activeProjectiles = [];
     this.roadRage?.reset();
@@ -962,6 +968,7 @@ export class Game {
     // La visibilidad de edificios usa la cámara del mismo cuadro.
     this.cameraRig.follow(this.player.position, dt, this.collisions, this.player.speed, this.input.isRunning);
     this.psychosis.update(dt, this.cameraRig);
+    this.substanceEffects?.update(dt);
     this.profiler?.mark('sistemas');
     this.world.update(dt, this.player.position, this.cameraRig.camera, this.traffic?.vehicles ?? []);
     this.profiler?.mark('mundoNPC');
@@ -1043,7 +1050,10 @@ export class Game {
     this.localLights.update(elapsed, this.player.position, (x, z) => this.world.active?.getGroundHeight?.(x, z) ?? 0, this.cameraRig.camera);
     const showSilhouette = GRAPHICS_PROFILES[quality].silhouette &&
       (this.collisions.mayOccludePlayer?.(this.cameraRig.camera.position, this.player.position) ?? true);
+    // El efecto de consumo mueve la cámara solo durante este render y captura su estela al terminar.
+    this.substanceEffects?.beforeRender(this.cameraRig.camera, { quality, paused: !active });
     this.renderer.render(this.sceneMgr.scene, this.cameraRig.camera, this.player.root, [this.sceneMgr.sun], showSilhouette);
+    this.substanceEffects?.afterRender(this.cameraRig.camera);
     if (this.performanceHUD.update(now, this.player.position, this.renderer, active, this.localLights)) {
       this.renderer.adaptResolution(this.performanceHUD.metrics.frameMs, performance.now() - now);
     } else this.renderer.resolution.resetWindow();
@@ -1107,6 +1117,7 @@ export class Game {
     this._running = false;
     this.gpsBeacon?.dispose();
     this.psychosis?.dispose?.();
+    this.substanceEffects?.dispose?.();
     this.poopSystem?.dispose?.();
     this.roadRage?.dispose?.();
     this.radio?.destroy?.();
