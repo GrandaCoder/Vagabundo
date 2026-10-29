@@ -68,6 +68,10 @@ En la primera partida se abre el creador de personaje. El juego se sirve con Vit
 
 En PowerShell, si una política de ejecución impide usar `npm`, ejecuta los mismos comandos con `npm.cmd`.
 
+### Sala de pruebas
+
+Con `npm run dev` activo, abre **/sala.html** (por ejemplo http://localhost:5173/sala.html?prueba=fumar). Es un piso plano sin ciudad, tráfico ni guardado donde aparece tu personaje con la misma cámara y los mismos controles, y carga en segundos. Cada prueba monta solo lo que necesita y tiene sus botones: personaje, fumar, pelea, efectos de sustancias y carros. El panel también cambia de modelo (realista o liviano), acelera el tiempo (x5, x30) y pasa de día a noche. Desde la consola se maneja con `__sala`. Para agregar una prueba, suma una entrada en `src/sala/pruebas.js`. La sala no forma parte de la compilación.
+
 ## Controles
 
 | Tecla o acción | Función |
