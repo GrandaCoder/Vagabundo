@@ -43,6 +43,7 @@ import { PoopSystem } from '../systems/PoopSystem.js';
 import { PsychosisSystem } from '../systems/PsychosisSystem.js';
 import { RoadRageSystem } from '../systems/RoadRageSystem.js';
 import { SubstanceEffects } from '../systems/SubstanceEffects.js';
+import { SUBSTANCE_EFFECTS } from '../data/substanceEffects.js';
 import { StealSystem } from '../features/steal.js';
 import { openRadioModal } from '../ui/RadioModal.js';
 
@@ -113,6 +114,11 @@ export class Game {
     window.addEventListener('mirror-stolen', (e) => this.roadRage?.trigger(e.detail?.car));
     // Imagen y sonido al consumir pegante, pastilla o hierba
     this.substanceEffects = new SubstanceEffects({ canvas, audio: this.audio });
+    // el basuco además trae paranoia: sombras, susurros y mirar a los lados
+    window.addEventListener('substance-consumed', (e) => {
+      const paranoia = SUBSTANCE_EFFECTS[e.detail?.id]?.paranoia;
+      if (paranoia) this.psychosis?.induce(paranoia.seconds, paranoia.severity);
+    });
     // Interacción
     this.interaction = new InteractionSystem(
       this.player, this.inventory, this.stats, this.audio,
@@ -645,6 +651,7 @@ export class Game {
 
     this.isSleeping = true;
     this.substanceEffects?.end();
+    this.psychosis?.clearInduced?.();
     window.dispatchEvent(new CustomEvent('sleep-start'));
     this.dog?.restAt(this.player.position);
     this.player.playAction('dormir', 1.6);
@@ -714,6 +721,7 @@ export class Game {
 
     this._deathPending = true;
     this.substanceEffects?.end();
+    this.psychosis?.clearInduced?.();
     this.deathCount++;
     this.input.keys = {};
     this.input.endFrame();
@@ -783,6 +791,7 @@ export class Game {
   _finishArrest() {
     if (!this._arrestPending) return;
     this.player.stopSmoking?.();
+    this.player.stopBasuco?.();
     this.inventory.clear();
     this.stats.dinero = 0;
     const pos = this._randomWalkablePosition();
@@ -804,6 +813,7 @@ export class Game {
   _respawn() {
     if (!this._deathPending) return;
     this.player.stopSmoking?.();
+    this.player.stopBasuco?.();
     const half = Math.floor(this.inventory.items.length / 2);
     for (let i = 0; i < half; i++) {
       const it = this.inventory.items[0];
@@ -815,6 +825,7 @@ export class Game {
     this.diseases.cureAll();
     this.psychosis?.dispose?.();
     this.substanceEffects?.end();
+    this.psychosis?.clearInduced?.();
     this.poopSystem?.activeProjectiles?.forEach?.(p => p.dispose?.());
     if (this.poopSystem) this.poopSystem.activeProjectiles = [];
     this.roadRage?.reset();

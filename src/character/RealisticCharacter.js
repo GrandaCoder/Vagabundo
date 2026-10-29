@@ -11,6 +11,9 @@ import { PALETTES } from './look.js';
 import { addGrime, addHairTone } from './weathering.js';
 import { attachAccessories, attachWeapon } from './props.js';
 import { attachCigaretteToHand, createSmokeOverlay, emberGlow } from './smoking.js';
+import { attachBasucoProps, createBasucoOverlay } from './pipe.js';
+import { rotateInFrame } from './melee.js';
+import { findBone } from './props.js';
 import { createMeleeOverlay } from './melee.js';
 import { addHatClip, hatEdgeProfile } from './hatFit.js';
 
@@ -306,6 +309,7 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
   const weights = {};
   let weaponId = null; // arma en mano (cuchillo, botella_picada) o null
   let smoking = null;   // qué se fuma en la mano izquierda ('cigarrillo', 'hierba') o null
+  let basuco = false;   // pipa en la izquierda y encendedor en la derecha
 
   function syncWeapon() {
     if (!inst || inst.weaponId === weaponId) return;
@@ -321,6 +325,12 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
     if (inst.cigarette) inst.cigarette.kind = smoking;
   }
 
+  function syncBasuco() {
+    if (!inst || !!inst.basucoProps === basuco) return;
+    inst.basucoProps?.dispose();
+    inst.basucoProps = basuco ? attachBasucoProps(inst.root, inst.bones) : null;
+  }
+
   async function setLook(l) {
     if (disposed) return;
     const my = ++token;
@@ -331,6 +341,7 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
     group.add(inst.root);
     syncWeapon();
     syncCigarette();
+    syncBasuco();
     for (const k of Object.keys(weights)) delete weights[k];
     for (const k of [...Object.keys(inst.actions), LOCOMOTION]) if (k !== 'walk' && k !== 'run') weights[k] = k === 'idle' ? 1 : 0;
   }
@@ -347,6 +358,10 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
     setSmoking(on, kind = 'cigarrillo') { smoking = on ? kind : null; syncCigarette(); },
     /** Brasa del cigarrillo en el mundo, o null si no está fumando */
     cigaretteTip(target) { return inst?.cigarette ? inst.cigarette.tip.getWorldPosition(target) : null; },
+    /** Pipa de basuco y encendedor en las manos */
+    setBasuco(on) { basuco = !!on; syncBasuco(); },
+    /** Cazoleta de la pipa en el mundo, o null si no la tiene */
+    pipeBowl(target) { return inst?.basucoProps ? inst.basucoProps.pipe.top.getWorldPosition(target) : null; },
     /** Boca en el mundo, para el humo de la calada */
     mouth(target) { return inst ? (inst.smoke ??= createSmokeOverlay(inst.bones, inst.root)).mouth(target) : null; },
     dispose() {
@@ -355,7 +370,7 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
       disposeRealisticInstance(inst); inst = null;
       group.removeFromParent();
     },
-    update(dt, { speed = 0, running = false, action = null, attack = null, smoke = null } = {}) {
+    update(dt, { speed = 0, running = false, action = null, attack = null, smoke = null, basuco: pipeT = null, look = 0 } = {}) {
       if (!inst) return;
       const a = inst.actions;
       // destino: acción especial si existe el clip (o su sustituto); si no, reposo o locomoción
@@ -366,7 +381,8 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
         if (a[clip]) { target = clip; scale = clipScale; }
       }
       if (inst?.root) {
-        const targetY = action === 'cagar' && !a.cagar ? -0.3 : 0;
+        // agacharse a fumar basuco baja el cuerpo lo que doblan las rodillas
+        const targetY = action === 'cagar' && !a.cagar ? -0.3 : -(inst.pipe?.drop ?? 0);
         inst.root.position.y += (targetY - inst.root.position.y) * Math.min(1, dt * 10);
       }
       if (target !== inst.previousTarget) {
@@ -403,6 +419,17 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
       // la calada también se suma encima, así se fuma caminando
       if (smoke || inst.smoke?.active) (inst.smoke ??= createSmokeOverlay(inst.bones, inst.root)).apply(dt, smoke);
       inst.cigarette?.setGlow(emberGlow(smoke?.puff));
+      // el basuco: agachado con las dos manos en la boca
+      if (pipeT != null || inst.pipe?.active) (inst.pipe ??= createBasucoOverlay(inst.bones, inst.root)).apply(dt, pipeT);
+      inst.basucoProps?.update(pipeT ?? 0);
+      // paranoia: la cabeza voltea a los lados (el cuello se lleva parte del giro)
+      inst.glance = (inst.glance ?? 0) + (look - (inst.glance ?? 0)) * Math.min(1, dt * 16);
+      if (Math.abs(inst.glance) > 0.002) {
+        inst.neck ??= findBone(inst.bones, 'Neck');
+        inst.head ??= findBone(inst.bones, 'Head');
+        if (inst.neck) rotateInFrame(inst.root, inst.neck, 0, inst.glance * 0.4, 0);
+        if (inst.head) rotateInFrame(inst.root, inst.head, 0, inst.glance * 0.6, 0);
+      }
       inst.accessories?.update();
     }
   };

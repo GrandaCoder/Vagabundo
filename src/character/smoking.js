@@ -34,10 +34,11 @@ export function emberGlow(t) {
 /** ¿Está botando el humo de la calada? (empieza al bajar la mano) */
 export const isExhaling = (t) => t != null && t >= PUFF.raise + PUFF.hold && t < PUFF.raise + PUFF.hold + PUFF.exhale;
 
-// Lo que se puede fumar: id del objeto → cómo se ve y de qué color es el humo.
+// Lo que se puede fumar: id del objeto → cómo se ve, de qué color es el humo y qué efecto de
+// consumo (SubstanceEffects) dispara cada calada.
 export const SMOKABLES = {
   cigarrillo: { name: 'cigarrillo', emoji: '🚬', paper: '#f1ede4', filter: '#c98a4a', radius: 0.0045, smoke: '#d8d8d8' },
-  hierba:     { name: 'porro',      emoji: '🌿', paper: '#e6dfc8', filter: '#f4f1e8', radius: 0.0058, smoke: '#8fdc74' }
+  hierba:     { name: 'porro',      emoji: '🌿', paper: '#e6dfc8', filter: '#f4f1e8', radius: 0.0058, smoke: '#8fdc74', effect: 'hierba' }
 };
 export const smokable = (id) => SMOKABLES[id] ?? SMOKABLES.cigarrillo;
 
@@ -87,18 +88,23 @@ const _q = new THREE.Quaternion();
 const _r = new THREE.Quaternion();
 
 /** Pone el cigarrillo entre los dedos de la mano izquierda del esqueleto Mixamo. */
+/** Pega `object` al hueso de la mano con los ejes de la mano (+Y hacia los dedos), en la muñeca. */
+export function attachToHand(root, hand, object) {
+  // attach() lo pasa al hueso sin moverlo de donde nació
+  root.updateMatrixWorld(true);
+  root.worldToLocal(hand.getWorldPosition(_p));
+  root.getWorldQuaternion(_r).invert();
+  object.position.copy(_p);
+  object.quaternion.copy(_r.multiply(hand.getWorldQuaternion(_q)));
+  root.add(object);
+  hand.attach(object);
+}
+
 export function attachCigaretteToHand(root, bones, kind = 'cigarrillo') {
   const hand = findBone(bones, 'LeftHand');
   if (!hand) return null;
   const cig = createCigarette(kind);
-  // Nace con los ejes de la mano (+Y hacia los dedos) y attach() lo pasa al hueso sin moverlo.
-  root.updateMatrixWorld(true);
-  root.worldToLocal(hand.getWorldPosition(_p));
-  root.getWorldQuaternion(_r).invert();
-  cig.object.position.copy(_p);
-  cig.object.quaternion.copy(_r.multiply(hand.getWorldQuaternion(_q)));
-  root.add(cig.object);
-  hand.attach(cig.object);
+  attachToHand(root, hand, cig.object);
   // entre el índice y el corazón, atravesado respecto a los dedos y con la brasa hacia afuera
   cig.object.position.add(new THREE.Vector3(0, 0.085, 0.015).applyQuaternion(cig.object.quaternion));
   cig.object.rotateZ(-Math.PI / 2);

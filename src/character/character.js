@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PALETTES, DEFAULT_LOOK, normalizeLook } from './look.js';
 import { attackExtension, attackSide } from './melee.js';
 import { createCigarette, puffReach, emberGlow } from './smoking.js';
+import { createPipe, createLighter, basucoReach, isLit, BASUCO } from './pipe.js';
 
 export { DEFAULT_LOOK };
 
@@ -13,6 +14,14 @@ const lam = (color) => new THREE.MeshLambertMaterial({ color });
 export const PUFF_POSE = {
   elbL: -0.97, armLx: -1.45, armLz: -0.67, headX: 0.12,
   cigarette: [-0.01, -0.25, 0.05], cigaretteRotation: [1.21, 0.14, -1.02]
+};
+
+// Basuco del personaje liviano: agachado, pipa en la izquierda y encendedor en la derecha.
+export const BASUCO_POSE_LIVIANO = {
+  pose: { lean: 0.35, headX: 0.12, kneeL: 0.7, kneeR: 0.7, legL: -0.35, legR: -0.35,
+    armLx: -1.45, armLz: -0.67, elbL: -0.97, armRx: -1.3, armRz: 0.55, elbR: -1.2 },
+  pipe: [-0.01, -0.25, 0.05], pipeRotation: [1.21, 0.14, -1.02],
+  lighter: [0.0, -0.25, 0.05], lighterRotation: [0, 0, 0]
 };
 
 function capsule(r, len, m) {
@@ -356,7 +365,22 @@ export function createCharacter(initial = DEFAULT_LOOK) {
   }
   const _mouthOffset = new THREE.Vector3();
 
-  function update(dt, { speed = 0, running = false, action = null, t = 0, load = 0, dirt = 0, wet = 0, look: lookAt = 0, attack = null, smoke = null }) {
+  // Pipa y encendedor del basuco en las manos
+  let basucoProps = null;
+  function setBasuco(on) {
+    if (!!basucoProps === !!on) return;
+    if (basucoProps) { basucoProps.pipe.dispose(); basucoProps.lighter.dispose(); basucoProps = null; return; }
+    const P = BASUCO_POSE_LIVIANO;
+    const pipe = createPipe(), lighter = createLighter();
+    pipe.object.position.fromArray(P.pipe); pipe.object.rotation.fromArray(P.pipeRotation);
+    lighter.object.position.fromArray(P.lighter); lighter.object.rotation.fromArray(P.lighterRotation);
+    for (const o of [pipe.object, lighter.object]) o.scale.setScalar(1.4);
+    arms[0].elbow.add(pipe.object);
+    arms[1].elbow.add(lighter.object);
+    basucoProps = { pipe, lighter };
+  }
+
+  function update(dt, { speed = 0, running = false, action = null, t = 0, load = 0, dirt = 0, wet = 0, look: lookAt = 0, attack = null, smoke = null, basuco: pipeT = null }) {
     const target = { lean: 0, armLx: 0, armRx: 0, armLz: 0.12, armRz: -0.12, elbL: -0.2, elbR: -0.2, legL: 0, legR: 0, kneeL: 0, kneeR: 0, bob: 0, lie: 0, headX: 0, headY: lookAt };
     const amp = Math.min(1, speed / 3.6) * (running ? 1.1 : 0.9);
     if (speed > 0.15) {
@@ -469,6 +493,15 @@ export function createCharacter(initial = DEFAULT_LOOK) {
       target.headX = lerp(target.headX, PUFF_POSE.headX, r);
     }
     cigarette?.setGlow(emberGlow(smoke?.puff));
+    if (pipeT != null) {
+      const r = basucoReach(pipeT);
+      for (const [key, value] of Object.entries(BASUCO_POSE_LIVIANO.pose)) target[key] = lerp(target[key], value, r);
+    }
+    if (basucoProps) {
+      const lit = isLit(pipeT);
+      basucoProps.lighter.setFlame(lit, pipeT ?? 0);
+      basucoProps.pipe.setGlow(lit ? 0.6 + 0.4 * Math.sin((pipeT ?? 0) * 9) ** 2 : Math.max(0, 1 - ((pipeT ?? 0) - BASUCO.bend - BASUCO.light)));
+    }
     const k = Math.min(1, dt * 12);
     for (const key of Object.keys(pose)) pose[key] = lerp(pose[key], target[key], k);
 
@@ -514,6 +547,8 @@ export function createCharacter(initial = DEFAULT_LOOK) {
       build();
     },
     setSmoking,
+    setBasuco,
+    pipeBowl(target) { return basucoProps ? basucoProps.pipe.top.getWorldPosition(target) : null; },
     cigaretteTip(target) { return cigarette ? cigarette.tip.getWorldPosition(target) : null; },
     mouth(target) {
       return target.copy(head.localToWorld(_mouthOffset.set(0, -0.115, 0.26)));

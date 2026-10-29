@@ -103,7 +103,7 @@ test('tintico no crea sonido y dispose restaura el audio general', () => {
 
 test('los barridos de los sonidos de consumir parten del instante en que suenan', () => {
   // Sin un valor inicial, una rampa se cuenta desde el inicio del contexto y, minutos después, ya llegó a su destino.
-  for (const id of ['pastilla', 'pegante', 'hierba']) {
+  for (const id of ['pastilla', 'pegante', 'hierba', 'basuco']) {
     const { ctx, created, sound } = fixture();
     ctx.currentTime = 300;
     sound.playOnset(id);

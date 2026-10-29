@@ -11,6 +11,11 @@ import { createRealisticCharacter, REALISTIC_SCALE } from '../character/Realisti
 import { PlayerRagdoll } from '../systems/PlayerRagdoll.js';
 import { WEAPONS, DEFAULT_WEAPON, COMBO_WINDOW, CHAIN_AT, comboStep } from '../data/weapons.js';
 import { SMOKE_DURATION, PUFF_INTERVAL, FIRST_PUFF, PUFF, PUFF_LENGTH, isExhaling, smokable, SmokePuffs } from '../character/smoking.js';
+import { BASUCO, BASUCO_LENGTH, BASUCO_TOTAL, isBasucoExhaling } from '../character/pipe.js';
+
+const emit = (type, detail) => {
+  if (typeof window !== 'undefined' && window.dispatchEvent) window.dispatchEvent(new CustomEvent(type, { detail }));
+};
 
 // Energía que gasta cada golpe (puños o arma).
 const ATTACK_ENERGY = 8;
@@ -78,6 +83,104 @@ export class Player {
     this._puffTimer = 0;
     this._smokeAt = new THREE.Vector3();
     this._smokeVelocity = new THREE.Vector3();
+
+    // Basuco: `basuco` = { t, inhaled, stowed } mientras dura la pipa y la bocanada
+    this.basuco = null;
+    // Paranoia (0 a 1) y la alucinación más cercana; las pone PsychosisSystem
+    this.paranoia = 0;
+    this.paranoiaFocus = null;
+    this._glance = 0;          // giro de la cabeza (rad, + a su izquierda)
+    this._glanceTarget = 0;
+    this._glanceTimer = 0;
+    this._glanceSide = 1;
+  }
+
+  /** Humo en la escena (cigarrillo, porro y basuco); se crea la primera vez que hace falta */
+  _puffs() { return this._smoke ??= new SmokePuffs(this.scene); }
+
+  /**
+   * Fuma basuco en pipa: se agacha, prende con el encendedor, aspira y bota el humo. Se queda
+   * quieto mientras tiene la pipa. false si está ocupado.
+   */
+  startBasuco() {
+    if (this.basuco || this.action || this.attack || this.isStunned) return false;
+    this.basuco = { t: 0, inhaled: false, stowed: false };
+    this.playAction('basuco', BASUCO_LENGTH);
+    // necesita las dos manos: el cigarrillo se guarda mientras tanto
+    if (this.smoking) { this.procedural.setSmoking?.(false); this._realistic?.setSmoking?.(false); }
+    this.procedural.setBasuco?.(true);
+    this._realistic?.setBasuco?.(true);
+    return true;
+  }
+
+  /** Guarda la pipa y el encendedor (y devuelve el cigarrillo a la mano si lo tenía) */
+  _stowBasuco() {
+    if (!this.basuco || this.basuco.stowed) return;
+    this.basuco.stowed = true;
+    if (this.action === 'basuco') { this.action = null; this.actionTimer = 0; }
+    this.procedural.setBasuco?.(false);
+    this._realistic?.setBasuco?.(false);
+    if (this.smoking) {
+      this.procedural.setSmoking?.(true, this.smoking.kind);
+      this._realistic?.setSmoking?.(true, this.smoking.kind);
+    }
+  }
+
+  stopBasuco() {
+    this._stowBasuco();
+    this.basuco = null;
+  }
+
+  _updateBasuco(dt) {
+    const b = this.basuco;
+    if (!b) return;
+    if (this.action === 'dormir' || this.isStunned) { this.stopBasuco(); return; }
+    b.t += dt;
+    // el efecto llega al terminar de aspirar
+    if (!b.inhaled && b.t >= BASUCO.bend + BASUCO.light) {
+      b.inhaled = true;
+      emit('substance-consumed', { id: 'basuco' });
+    }
+    if (b.t >= BASUCO_LENGTH) this._stowBasuco();
+    const puffs = this._puffs();
+    // humo de la cazoleta mientras arde
+    if (!b.stowed && b.t > BASUCO.bend && b.t < BASUCO.bend + BASUCO.light
+      && (this._wispTimer -= dt) <= 0 && this.character.pipeBowl?.(this._smokeAt)) {
+      this._wispTimer = 0.08;
+      puffs.emit(this._smokeAt, { size: 0.03, grow: 0.2, life: 1.8, alpha: 0.3, color: '#e4e2dc' });
+    }
+    // una bocanada espesa al bajar las manos
+    if (isBasucoExhaling(b.t) && (this._puffTimer -= dt) <= 0 && this.character.mouth?.(this._smokeAt)) {
+      this._puffTimer = 0.04;
+      const yaw = this.root.rotation.y;
+      const fade = 1 - (b.t - BASUCO.bend - BASUCO.light) / BASUCO.exhale;
+      this._smokeVelocity.set(Math.sin(yaw), -0.05, Math.cos(yaw)).multiplyScalar(0.7 * Math.max(0.2, fade));
+      puffs.emit(this._smokeAt, { velocity: this._smokeVelocity, size: 0.07, grow: 0.7, life: 3.2, alpha: 0.5 * Math.max(0.3, fade), color: '#e9e7e2' });
+    }
+    if (b.t >= BASUCO_TOTAL) this.basuco = null;
+  }
+
+  /** Con paranoia, la cabeza voltea de golpe a un lado y al otro, o hacia lo que le pareció ver */
+  _updateGlance(dt) {
+    const p = this.paranoia ?? 0;
+    if (p < 0.05) {
+      this._glanceTarget = 0;
+    } else if ((this._glanceTimer -= dt) <= 0) {
+      this._glanceTimer = 0.45 + Math.random() * (1.6 - p);
+      const focus = this.paranoiaFocus;
+      if (focus && Math.random() < 0.5) {
+        // ángulo de la sombra respecto al frente del personaje (+ a su izquierda)
+        const yaw = Math.atan2(focus.x - this.position.x, focus.z - this.position.z) - this.root.rotation.y;
+        this._glanceTarget = THREE.MathUtils.clamp(Math.atan2(Math.sin(yaw), Math.cos(yaw)), -1.2, 1.2);
+      } else if (Math.random() < 0.2) {
+        this._glanceTarget = 0;
+      } else {
+        this._glanceSide = -this._glanceSide;
+        this._glanceTarget = this._glanceSide * (0.55 + Math.random() * 0.55) * Math.min(1, 0.4 + p);
+      }
+    }
+    // giros bruscos, no suaves
+    this._glance += (this._glanceTarget - this._glance) * Math.min(1, dt * 14);
   }
 
   /**
@@ -99,6 +202,9 @@ export class Player {
     this._realistic?.setSmoking?.(false);
   }
 
+  /** Lo que tiene en la mano izquierda: el cigarrillo se guarda mientras usa la pipa */
+  get _holdingCigarette() { return !!this.smoking && !(this.basuco && !this.basuco.stowed); }
+
   _updateSmoking(dt) {
     const smoke = this.smoking;
     if (smoke) {
@@ -107,9 +213,7 @@ export class Player {
       if (smoke.left <= 0) {
         this.stopSmoking();
         const { emoji, name } = smokable(smoke.kind);
-        if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('toast', { detail: { text: `${emoji} Se acabó el ${name}.`, type: 'info' } }));
-        }
+        emit('toast', { text: `${emoji} Se acabó el ${name}.`, type: 'info' });
         return;
       }
       // el reloj de la próxima calada corre también durante la actual: una cada 30 s exactos
@@ -119,13 +223,19 @@ export class Player {
         if (smoke.puff >= PUFF_LENGTH + PUFF.exhale) smoke.puff = null;
       } else if (smoke.nextPuff <= 0 && !this.attack && !this.isStunned && !this.action) {
         smoke.puff = 0;
+        smoke.inhaled = false;
         smoke.nextPuff += PUFF_INTERVAL;
       }
+      // el porro pega en cada calada (y la siguiente renueva el efecto)
+      const { effect } = smokable(smoke.kind);
+      if (effect && isExhaling(smoke.puff) && !smoke.inhaled) {
+        smoke.inhaled = true;
+        emit('substance-consumed', { id: effect });
+      }
     }
-    if (!smoke && !this._smoke) return;
-    this._smoke ??= new SmokePuffs(this.scene);
-    if (smoke) {
+    if (smoke && this._holdingCigarette) {
       const color = smokable(smoke.kind).smoke;
+      this._puffs();
       // hilo de humo que sale de la brasa
       if ((this._wispTimer -= dt) <= 0 && this.character.cigaretteTip?.(this._smokeAt)) {
         this._wispTimer = 0.12;
@@ -140,7 +250,6 @@ export class Player {
         this._smoke.emit(this._smokeAt, { velocity: this._smokeVelocity, size: 0.05, grow: 0.45, life: 2.6, alpha: 0.38 * Math.max(0.3, fade), color });
       }
     }
-    this._smoke.update(dt);
   }
 
   get weapon() { return WEAPONS[this.equippedWeapon] ?? WEAPONS[DEFAULT_WEAPON]; }
@@ -196,7 +305,8 @@ export class Player {
       this.character = this._realistic;
       this.modelScale = REALISTIC_SCALE;
       this._realistic.setWeapon?.(this.equippedWeapon === DEFAULT_WEAPON ? null : this.equippedWeapon);
-      this._realistic.setSmoking?.(!!this.smoking, this.smoking?.kind);
+      this._realistic.setSmoking?.(this._holdingCigarette, this.smoking?.kind);
+      this._realistic.setBasuco?.(!!this.basuco && !this.basuco.stowed);
     } else {
       this.root.remove(this.character.group);
       this.character = this.procedural;
@@ -367,6 +477,7 @@ export class Player {
     if (this.ragdoll?.active) {
       this.attack = null;
       this.stopSmoking(); // el cigarrillo se cae al salir volando
+      this.stopBasuco();
       this._smoke?.update(dt);
       this.velocity?.set(0, 0, 0);
       this.ragdoll.update(dt, collisions);
@@ -393,8 +504,12 @@ export class Player {
     }
     this._updateAttack(dt, npcs);
     this._updateSmoking(dt);
+    this._updateBasuco(dt);
+    this._smoke?.update(dt);
+    this._updateGlance(dt);
 
-    const { x = 0, z = 0 } = this.input?.axis ?? {};
+    // con la pipa en la boca se queda quieto
+    const { x = 0, z = 0 } = this.basuco && !this.basuco.stowed ? {} : (this.input?.axis ?? {});
     const stunned = this._impactTime > 0;
     const moving = !stunned && (x !== 0 || z !== 0);
     const running = Boolean(this.input?.isRunning && moving);
@@ -493,7 +608,9 @@ export class Player {
       running,
       action: stunned ? null : (this.sorting ? 'buscar' : this.action),
       attack: this.attack,
-      smoke: this.smoking,
+      smoke: this._holdingCigarette ? this.smoking : null,
+      basuco: this.basuco && !this.basuco.stowed ? this.basuco.t : null,
+      look: this._glance,
       t: this.time,
       load: this.load,
       dirt: this.stats ? Math.max(0, (40 - this.stats.higiene) / 40) : 0

@@ -9,6 +9,9 @@ import { Input } from '../core/Input.js';
 import { Player } from '../entities/Player.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { normalizeLook } from '../character/look.js';
+import { SubstanceEffects } from '../systems/SubstanceEffects.js';
+import { PsychosisSystem } from '../systems/PsychosisSystem.js';
+import { SUBSTANCE_EFFECTS } from '../data/substanceEffects.js';
 
 // Necesidades llenas; el resto de sistemas que el jugador consulta no existen en la sala.
 export function createStats() {
@@ -57,6 +60,20 @@ export class Sala {
     this.player.position.set(0, 0, 0);
     this.player.root.position.copy(this.player.position);
     this.setHour(this.hour);
+
+    // Lo que se consume se ve igual que en el juego: efectos de sustancias y la paranoia del basuco
+    this.effects = new SubstanceEffects({ canvas, audio: null });
+    this.psychosis = new PsychosisSystem(this.scene, this.player, this.stats, null, null);
+    window.addEventListener('substance-consumed', (e) => {
+      const paranoia = SUBSTANCE_EFFECTS[e.detail?.id]?.paranoia;
+      if (paranoia) this.psychosis.induce(paranoia.seconds, paranoia.severity);
+    });
+  }
+
+  /** Corta efectos y paranoia (como al dormir en el juego) */
+  calm() {
+    this.effects.end();
+    this.psychosis.clearInduced();
   }
 
   /** 13 = mediodía, 22 = noche */
@@ -107,13 +124,17 @@ export class Sala {
     for (const npc of this.npcs) npc.update(dt, { player: this.player });
     for (const update of this.updaters) update(dt);
     this.cameraRig.follow(this.player.position, real, null, this.player.speed, this.input.isRunning);
+    this.psychosis.update(dt, this.cameraRig);
+    this.effects.update(dt);
     this.sceneMgr.followTarget?.(this.player.position, this.hour);
     this.sceneMgr.update?.(dt);
     this.input.endFrame();
 
     const camera = this.cameraRig.camera;
     for (const fn of this.beforeRender) fn(camera);
+    this.effects.beforeRender(camera);
     this.renderer.render(this.scene, camera, this.player.root, [this.sceneMgr.sun]);
+    this.effects.afterRender(camera);
     for (const fn of this.afterRender) fn(camera);
   };
 }

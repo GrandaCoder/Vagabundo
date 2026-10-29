@@ -29,13 +29,19 @@ function fumar(sala) {
         texto: `${s.emoji} Prender ${s.name}`,
         hacer: () => { p.stopSmoking(); p.startSmoking(id); toast(`${s.emoji} Prendiste un ${s.name}`); }
       })),
+      { texto: '💨 Basuco', hacer: () => { if (p.startBasuco()) toast('💨 Prendiste la pipa'); } },
       { texto: '⏩ Calada ya', hacer: () => { if (p.smoking) p.smoking.nextPuff = 0; } },
       { texto: '⏭ Casi se acaba', hacer: () => { if (p.smoking) p.smoking.left = 5; } },
-      { texto: 'Apagar', hacer: () => p.stopSmoking() }
+      { texto: 'Apagar', hacer: () => p.stopSmoking() },
+      { texto: '😌 Calmar', hacer: () => sala.calm() }
     ],
-    estado: () => p.smoking
-      ? `${p.smoking.kind}: quedan ${Math.ceil(p.smoking.left)} s\npróxima calada en ${Math.max(0, p.smoking.nextPuff).toFixed(1)} s${p.smoking.puff != null ? `\ncalada t=${p.smoking.puff.toFixed(2)}` : ''}`
-      : 'sin fumar'
+    estado: () => [
+      p.smoking
+        ? `${p.smoking.kind}: quedan ${Math.ceil(p.smoking.left)} s\npróxima calada en ${Math.max(0, p.smoking.nextPuff).toFixed(1)} s${p.smoking.puff != null ? `\ncalada t=${p.smoking.puff.toFixed(2)}` : ''}`
+        : 'sin fumar',
+      p.basuco ? `basuco t=${p.basuco.t.toFixed(1)}` : '',
+      sala.psychosis.induced ? `paranoia: ${Math.ceil(sala.psychosis.induced.left)} s  sombras: ${sala.psychosis.shadowPeople.length}` : ''
+    ].filter(Boolean).join('\n')
   };
 }
 
@@ -54,7 +60,7 @@ export const PRUEBAS = [
   {
     id: 'fumar',
     nombre: 'Fumar',
-    descripcion: 'Cigarrillo y porro en la mano, caladas y humo. Sube la velocidad para no esperar 30 s.',
+    descripcion: 'Cigarrillo, porro y basuco: caladas, humo y efectos. Sube la velocidad para no esperar 30 s.',
     montar: fumar
   },
   {
@@ -81,17 +87,14 @@ export const PRUEBAS = [
   {
     id: 'efectos',
     nombre: 'Efectos de sustancias',
-    descripcion: 'La imagen de cada sustancia sin tener que conseguirla.',
-    async montar(sala) {
-      const { SubstanceEffects } = await import('../systems/SubstanceEffects.js');
-      const fx = new SubstanceEffects({ canvas: sala.canvas, audio: null });
-      sala.updaters.add((dt) => fx.update(dt));
-      sala.beforeRender.add((camera) => fx.beforeRender(camera));
-      sala.afterRender.add((camera) => fx.afterRender(camera));
+    descripcion: 'La imagen de cada sustancia sin tener que conseguirla. El basuco trae paranoia.',
+    montar(sala) {
+      // como en el juego: el evento dispara la imagen y, con el basuco, la paranoia
+      const consume = (id) => window.dispatchEvent(new CustomEvent('substance-consumed', { detail: { id } }));
       return {
         acciones: [
-          ...Object.keys(SUBSTANCE_EFFECTS).map((id) => ({ texto: id, hacer: () => fx.consume(id) })),
-          { texto: 'Terminar', hacer: () => fx.end() }
+          ...Object.keys(SUBSTANCE_EFFECTS).map((id) => ({ texto: id, hacer: () => consume(id) })),
+          { texto: 'Terminar', hacer: () => sala.calm() }
         ]
       };
     }

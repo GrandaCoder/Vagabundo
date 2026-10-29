@@ -114,6 +114,11 @@ export const ITEMS = {
     id: 'pastilla', name: 'Pastilla', weight: 0.05, value: 8000,
     consumable: 'vicio', amount: 60, animo: 40, salud: -5, substance: true
   },
+  basuco: {
+    id: 'basuco', name: 'Basuco', weight: 0.02, value: 4000,
+    consumable: 'vicio', amount: 70, animo: 30, energia: 15, salud: -6, hambre: -10, substance: true,
+    desc: 'Se fuma en pipa, agachado. Sube el ánimo de golpe pero trae paranoia y alucinaciones.'
+  },
   cigarrillo: {
     id: 'cigarrillo', name: 'Cigarrillo suelto', weight: 0.01, value: 300,
     consumable: 'vicio', amount: 35, salud: -1
@@ -168,7 +173,7 @@ const ITEM_EMOJIS = {
   agua: '💧', refresco: '🥤', cafe: '☕', lataComida: '🐟', vendaje: '🩹',
   reloj: '⌚', moneda: '🪙', anillo: '💍', jabon: '🧼', cepillo: '🪥',
   empanada: '🥟', morcilla: '🌭', papaCriolla: '🥔', aguapanela: '🍵',
-  retrovisor: '🪞', radio: '📻', radioTransistor: '📻', pilas: '🔋', popo: '💩', cigarrillo: '🚬',
+  retrovisor: '🪞', radio: '📻', radioTransistor: '📻', pilas: '🔋', popo: '💩', cigarrillo: '🚬', basuco: '💨',
   curita: '🩹', hierba: '🌿', rifa: '🎟️', arma: '🗡️', cuchillo: '🔪', botella_picada: '🍾'
 };
 for (const item of Object.values(ITEMS)) {
@@ -202,7 +207,7 @@ const ICONS = {
   lata: 'recycle', botella: 'recycle', carton: 'package', chatarra: 'wrench', cable: 'flame',
   reloj: 'watch', moneda: 'coins', anillo: 'sparkles', retrovisor: 'eye', radio: 'phone', radioTransistor: 'radio', pilas: 'flame',
   pan: 'bread', empanada: 'food', morcilla: 'food', papaCriolla: 'food', aguapanela: 'coffee', lataComida: 'food', agua: 'water', refresco: 'water', cafe: 'coffee',
-  vendaje: 'bandage', jabon: 'bath', cepillo: 'bath', cigarrillo: 'flame',
+  vendaje: 'bandage', jabon: 'bath', cepillo: 'bath', cigarrillo: 'flame', basuco: 'flame',
   lona: 'tent', madera: 'layers', colchon: 'bed', vela: 'flame', popo: 'alert-triangle',
   curita: 'bandage', hierba: 'flame', rifa: 'dice', arma: 'wrench', cuchillo: 'wrench', botella_picada: 'recycle'
 };
@@ -241,7 +246,8 @@ export const LOOT_RARE = [
 export const LOOT_SUBSTANCE = [
   { item: 'tintico',  weight: 50 },
   { item: 'pegante',  weight: 30 },
-  { item: 'pastilla', weight: 20 }
+  { item: 'pastilla', weight: 20 },
+  { item: 'basuco',   weight: 20 }
 ];
 
 // ===== TIENDA LA ESQUINITA (precios en COP) =====

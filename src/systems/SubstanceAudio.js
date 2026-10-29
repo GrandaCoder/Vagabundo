@@ -91,6 +91,37 @@ const SOUNDS = {
         s.osc(type, f).connect(s.gain(v)).connect(tremolo);
       }
     }
+  },
+  basuco: {
+    onset(s) {
+      // Chispazo, crujido de la pipa y una aspirada corta y fuerte.
+      for (let k = 0; k < 7; k++) {
+        const at = 0.05 + k * 0.11 + Math.random() * 0.05;
+        const g = s.gain(0);
+        g.gain.setValueAtTime(0.22, s.now + at);
+        g.gain.exponentialRampToValueAtTime(0.0001, s.now + at + 0.025);
+        s.noise().connect(s.filter('highpass', 2500)).connect(g).connect(s.out);
+      }
+      const bp = s.filter('bandpass', 500, 1.4);
+      bp.frequency.setValueAtTime(500, s.now + 0.2);
+      bp.frequency.exponentialRampToValueAtTime(1400, s.now + 1.6);
+      const inhale = s.gain(0);
+      inhale.gain.setValueAtTime(0.0001, s.now + 0.2);
+      inhale.gain.exponentialRampToValueAtTime(0.25, s.now + 1.2);
+      inhale.gain.exponentialRampToValueAtTime(0.0001, s.now + 1.8);
+      s.noise().connect(bp).connect(inhale).connect(s.out);
+    },
+    sustain(s) {
+      // Pitido agudo de oídos y un pulso grave acelerado, como el corazón.
+      const ring = s.gain(0.01);
+      s.lfo(0.4, 0.005, ring.gain);
+      s.osc('sine', 7400).connect(ring).connect(s.bus);
+      const lp = s.filter('lowpass', 180, 1);
+      lp.connect(s.bus);
+      const pulse = s.gain(0);
+      s.lfo(2.1, 0.12, pulse.gain);
+      s.osc('sine', 52).connect(pulse).connect(lp);
+    }
   }
 };
 

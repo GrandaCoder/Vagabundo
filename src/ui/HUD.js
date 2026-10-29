@@ -466,6 +466,12 @@ else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] So
       this._toast(`${smokable(game.player.smoking.kind).emoji} Ya tienes uno prendido.`, 'info');
       return;
     }
+    // el basuco se fuma en pipa: si está ocupado (pelea, otra acción) no se gasta
+    const pipe = item.id === 'basuco';
+    if (pipe && game.player?.startBasuco && !game.player.startBasuco()) {
+      this._toast('💨 Ahora no: tienes las manos ocupadas.', 'info');
+      return;
+    }
     if (item.consumable) {
       if (item.consumable === 'hambre' && game.stats.canEat?.() === false) {
         this._toast('No puedes comer mientras tienes náuseas.', 'warning');
@@ -485,11 +491,13 @@ else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] So
       const verb = isDrink ? '🥤 Bebiste' : item.substance ? '🚬 Consumiste' : item.consumable === 'salud' ? '🩹 Te aplicaste' : '🍴 Comiste';
       // el cigarrillo y el porro no se comen: se quedan en la mano y se fuman caminando
       if (smokes) game.player?.startSmoking?.(item.id);
-      else game.player?.playAction?.(isDrink ? 'beber' : 'comer', 1.2);
+      else if (!pipe) game.player?.playAction?.(isDrink ? 'beber' : 'comer', 1.2);
       const lit = smokable(item.id);
-      this._toast(smokes ? `${lit.emoji} Prendiste un ${lit.name}` : `${verb}: ${item.name}`, 'info');
+      this._toast(smokes ? `${lit.emoji} Prendiste un ${lit.name}` : pipe ? '💨 Prendiste la pipa' : `${verb}: ${item.name}`, 'info');
       this._renderInventory(inv);
-      if (item.substance) window.dispatchEvent(new CustomEvent('substance-consumed', { detail: { id: itemId } }));
+      // lo que se fuma pega al aspirar: el jugador avisa en cada calada o al soltar la pipa
+      const smokedLater = (smokes || pipe) && game.player?.startSmoking;
+      if (item.substance && !smokedLater) window.dispatchEvent(new CustomEvent('substance-consumed', { detail: { id: itemId } }));
     } else if (item.cure) {
       game.diseases?.cure?.(item.cure);
       inv.remove(itemId, 1);

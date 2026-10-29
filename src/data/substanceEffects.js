@@ -39,5 +39,18 @@ export const SUBSTANCE_EFFECTS = Object.freeze({
     }),
     trail: Object.freeze({ keep: 0.7, opacity: 0.3, sway: 0, breathe: 0.008 }),
     camera: Object.freeze({ fov: 3, roll: 0.008, hz: 0.12 })
+  }),
+  // Subidón paranoico: frío, duro, visión de túnel con un pulso rojizo lento en los bordes.
+  // `paranoia` dispara las alucinaciones de PsychosisSystem (sombras, susurros, mirar a los lados).
+  basuco: Object.freeze({
+    seconds: 40,
+    filter: (i) => ({ contrast: 1 + 0.35 * i, saturate: 1 - 0.45 * i, brightness: 1 - 0.1 * i, hueRotate: -12 * i }),
+    overlay: (i, t) => ({
+      background: `radial-gradient(ellipse at center, transparent ${30 - 6 * Math.sin(t * 2.6)}%, rgba(70,0,10,.55) 62%, rgba(5,0,2,.95) 100%)`,
+      mixBlendMode: 'multiply', opacity: 0.85 * i
+    }),
+    trail: Object.freeze({ keep: 0.6, opacity: 0.35, sway: 6, breathe: 0.012 }),
+    camera: Object.freeze({ fov: 5, roll: 0.015, hz: 0.45 }),
+    paranoia: Object.freeze({ seconds: 50, severity: 0.8 })
   })
 });
