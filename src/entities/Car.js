@@ -5,21 +5,23 @@ import { makeVehicle } from '../world/bogota/vehicles.js';
 import { createImportedModel, disposeImportedInstance } from '../utils/ImportedModels.js';
 
 export class Car {
-  constructor(scene, position, rotation = 0, { traffic = false } = {}) {
+  constructor(scene, position, rotation = 0, { traffic = false, kind = null } = {}) {
     this.scene = scene;
     this.used = false;
     this.cooldown = 0;
     this.traffic = traffic;
+    this.pursuit = false;
 
     this.group = new THREE.Group();
     this.group.position.copy(position);
     this.group.rotation.y = rotation;
     scene.add(this.group);
 
-    // Carro realista (portado de rebusque): particular o taxi amarillo, frente hacia +X local
-    const kind = Math.random() < 0.3 ? 'taxi' : 'carro';
-    this.modelKind = kind === 'taxi' ? 'car2' : 'car1';
-    const v = makeVehicle(kind, Math.floor(Math.random() * 8), { beams: true });
+    // Carro realista (portado de rebusque): particular, taxi o policía; frente hacia +X local
+    const resolvedKind = kind ?? (Math.random() < 0.3 ? 'taxi' : 'carro');
+    this.kind = resolvedKind;
+    this.modelKind = resolvedKind === 'taxi' ? 'car2' : 'car1';
+    const v = makeVehicle(resolvedKind, Math.floor(Math.random() * 8), { beams: true });
     this.vehicle = v;
     if (!traffic && v.beam) v.beam.visible = false;
     this.length = v.length;
@@ -78,7 +80,8 @@ export class Car {
    * @returns { items, caught }
    */
   steal(caughtMult = 1) {
-    if (this.used || this.cooldown > 0) return null;
+    // A una patrulla no se le roban los espejos.
+    if (this.kind === 'police' || this.used || this.cooldown > 0) return null;
 
     const items = [];
     const mirrorCount = Math.random() < 0.5 ? 2 : 1;
@@ -115,6 +118,12 @@ export class Car {
     if (this.vehicle.tailMat && braking !== this._braking) {
       this.vehicle.tailMat.color.set('#ff1a12').multiplyScalar(braking ? 3.5 : 1.4);
       this._braking = braking;
+    }
+    const lights = this.vehicle.policeLights;
+    if (lights) {
+      const on = Math.floor(performance.now() / (this.pursuit ? 90 : 160)) % 2 === 0;
+      lights.blue.color.set(on ? '#1a6cff' : '#061028').multiplyScalar(on ? 4 : 0.35);
+      lights.red.color.set(on ? '#061028' : '#ff1a2a').multiplyScalar(on ? 0.35 : 4);
     }
   }
 

@@ -107,6 +107,7 @@ export class Game {
       this.player, this.inventory, this.stats, this.audio,
       this.diseases, this.talents, this.crafting
     );
+    this.interaction.getTraffic = () => this.traffic;
 
     this.steal = new StealSystem(this);
 
@@ -137,6 +138,7 @@ export class Game {
     window.addEventListener('open-recycler', () => openRecycler(this));
     window.addEventListener('open-shop', (e) => openShop(this, e.detail?.target));
     window.addEventListener('open-cambuche', () => openCambuche(this));
+    window.addEventListener('police-arrest', () => this._policeArrest());
     window.addEventListener('open-radio-modal', () => openRadioModal(this));
     window.addEventListener('keydown', (e) => {
       if (e.repeat || e.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
@@ -177,6 +179,7 @@ export class Game {
     this.isSleeping = false;
     this.deathCount = 0;
     this._deathPending = false;
+    this._arrestPending = false;
     this._wasNight = null;
 
     this._lastTime = performance.now();
@@ -382,7 +385,7 @@ export class Game {
 
   /** El mundo se congela mientras hay un menú o el creador abierto */
   get paused() {
-    return this._loading || this._deathPending || this.menu.isOpen || this.creator.isOpen || !!this.inventoryUI?.isOpen || !!this.hud?._talentOpen || !!this.hud?._craftOpen || !!this.hud?._dealerOpen;
+    return this._loading || this._deathPending || this._arrestPending || this.menu.isOpen || this.creator.isOpen || !!this.inventoryUI?.isOpen || !!this.hud?._talentOpen || !!this.hud?._craftOpen || !!this.hud?._dealerOpen;
   }
 
   _spawnEntities() {
@@ -484,7 +487,7 @@ export class Game {
       this.interaction.register(car);
     }
     if (district.getTrafficRoutes) {
-      this.traffic = new TrafficSystem(this.sceneMgr.scene, district.getTrafficRoutes());
+      this.traffic = new TrafficSystem(this.sceneMgr.scene, district.getTrafficRoutes(), { policeCount: 2 });
       this.traffic.setParkedCars(this.cars);
       for (const { car } of this.traffic.vehicles) this.interaction.register(car);
     }
@@ -687,7 +690,7 @@ export class Game {
   }
 
   _handleDeath() {
-    if (this._deathPending) return true;
+    if (this._deathPending || this._arrestPending) return true;
     if (this.stats.salud > 0) return false;
     if (this.player.isRagdollActive) return false;
 
@@ -723,6 +726,56 @@ export class Game {
     });
     window.dispatchEvent(new CustomEvent('death'));
     return true;
+  }
+
+  _policeArrest() {
+    if (this._arrestPending || this._deathPending) return;
+    this._arrestPending = true;
+    this.input.keys = {};
+    this.input.endFrame();
+    this.audio.updateSteps(false, false);
+    if (this.interaction.boostActive) this.interaction._endBoost();
+    this.menu.open({
+      title: 'Te atrapó la Policía',
+      sub: 'Una patrulla te alcanzó.',
+      ic: 'alert',
+      dismissible: false,
+      render: () => ({
+        body: el('div', {},
+          el('p', { text: 'Te persiguieron tras el robo y te alcanzaron. Confiscaron todo tu inventario y el dinero que llevabas.' }),
+          el('p', { text: 'Te sueltan en otro punto de la ciudad. La próxima vez, pierde a la patrulla.' })),
+        foot: [button('Continuar', { primary: true, onClick: () => this._finishArrest() })]
+      })
+    });
+  }
+
+  _randomWalkablePosition() {
+    const district = this.world.active;
+    const fallback = district?.reserved?.respawn ?? district?.reserved?.spawn ?? { x: 32, z: 32 };
+    // Andenes, plazas y parques lejos de los sitios reservados del barrio.
+    const grid = district?.getSpawnGrid?.() ?? [];
+    const spot = grid.length ? grid[Math.floor(Math.random() * grid.length)] : fallback;
+    return new THREE.Vector3(spot.x, district?.getGroundHeight?.(spot.x, spot.z) ?? 0, spot.z);
+  }
+
+  _finishArrest() {
+    if (!this._arrestPending) return;
+    this.inventory.clear();
+    this.stats.dinero = 0;
+    const pos = this._randomWalkablePosition();
+    this.player.position.copy(pos);
+    this.player.root.position.copy(this.player.position);
+    this.player.clearVehicleImpact?.();
+    if (this.dog?.isFriend) { this.dog.wake(); this.dog.resetNear(this.player.position); }
+    this.cameraRig._snap = true;
+    this.cameraRig.follow(this.player.position, 0, this.collisions);
+    this.interaction.currentTarget = null;
+    this.interaction.currentTargetType = null;
+    this.input.keys = {};
+    this.input.endFrame();
+    this.traffic?.endPursuit?.();
+    this._arrestPending = false;
+    this.menu.close();
   }
 
   _respawn() {
