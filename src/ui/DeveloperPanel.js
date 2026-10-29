@@ -1,6 +1,9 @@
 import {el} from './dom.js';
 import {DEBUG_SYSTEMS} from '../core/DebugSystems.js';
 
+// Perfiles de luz de Slop para revisar la ciudad sin cambiar el reloj guardado.
+const TIME_PROFILES=[['golden','🌇 Golden hour'],['midday','☀️ Mediodía'],['blue-hour','🌆 Blue hour'],['night','🌙 Noche'],[null,'🕒 Reloj']];
+
 export class DeveloperPanel {
  constructor(game){
   this.game=game;this.opened=false;this.controls=new Map();
@@ -12,10 +15,12 @@ export class DeveloperPanel {
    input.addEventListener('change',async()=>{try{await game.debugSystems.setEnabled(key,input.checked);this.status.textContent='';}catch(error){this.status.textContent=error.message;}finally{this.refresh();}});
    this.controls.set(key,input);this.content.append(el('label',{class:'dev-toggle'},input,el('span',{text:label})));
   }
+  this.timeButtons=TIME_PROFILES.map(([id,label])=>{const button=el('button',{type:'button',text:label,'data-profile':id??'clock',onclick:()=>{game.sceneMgr?.setTimeProfile?.(id);this.refresh();}});return button;});
+  if(game.sceneMgr?.setTimeProfile)this.content.append(el('p',{class:'dev-section',text:'Hora del día'}),el('div',{class:'dev-actions dev-time'},...this.timeButtons));
   this.lock=el('input',{type:'checkbox',checked:true});this.lock.addEventListener('change',()=>{game.renderer.adaptiveLocked=this.lock.checked?true:this.previousAdaptive;});
   this.resetButton=el('button',{type:'button',text:'Activar todo',onclick:async()=>{try{await game.debugSystems.reset();this.status.textContent='';}catch(error){this.status.textContent=error.message;}}});
   this.content.append(el('label',{class:'dev-toggle'},this.lock,el('span',{text:'Bloquear adaptación automática'})),this.metrics,
-   el('div',{class:'dev-actions'},el('button',{type:'button',text:'Reiniciar medición',onclick:()=>game.performanceHUD.metrics.reset()}),this.resetButton),el('p',{class:'dev-hint',text:'Sin guardar cambios. El clima y la hora siguen controlando la lluvia y las luces.'}),this.status);
+   el('div',{class:'dev-actions'},el('button',{type:'button',text:'Reiniciar medición',onclick:()=>game.performanceHUD.metrics.reset()}),this.resetButton),el('p',{class:'dev-hint',text:'Sin guardar cambios. La hora de prueba no cambia el reloj de la partida; «Reloj» vuelve a la hora real. El clima sigue controlando la lluvia.'}),this.status);
   this.fold=el('button',{type:'button',text:'−','aria-label':'Plegar panel','aria-expanded':'true',onclick:()=>{this.content.hidden=!this.content.hidden;this.fold.textContent=this.content.hidden?'+':'−';this.fold.setAttribute('aria-expanded',String(!this.content.hidden));}});
   this.panel=el('aside',{id:'developer-panel',hidden:true,'aria-label':'Herramientas de desarrollo'},el('header',{},el('strong',{text:'Desarrollo · sesión'}),this.fold,el('button',{type:'button',text:'×','aria-label':'Cerrar desarrollo',onclick:()=>this.close()})),this.content);
   document.body.append(this.button,this.panel);
@@ -38,6 +43,8 @@ export class DeveloperPanel {
   if(this.game.debugSystems.pending.size)this.status.textContent='Preparando cambio gráfico…';
   else if(this.status.textContent==='Preparando cambio gráfico…')this.status.textContent='';
   this.resetButton.disabled=this.game.debugSystems.pending.size>0;
+  const override=this.game.sceneMgr?._timeProfileOverride??null;
+  for(const button of this.timeButtons??[]){const id=button.getAttribute('data-profile'),active=(id==='clock'?null:id)===override;button.setAttribute('aria-pressed',String(active));}
  }
  tick(){const g=this.game;this.button.disabled=!g._running||g._loading;if(this.opened&&(g.paused||g.isSleeping||g._deathPending))this.close();if(!this.opened)return;
   const m=g.performanceHUD.metrics,info=g.renderer.instance.info.render,counts=g.debugSystems.counts();
