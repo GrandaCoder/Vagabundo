@@ -7,8 +7,29 @@ import { makeVehicle } from '../world/bogota/vehicles.js';
 import { createVehicleVisual } from '../vehicles/VehicleVisuals.js';
 import { VEHICLE_TYPES } from '../vehicles/VehicleTypes.js';
 
+const SHIRTS = [0x8a2b2b, 0x2b4a8a, 0x3a3a3a, 0xc9b27a, 0x2f6b45, 0xe0e0e0];
+const SKINS = [0xe0b08a, 0xc68a5e, 0x9a6440, 0x6e4529];
+
+/** Conductor sentado: torso y cabeza simples, visibles por las ventanas sin cargar un personaje completo. */
+function createSeatedDriver(height) {
+  const group = new THREE.Group();
+  group.name = 'Conductor';
+  const shirt = new THREE.MeshStandardMaterial({ color: SHIRTS[Math.floor(Math.random() * SHIRTS.length)], roughness: .9 });
+  const skin = new THREE.MeshStandardMaterial({ color: SKINS[Math.floor(Math.random() * SKINS.length)], roughness: .8 });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(.26, .42, .38), shirt);
+  torso.position.y = height - .62;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(.11, 10, 8), skin);
+  head.position.y = height - .3;
+  group.add(torso, head);
+  // Frente hacia +X local; en Colombia se conduce desde el lado izquierdo (−Z).
+  group.position.set(.05, 0, -.36);
+  return group;
+}
+
+const CRIOLLOS = new Set(['zapatico', 'huevito', 'amigofiel']);
+
 export class Car {
-  constructor(scene, position, rotation = 0, { traffic = false, variant = null, visualMode = 'slop', visualFactory = createVehicleVisual } = {}) {
+  constructor(scene, position, rotation = 0, { traffic = false, kind = null, variant = null, visualMode = 'slop', visualFactory = createVehicleVisual } = {}) {
     this.scene = scene;
     this.used = false;
     this.cooldown = 0;
@@ -17,25 +38,31 @@ export class Car {
     this.visualMode = visualMode;
     this._visualFactory = visualFactory;
     this._visualToken = 0;
+    this.pursuit = false;
 
     this.group = new THREE.Group();
     this.group.position.copy(position);
     this.group.rotation.y = rotation;
     scene.add(this.group);
 
-    // Carro realista (portado de rebusque): particular o taxi amarillo, frente hacia +X local
-    const kind = Math.random() < 0.3 ? 'taxi' : 'carro';
+    // Particular, taxi o patrulla; la carrocería del donante usa el frente +X local.
+    const resolvedKind = kind ?? (Math.random() < 0.3 ? 'taxi' : 'carro');
+    this.kind = resolvedKind;
+    if (resolvedKind === 'police') variant ??= 'police';
     this._variant = variant;
-    this.modelKind = (variant ?? (kind === 'taxi' ? 'taxi' : 'sedan')) === 'taxi' ? 'car2' : 'car1';
+    this.modelKind = (variant ?? (resolvedKind === 'taxi' ? 'taxi' : 'sedan')) === 'taxi' ? 'car2' : 'car1';
     this.visualSeed = Math.floor(Math.random() * 8);
-    const v = makeVehicle(kind, this.visualSeed, { beams: false });
+    const v = makeVehicle(resolvedKind, this.visualSeed, { beams: false });
     this.vehicle = v;
+    if (!traffic && v.beam) v.beam.visible = false;
     this.length = v.length;
     this.width = v.width;
     this.height = VEHICLE_TYPES[this.variant]?.height ?? 1.75;
     if (variant && VEHICLE_TYPES[variant]) {this.length=VEHICLE_TYPES[variant].length;this.width=VEHICLE_TYPES[variant].width;}
     v.group.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.group.add(v.group);
+    // Barra de luces propia de la patrulla, encima de cualquier carrocería (la del donante no la trae).
+    if (resolvedKind === 'police') this._buildLightbar();
 
     // Faros físicos: el gestor global selecciona sus proxies según distancia y calidad.
     this.headlights=[];
@@ -76,12 +103,45 @@ export class Car {
     this.group.add(this.marker);
     // Los estacionados dibujan su aro en el lote del banco de vehículos, como el tráfico su carrocería.
     if (!traffic && scene.isScene) this._releaseMarker = vehicleBatches(scene).addMarker(this.marker);
+
+    // Solo los carros en circulación llevan conductor; los estacionados activan la alarma.
+    this.driver = traffic ? createSeatedDriver(this.modelKind === 'car2' ? 1.45 : 1.62) : null;
+    if (this.driver) this.group.add(this.driver);
+  }
+
+  /** Muestra u oculta al conductor sentado (se baja del carro o vuelve a subir). */
+  setDriverInside(inside) {
+    this.driverInside = inside;
+    if (this.driver) this.driver.visible = inside && !this.driverHidden;
+  }
+
+  /** Punto junto a la puerta del conductor, en metros del mundo. */
+  driverDoor(target = new THREE.Vector3()) {
+    this.group.updateMatrixWorld();
+    return target.set(.05, 0, -(this.width / 2 + .55)).applyMatrix4(this.group.matrixWorld).setY(this.group.position.y);
+  }
+
+  _buildLightbar() {
+    const roof = (VEHICLE_TYPES.police?.height ?? 1.75) + .02, width = this.width;
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(.85, .1, width - .35), new THREE.MeshStandardMaterial({ color: '#101214', roughness: .4, metalness: .65 }));
+    bar.position.set(-.2, roof, 0);
+    const blue = new THREE.MeshBasicMaterial({ color: new THREE.Color('#1a6cff').multiplyScalar(3) });
+    const red = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff1a2a').multiplyScalar(3) });
+    const left = new THREE.Mesh(new THREE.BoxGeometry(.35, .1, .28), blue), right = new THREE.Mesh(new THREE.BoxGeometry(.35, .1, .28), red);
+    left.position.set(-.2, roof + .06, .26); right.position.set(-.2, roof + .06, -.26);
+    this.lightbar = new THREE.Group();
+    this.lightbar.name = 'Barra de luces de patrulla';
+    this.lightbar.add(bar, left, right);
+    this.group.add(this.lightbar);
+    this.policeLights = { blue, red };
   }
 
   get position() { return this.group.position; }
   get variant() { return this._variant ?? (this.modelKind === 'car2' ? 'taxi' : 'sedan'); }
 
   preloadModel() {
+    // Los carros criollos estacionados (Zapatico, Huevito, Amigo Fiel) no existen en el donante: conservan su carrocería.
+    if (!this._variant && CRIOLLOS.has(this.vehicle.model)) return this._modelPromise ??= Promise.resolve().then(()=>{if(!this.traffic&&!this._disposed)this.prepareDrivingVisual();});
     return this._modelPromise ??= this.setVisualMode(this.visualMode).then(()=>{if(!this.traffic&&!this._disposed)this.prepareDrivingVisual();});
   }
 
@@ -104,6 +164,8 @@ export class Car {
       this.vehicle=next;this.visualMode=mode;
       this.importedModel=mode==='actual'?next.group:undefined;
       this.group.remove(previous.group);previous.dispose();next.activate?.();
+      // Los vidrios del donante son oscuros: el conductor sentado no se vería y solo sumaría dibujos.
+      this.driverHidden=true;if(this.driver)this.driver.visible=false;
       this.syncHeadlights();
       settled=true;return true;
     }};
@@ -118,6 +180,8 @@ export class Car {
     if(this._night===!!night)return;
     this._night=!!night;this.vehicle.setNight?.(this._night);
     for(const light of this.headlights)light.intensity=this._night?650:0;
+    // Carrocerías criollas: sus reflejos de faro solo se ven de noche (los faros reales son las luces de arriba).
+    for(const flare of this.vehicle.flares??[])flare.visible=this._night;
   }
 
   /**
@@ -126,7 +190,8 @@ export class Car {
    * @returns { items, caught }
    */
   steal(caughtMult = 1) {
-    if (this.used || this.cooldown > 0) return null;
+    // A una patrulla no se le roban los espejos.
+    if (this.kind === 'police' || this.used || this.cooldown > 0) return null;
 
     const items = [];
     const mirrorCount = Math.random() < 0.5 ? 2 : 1;
@@ -202,6 +267,12 @@ export class Car {
     for (const wheel of this.vehicle.wheels) wheel.rotation.z -= distance / 0.33;
     if (this.vehicle.tailMat && braking !== wasBraking) {
       this.vehicle.tailMat.color.set('#ff1a12').multiplyScalar(braking ? 3 : 1.4);
+    }
+    const lights = this.policeLights ?? this.vehicle.policeLights;
+    if (lights) {
+      const on = Math.floor(performance.now() / (this.pursuit ? 90 : 160)) % 2 === 0;
+      lights.blue.color.set(on ? '#1a6cff' : '#061028').multiplyScalar(on ? 4 : 0.35);
+      lights.red.color.set(on ? '#061028' : '#ff1a2a').multiplyScalar(on ? 0.35 : 4);
     }
   }
 

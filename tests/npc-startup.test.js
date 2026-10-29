@@ -12,6 +12,8 @@ test('el detalle completo se solicita una vez antes del primer plano y conserva 
 });
 test('un NPC cercano fuera de cámara precarga sin animarse',()=>{
  let requested=0,animated=0;const npc={position:new THREE.Vector3(5,0,0),root:new THREE.Group(),character:{update(){animated++;}},lodChar:{},fullChar:null,_fullLoading:null,_loadFull(){requested++;return this._fullLoading=Promise.resolve();},_updateDetail:Npc.prototype._updateDetail,_show(){},_walk(){},animAcc:0,splatTimer:0};
+ // Reacciones, frases y paraguas llegaron con la integración; aquí no intervienen.
+ Object.assign(npc,{_updateReaction(){},_updateSpeech(){},_updateUmbrella(){},_applyPose(){}});
  Npc.prototype.update.call(npc,1/60,{player:new THREE.Vector3(),frustum:{intersectsSphere:()=>false}});
  assert.equal(requested,1);assert.equal(animated,0);assert.equal(npc.root.visible,false);
 });

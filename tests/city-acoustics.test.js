@@ -50,15 +50,18 @@ test('motores y claxon de un carro detrás de un edificio suenan más bajo sin c
   class Howl { constructor() { this.voices = new Map(); this.n = 0; } state() { return 'loaded'; } play() { const id = ++this.n; this.voices.set(id, {}); return id; }
     volume(v, id) { this.voices.get(id).volume = v; } rate() {} seek() {} duration() { return 1; } stop() {} playing() { return true; } }
   const sounds = Object.fromEntries(['carIdle', 'carDrive', 'busIdle', 'busDrive', 'horn1', 'horn2', 'horn3'].map(k => [k, new Howl()]));
-  const audio = new VehicleAudio(sounds, () => 0);
-  const hidden = { car: { position: new THREE.Vector3(30, 0, 0) }, speed: 0, personBlocked: true };
-  const open = { car: { position: new THREE.Vector3(0, 0, 30) }, speed: 0, personBlocked: true };
-  audio.update(1, new THREE.Vector3(), [hidden, open], null, car => car === hidden.car ? OBSTRUCTED_GAIN : 1);
-  const idle = car => sounds.carIdle.voices.get(audio.instances.get(car).idle.id).volume;
-  assert.ok(Math.abs(idle(hidden.car) - idle(open.car) * OBSTRUCTED_GAIN) < 1e-9);
-  const horn = car => audio.instances.get(car).horn;
-  assert.ok(Math.abs(horn(hidden.car).sound.voices.get(horn(hidden.car).id).volume - .48 * OBSTRUCTED_GAIN) < 1e-9);
-  assert.equal(horn(open.car).sound.voices.get(horn(open.car).id).volume, .48);
+  // Mismo carro a la misma distancia, tapado o no; cada uno en su mezcla porque solo suenan dos claxones a la vez.
+  const play = gain => {
+    const audio = new VehicleAudio(sounds, () => 0);
+    const entry = { car: { position: new THREE.Vector3(10, 0, 0) }, speed: 0, personBlocked: true };
+    audio.update(1, new THREE.Vector3(), [entry], null, () => gain);
+    const state = audio.instances.get(entry.car);
+    return { idle: sounds.carIdle.voices.get(state.idle.id).volume, horn: state.horn.sound.voices.get(state.horn.id).volume };
+  };
+  const open = play(1), hidden = play(OBSTRUCTED_GAIN);
+  assert.ok(open.idle > 0 && open.horn > 0);
+  assert.ok(Math.abs(hidden.idle - open.idle * OBSTRUCTED_GAIN) < 1e-9);
+  assert.ok(Math.abs(hidden.horn - open.horn * OBSTRUCTED_GAIN) < 1e-9);
 });
 
 test('una manzana hecha de franjas de dos metros tapa según su fondo total', () => {

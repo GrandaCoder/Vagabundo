@@ -140,9 +140,19 @@ test('las lentes del semáforo se iluminan sobre el GLB, sin discos flotantes ni
   await signals.preloadModel();
   assert.equal(signals.poleMeshes.reduce((sum, mesh) => sum + mesh.count, 0), signals.poles.length);
   assert.ok(signals.poleMeshes.length > 1, 'los semáforos se reparten por celdas para que el descarte y las sombras los separen');
-  assert.equal(signals.group.children.length, 3);
-  const axes = signals.poleMeshes.flatMap(mesh => [...mesh.geometry.getAttribute('trafficAxis').array]);
-  assert.deepEqual(axes.sort(), signals.poles.map(pole => pole.axis).sort());
+  assert.equal(signals.group.children.length, signals.poleMeshes.length + (signals.stopSigns?.length ?? 0));
+  for (const pole of signals.poles) {
+    const batch = signals.poleMeshes[pole.batchIndex];
+    assert.equal(batch.geometry.getAttribute('trafficAxis').getX(pole.instanceIndex), pole.axis);
+    assert.equal(batch.material, signals.poleMesh.material);
+  }
+  const camera = new THREE.PerspectiveCamera(60, 1, .1, 50);
+  camera.position.set(75, 8, 95); camera.lookAt(75, 0, 70); camera.updateMatrixWorld();
+  const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  const visible = signals.poleMeshes.filter(mesh => frustum.intersectsObject(mesh));
+  // Con lotes de 96 m (STATIC_CHUNK_SIZE) la vista no dibuja todos los semáforos de la ciudad.
+  assert.ok(visible.reduce((sum, mesh) => sum + mesh.count, 0) < signals.poles.length);
+  assert.ok(signals.poleMeshes.every(mesh => mesh.frustumCulled && mesh.boundingSphere));
   let pointLights = 0;
   signals.group.traverse(object => { if (object.isLight) pointLights++; });
   assert.equal(pointLights, 0);

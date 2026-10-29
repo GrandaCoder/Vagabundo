@@ -3,16 +3,21 @@ import { TALENTS, BRANCHES } from '../data/talents.js';
 import { XP_PER_LEVEL, XP_CRAFT } from '../utils/constants.js';
 import { NEEDS } from '../systems/StatsSystem.js';
 import { cop } from '../utils/money.js';
-import { itemRarityLabel } from '../data/items.js';
+import { ITEMS, itemRarityLabel } from '../data/items.js';
+import { SMOKABLES, smokable } from '../character/smoking.js';
+import { itemArtHTML, itemCategory } from './itemArt.js';
+import { NEED_META, needLevel } from './needsMeta.js';
+import { describeWeather } from '../world/Climate.js';
+
+const NEED_LABELS = { hambre: 'hambre', sed: 'sed', energia: 'energía', salud: 'salud', higiene: 'higiene', animo: 'ánimo', vicio: 'vicio' };
 
 export class HUD {
   constructor() {
     this._htmlCache = new WeakMap();
     this._panelElapsed = 0.1;
     this.bars = {};
-    document.querySelectorAll('.stat-bar').forEach((el) => {
-      this.bars[el.dataset.stat] = el.querySelector('.fill');
-    });
+    this.barValues = {};
+    this._buildNeeds(document.getElementById('hud'));
 
     this.clockEl = document.getElementById('clock');
     this.moneyEl = document.getElementById('money');
@@ -66,6 +71,8 @@ export class HUD {
     this._talentOpen = false;
     this._craftOpen = false;
     this._dealerOpen = false;
+    this._craftSelected = null;
+    this.craftPanel?.addEventListener('click', (e) => this._onCraftClick(e));
 
     // Toasts
     this._bindEvents();
@@ -99,6 +106,25 @@ export class HUD {
     });
   }
 
+  /** Una fila por necesidad: icono, nombre, barra y valor. */
+  _buildNeeds(container) {
+    if (!container) return;
+    for (const { id, icon, label, color } of NEED_META) {
+      const row = document.createElement('div');
+      row.className = 'stat-bar';
+      row.dataset.stat = id;
+      row.style.setProperty('--c', color);
+      row.title = id === 'vicio' ? 'Vicio: si se vacía entras en abstinencia' : label;
+      row.innerHTML = `<span class="stat-bar__icon" aria-hidden="true">${icon}</span>`
+        + `<span class="stat-bar__name">${label}</span>`
+        + '<div class="bar"><div class="fill"></div></div>'
+        + '<span class="stat-bar__value">100</span>';
+      container.appendChild(row);
+      this.bars[id] = row.querySelector('.fill');
+      this.barValues[id] = row.querySelector('.stat-bar__value');
+    }
+  }
+
   setCameraMode(mode) {
     const thirdPerson = mode === 'third-person';
     if (this.cameraButton) {
@@ -124,8 +150,20 @@ export class HUD {
     window.addEventListener('talent-unlock', (e) => this._toast(`🌟 Talento: ${e.detail.name}`, 'rare'));
     window.addEventListener('craft', (e) => this._toast(`🔨 Crafteado: ${e.detail.name} x${e.detail.qty}`, 'info'));
     window.addEventListener('steal', (e) => {
-      if (e.detail.caught) this._toast('🚨 ¡Atrapado robando!', 'death');
+      if (e.detail.chase) {
+        this._toast('🚓 ¡Te vio la Policía! ¡Corre!', 'death');
+        if (e.detail.added?.length) this._toast(`🪞 Robado: ${e.detail.added.join(', ')}`, 'warn');
+      } else if (e.detail.caught) this._toast('🚨 ¡Atrapado robando!', 'death');
       else if (e.detail.added?.length) this._toast(`🪞 Robado: ${e.detail.added.join(', ')}`, 'warn');
+    });
+    window.addEventListener('police-chase', () => {
+      this._toast('🚨 Persecución: no dejes que te alcancen', 'warn');
+    });
+    window.addEventListener('police-arrest', () => {
+      this._toast('🚓 La Policía te alcanzó y confiscó todo', 'death');
+    });
+    window.addEventListener('police-escaped', () => {
+      this._toast('💨 Escapaste de la Policía', 'info');
     });
     window.addEventListener('withdrawal', (e) => {
       if (e.detail.active) this._toast('🚬 Abstinencia: caminas más lento y baja el ánimo', 'warn');
@@ -183,6 +221,7 @@ export class HUD {
     if (this._craftOpen) {
       const game = window.__game;
       if (game?.crafting && game.inventory) this.renderCrafting(game.crafting, game.inventory, game.talents);
+      this.craftPanel?.querySelector?.('.craft-recipe.selected')?.focus({ preventScroll: true });
     }
   }
 
@@ -199,7 +238,13 @@ export class HUD {
     // Barras de stats
     for (const k of NEEDS) {
       const el = this.bars[k];
-      if (el) el.style.width = `${Math.max(0, Math.min(100, stats[k]))}%`;
+      if (!el) continue;
+      const value = Math.max(0, Math.min(100, stats[k] ?? 0));
+      this._setWidth(el, value);
+      this._setText(this.barValues[k], String(Math.round(value)));
+      const level = needLevel(value);
+      const row = el.parentElement.parentElement;
+      if (row.dataset.level !== level) row.dataset.level = level;
     }
     this.bars.vicio?.parentElement.parentElement.classList.toggle('critical', stats.inWithdrawal);
     this.bars.vicio?.parentElement.parentElement.classList.toggle('high-withdrawal', !!stats.isHighWithdrawal);
@@ -224,7 +269,13 @@ export class HUD {
     // Reloj
     const h = Math.floor(clock.hour).toString().padStart(2, '0');
     const m = Math.floor((clock.hour % 1) * 60).toString().padStart(2, '0');
-    this._setText(this.clockEl, `Día ${clock.day} — ${h}:${m}`);
+    const sky = this.weather?.type ? describeWeather(this.weather.type, clock.isNight) : null;
+    this._setText(this.clockEl, sky ? `Día ${clock.day} — ${h}:${m} ∙ ${sky.icon}` : `Día ${clock.day} — ${h}:${m}`);
+    const skyKey = sky && `${sky.label}|${this.weather.season?.id}`;
+    if (this.clockEl && sky && this._weatherTitle !== skyKey) {
+      this._weatherTitle = skyKey;
+      this.clockEl.title = `${sky.label} ∙ ${this.weather.season?.label ?? ''}`;
+    }
     this._setText(this.moneyEl, cop(stats.dinero));
 
     // Nivel y XP
@@ -232,7 +283,7 @@ export class HUD {
     this._setText(this.nameEl, window.__game?.look?.nombre ?? '');
     const xpNeeded = XP_PER_LEVEL * stats.level;
     if (this.xpFillEl) {
-      this.xpFillEl.style.width = `${Math.min(100, (stats.xp / xpNeeded) * 100)}%`;
+      this._setWidth(this.xpFillEl, (stats.xp / xpNeeded) * 100);
     }
     if (this.talentPointsEl) {
       this._setText(this.talentPointsEl, `🌟 ${talentSystem?.points ?? 0}`);
@@ -248,11 +299,12 @@ export class HUD {
     if (this.promptEl) {
       if (window.__game?.paused) {
         this.promptEl.classList.remove('visible');
-      } else if (interaction?.currentTarget) {
+      } else if (interaction?.currentTarget || interaction?.stealPrompt) {
         const type = interaction.currentTargetType;
-        let text = '';
+        let text = interaction?.stealPrompt ?? '';
         if (type === 'pickup') text = '[E] Recoger basura · [Mantener Q] Seleccionar';
         else if (type === 'car') text = interaction.currentTarget?.traffic ? '[E] Robar retrovisor del carro en circulación' : '[E] Robar retrovisor de auto';
+        else if (type === 'fireBarrel') text = '🔥 [E] Calentarte las manos en la fogata (+Calor, +Ánimo, +Energía)';
         else if (type === 'sell') text = '[E] Recicladora El Progreso · Vender material';
         else if (type === 'shop') text = `[E] ${interaction.currentTarget.title ?? 'Tienda La Esquinita'} · Comprar`;
         else if (type === 'dog') {
@@ -265,6 +317,7 @@ export class HUD {
         }
         else if (type === 'cambuche') text = '[E] Tu cambuche · Armar / Dormir';
         else if (type === 'dealer') text = '[Q / E] Tienda del Dealer · Comprar / Vender';
+else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] Soltar carreta de balineras 🛒' : '[E] Agarrar carreta de balineras 🛒 (+120kg)';
 
         if (text) {
           this._setText(this.promptEl, text);
@@ -284,6 +337,8 @@ export class HUD {
 
     if (this.statusEl) {
       const warnings = [];
+      if (stats.calor > 0) warnings.push(`🔥 Calientito (${Math.ceil(stats.calor)}s)`);
+      else if (stats.isFreezing) warnings.push('🥶 Congelándote: el frío y la lluvia te debilitan.');
       if (stats.sed <= 20) warnings.push(stats.sed <= 0 ? 'Sin agua: estás perdiendo salud.' : 'Sed crítica: bebe agua.');
       if (stats.hambre <= 20) warnings.push(stats.hambre <= 0 ? 'Sin alimento: estás perdiendo salud.' : 'Hambre crítica: come algo.');
       if (stats.energia <= 20) warnings.push('Energía baja: descansa.');
@@ -314,6 +369,14 @@ export class HUD {
 
   _setText(element, text) {
     if (element && element.textContent !== text) element.textContent = text;
+  }
+
+  _setWidth(element, percent) {
+    this._widthCache ??= new WeakMap();
+    const width = `${Math.max(0, Math.min(100, percent)).toFixed(1)}%`;
+    if (this._widthCache.get(element) === width) return;
+    this._widthCache.set(element, width);
+    element.style.width = width;
   }
 
   /** Mantiene los nodos, el foco y sus listeners mientras el contenido no cambie. */
@@ -371,6 +434,13 @@ export class HUD {
       game.poopSystem?.throwPoop(game.player, game.cameraRig);
       return;
     }
+    if (item.weapon) {
+      if (!game.player || game.player.isStunned) return;
+      const equipped = game.player.toggleWeapon(item.weapon);
+      game.audio?.play('pickup');
+      this._toast(equipped ? `🔪 Equipaste: ${item.name}. Ataca con clic o G.` : `Guardaste: ${item.name}. Vuelves a los puños.`, 'info');
+      return;
+    }
     if (itemId === 'radioTransistor') {
       game.inventoryUI?.close();
       window.dispatchEvent(new CustomEvent('open-radio-modal'));
@@ -391,6 +461,17 @@ export class HUD {
       return;
     }
 
+    const smokes = !!SMOKABLES[item.id];
+    if (smokes && game.player?.smoking) {
+      this._toast(`${smokable(game.player.smoking.kind).emoji} Ya tienes uno prendido.`, 'info');
+      return;
+    }
+    // el basuco se fuma en pipa: si está ocupado (pelea, otra acción) no se gasta
+    const pipe = item.id === 'basuco';
+    if (pipe && game.player?.startBasuco && !game.player.startBasuco()) {
+      this._toast('💨 Ahora no: tienes las manos ocupadas.', 'info');
+      return;
+    }
     if (item.consumable) {
       if (item.consumable === 'hambre' && game.stats.canEat?.() === false) {
         this._toast('No puedes comer mientras tienes náuseas.', 'warning');
@@ -401,13 +482,22 @@ export class HUD {
         const delta = (k === item.consumable ? item.amount : 0) + (k !== item.consumable ? (item[k] ?? 0) : 0);
         if (delta) game.stats[k] = Math.max(0, Math.min(100, game.stats[k] + delta));
       }
+      if (item.calor) {
+        game.stats.calor = Math.min(300, (game.stats.calor || 0) + item.calor);
+      }
       inv.remove(itemId, 1);
       game.audio?.play('pickup');
-      const isDrink = item.consumable === 'sed' || item.id === 'cafe' || item.id === 'refresco';
+      const isDrink = item.consumable === 'sed' || item.id === 'cafe' || item.id === 'refresco' || item.id === 'aguapanela';
       const verb = isDrink ? '🥤 Bebiste' : item.substance ? '🚬 Consumiste' : item.consumable === 'salud' ? '🩹 Te aplicaste' : '🍴 Comiste';
-      game.player?.playAction?.(isDrink ? 'beber' : 'comer', 1.2);
-      this._toast(`${verb}: ${item.name}`, 'info');
+      // el cigarrillo y el porro no se comen: se quedan en la mano y se fuman caminando
+      if (smokes) game.player?.startSmoking?.(item.id);
+      else if (!pipe) game.player?.playAction?.(isDrink ? 'beber' : 'comer', 1.2);
+      const lit = smokable(item.id);
+      this._toast(smokes ? `${lit.emoji} Prendiste un ${lit.name}` : pipe ? '💨 Prendiste la pipa' : `${verb}: ${item.name}`, 'info');
       this._renderInventory(inv);
+      // lo que se fuma pega al aspirar: el jugador avisa en cada calada o al soltar la pipa
+      const smokedLater = (smokes || pipe) && game.player?.startSmoking;
+      if (item.substance && !smokedLater) window.dispatchEvent(new CustomEvent('substance-consumed', { detail: { id: itemId } }));
     } else if (item.cure) {
       game.diseases?.cure?.(item.cure);
       inv.remove(itemId, 1);
@@ -484,46 +574,135 @@ export class HUD {
 
   renderCrafting(craftingSystem, inventory, talentSystem) {
     if (!this.craftPanel) return;
+    this._craftCtx = { craftingSystem, inventory, talentSystem };
     const recipes = craftingSystem.getAvailable(inventory);
+    // La selección sobrevive a los redibujados; por defecto, la primera receta lista.
+    if (!recipes.some((r) => r.id === this._craftSelected)) {
+      this._craftSelected = (recipes.find((r) => r.craftable && r.fits !== false) ?? recipes[0])?.id ?? null;
+    }
 
-    const recipesHtml = recipes.map((r) => {
-      const ingredients = Object.entries(r.ingredients).map(([id, qty]) => {
-        const have = inventory.count(id);
-        const ok = have >= qty;
-        return `<span class="${ok ? 'ing-ok' : 'ing-missing'}">${id} (${have}/${qty})</span>`;
-      }).join(', ');
-
+    const slots = recipes.map((r) => {
+      const ready = r.craftable && r.fits !== false;
+      const heavy = r.craftable && !ready;
+      const selected = r.id === this._craftSelected;
+      const state = ready ? 'disponible' : heavy ? 'no cabe en el costal' : 'faltan materiales';
+      const cls = ['craft-recipe', `cat-${itemCategory(r.result)}`, ready && 'craftable', heavy && 'heavy', selected && 'selected']
+        .filter(Boolean).join(' ');
+      const flag = ready ? '✓' : heavy ? 'kg' : '';
       return `
-        <div class="craft-recipe ${r.craftable ? 'craftable' : ''}" data-id="${r.id}">
-          <div class="recipe-name">${r.emoji} ${r.name} x${r.qty}</div>
-          <div class="recipe-ingredients">${ingredients}</div>
-          <button class="craft-btn" ${r.craftable ? '' : 'disabled'}>Craftear</button>
-        </div>
+        <button type="button" class="${cls}" data-id="${r.id}" aria-pressed="${selected}" aria-label="${r.name} ×${r.qty}: ${state}">
+          ${itemArtHTML(r.result, 'craft-slot-art')}
+          <span class="craft-slot-qty">×${r.qty}</span>
+          ${flag ? `<span class="craft-slot-flag" aria-hidden="true">${flag}</span>` : ''}
+          <span class="craft-slot-name">${r.name}</span>
+        </button>
       `;
     }).join('');
 
-    if (!this._setHTML(this.craftPanel, `
-      <div class="craft-header">
-        <h2>🔨 Mesa de Crafteo</h2>
+    this._setHTML(this.craftPanel, `
+      <header class="craft-header">
+        ${itemArtHTML('yunque', 'craft-header-art')}
+        <h2>Mesa de Crafteo</h2>
+        <span class="craft-load" title="Carga del costal">${inventory.totalWeight.toFixed(1)}/${inventory.maxWeight} kg</span>
+        <button type="button" class="craft-close" data-act="close" aria-label="Cerrar mesa de crafteo">✕</button>
+      </header>
+      <div class="craft-body">
+        <div class="craft-recipes" aria-label="Recetas">${slots}</div>
+        ${this._craftBench(recipes.find((r) => r.id === this._craftSelected), inventory)}
       </div>
-      <div class="craft-recipes">${recipesHtml}</div>
-      <div class="craft-hint">Pulsa C o ESC para cerrar.</div>
-    `)) return;
+      <div class="craft-hint">Clic: elegir receta · C / Esc: cerrar</div>
+    `);
+  }
 
-    this.craftPanel.querySelectorAll('.craft-recipe.craftable .craft-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const recipeEl = btn.closest('.craft-recipe');
-        const id = recipeEl.dataset.id;
-        const recipe = craftingSystem.recipes.find((r) => r.id === id);
-        if (recipe) {
-          const result = craftingSystem.craft(recipe, inventory);
-          if (result && window.__game) {
-            window.__game.stats.addXP(XP_CRAFT, window.__game.talents);
-          }
-          this.renderCrafting(craftingSystem, inventory, talentSystem);
-        }
-      });
-    });
+  /** Banco de trabajo: resultado grande, materiales y acción principal. */
+  _craftBench(r, inventory) {
+    if (!r) return '<section class="craft-bench"><p class="craft-reason">No hay recetas.</p></section>';
+    const item = ITEMS[r.result];
+    const ready = r.craftable && r.fits !== false;
+    let missing = 0;
+    const mats = Object.entries(r.ingredients).map(([id, qty]) => {
+      const have = inventory.count(id);
+      const ok = have >= qty;
+      missing += Math.max(0, qty - have);
+      return `
+        <li class="craft-mat cat-${itemCategory(id)} ${ok ? 'ok' : 'missing'}">
+          ${itemArtHTML(id, 'craft-mat-art')}
+          <span class="craft-mat-name">${ITEMS[id]?.name ?? id}</span>
+          <span class="craft-mat-count">${Math.min(have, qty)}/${qty}</span>
+          <span class="craft-mat-flag" title="${ok ? 'Suficiente' : 'Falta'}">${ok ? '✓' : '✗'}</span>
+        </li>
+      `;
+    }).join('');
+    const state = ready ? 'ready' : r.craftable ? 'heavy' : 'missing';
+    const reason = ready ? 'Listo para fabricar'
+      : r.craftable ? 'No te cabe en el costal'
+      : missing === 1 ? 'Te falta 1 material' : `Te faltan ${missing} materiales`;
+
+    return `
+      <section class="craft-bench cat-${itemCategory(r.result)} ${state}">
+        <div class="craft-pedestal">
+          ${itemArtHTML(r.result, 'craft-result-art')}
+          <span class="craft-yield">×${r.qty}</span>
+        </div>
+        <h3 class="craft-result-name">${r.name}</h3>
+        <p class="craft-effect">${this._craftEffect(item)}</p>
+        <h4 class="craft-mats-title">Materiales</h4>
+        <ul class="craft-mats">${mats}</ul>
+        <p class="craft-reason" role="status">${reason}</p>
+        <button type="button" class="craft-go" data-act="craft" ${ready ? '' : 'disabled'}>
+          ${itemArtHTML('yunque', 'craft-go-art')}<span>Fabricar</span>
+        </button>
+      </section>
+    `;
+  }
+
+  /** Una línea con lo que hace el objeto, a partir de sus datos reales. */
+  _craftEffect(item) {
+    if (!item) return '';
+    const parts = [];
+    if (item.consumable) parts.push(`+${item.amount} ${NEED_LABELS[item.consumable]}`);
+    for (const k of NEEDS) {
+      if (k !== item.consumable && item[k]) parts.push(`${item[k] > 0 ? '+' : ''}${item[k]} ${NEED_LABELS[k]}`);
+    }
+    if (item.cure) parts.push(`Cura: ${item.cure}`);
+    if (!parts.length) parts.push(item.usable ? 'Se usa desde el inventario' : `Se vende por ${cop(item.value)}`);
+    parts.push(`${item.weight} kg`);
+    return parts.join(' · ');
+  }
+
+  _onCraftClick(e) {
+    const target = e.target.closest?.('[data-act], .craft-recipe');
+    if (!target || !this._craftCtx) return;
+    const { craftingSystem, inventory, talentSystem } = this._craftCtx;
+    if (target.dataset.act === 'close') { this.toggleCraftPanel(); return; }
+
+    if (target.dataset.act !== 'craft') {
+      this._craftSelected = target.dataset.id;
+      this.renderCrafting(craftingSystem, inventory, talentSystem);
+      this.craftPanel.querySelector('.craft-recipe.selected')?.focus({ preventScroll: true });
+      return;
+    }
+
+    const recipe = craftingSystem.recipes.find((r) => r.id === this._craftSelected);
+    if (!recipe) return;
+    const game = window.__game;
+    const result = craftingSystem.craft(recipe, inventory);
+    if (result) {
+      game?.stats?.addXP(XP_CRAFT, game.talents);
+      game?.audio?.play('treasure');
+    } else {
+      game?.audio?.play('full');
+    }
+    this.renderCrafting(craftingSystem, inventory, talentSystem);
+    const bench = this.craftPanel.querySelector('.craft-bench');
+    if (result && bench) {
+      // Reinicia la animación aunque el HTML no haya cambiado.
+      bench.classList.remove('just-crafted');
+      void bench.offsetWidth;
+      bench.classList.add('just-crafted');
+    }
+    (this.craftPanel.querySelector('.craft-go:not([disabled])') ?? this.craftPanel.querySelector('.craft-recipe.selected'))
+      ?.focus({ preventScroll: true });
   }
 
   renderDealer(dealer = null) {
