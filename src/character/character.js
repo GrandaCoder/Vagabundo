@@ -334,10 +334,14 @@ export function createCharacter(initial = DEFAULT_LOOK) {
 
   // Cigarrillo en la mano izquierda (al final del antebrazo), con la brasa hacia el frente
   let cigarette = null;
-  function setSmoking(on) {
-    if (!!cigarette === !!on) return;
-    if (cigarette) { cigarette.dispose(); cigarette = null; return; }
-    cigarette = createCigarette();
+  function setSmoking(on, kind = 'cigarrillo') {
+    const want = on ? kind : null;
+    if ((cigarette?.kind ?? null) === want) return;
+    cigarette?.dispose();
+    cigarette = null;
+    if (!want) return;
+    cigarette = createCigarette(want);
+    cigarette.kind = want;
     cigarette.object.position.set(-0.02, -0.25, 0.05);
     cigarette.object.rotation.x = Math.PI / 2;
     cigarette.object.scale.setScalar(1.4);

@@ -305,7 +305,7 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
   let disposed = false;
   const weights = {};
   let weaponId = null; // arma en mano (cuchillo, botella_picada) o null
-  let smoking = false;  // cigarrillo en la mano izquierda
+  let smoking = null;   // qué se fuma en la mano izquierda ('cigarrillo', 'hierba') o null
 
   function syncWeapon() {
     if (!inst || inst.weaponId === weaponId) return;
@@ -315,9 +315,10 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
   }
 
   function syncCigarette() {
-    if (!inst || !!inst.cigarette === smoking) return;
+    if (!inst || (inst.cigarette?.kind ?? null) === smoking) return;
     inst.cigarette?.dispose();
-    inst.cigarette = smoking ? attachCigaretteToHand(inst.root, inst.bones) : null;
+    inst.cigarette = smoking ? attachCigaretteToHand(inst.root, inst.bones, smoking) : null;
+    if (inst.cigarette) inst.cigarette.kind = smoking;
   }
 
   async function setLook(l) {
@@ -342,8 +343,8 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
     setLook(l) { look = l; return setLook(l); },
     /** Arma visible en la mano derecha; null para ir con las manos vacías */
     setWeapon(id) { weaponId = id || null; syncWeapon(); },
-    /** Cigarrillo en la mano izquierda */
-    setSmoking(on) { smoking = !!on; syncCigarette(); },
+    /** Cigarrillo (o porro, con kind = 'hierba') en la mano izquierda */
+    setSmoking(on, kind = 'cigarrillo') { smoking = on ? kind : null; syncCigarette(); },
     /** Brasa del cigarrillo en el mundo, o null si no está fumando */
     cigaretteTip(target) { return inst?.cigarette ? inst.cigarette.tip.getWorldPosition(target) : null; },
     /** Boca en el mundo, para el humo de la calada */

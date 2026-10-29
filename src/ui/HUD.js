@@ -4,6 +4,7 @@ import { XP_PER_LEVEL, XP_CRAFT } from '../utils/constants.js';
 import { NEEDS } from '../systems/StatsSystem.js';
 import { cop } from '../utils/money.js';
 import { ITEMS, itemRarityLabel } from '../data/items.js';
+import { SMOKABLES, smokable } from '../character/smoking.js';
 import { itemArtHTML, itemCategory } from './itemArt.js';
 import { NEED_META, needLevel } from './needsMeta.js';
 import { describeWeather } from '../world/Climate.js';
@@ -460,8 +461,9 @@ else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] So
       return;
     }
 
-    if (item.id === 'cigarrillo' && game.player?.smoking) {
-      this._toast('🚬 Ya tienes uno prendido.', 'info');
+    const smokes = !!SMOKABLES[item.id];
+    if (smokes && game.player?.smoking) {
+      this._toast(`${smokable(game.player.smoking.kind).emoji} Ya tienes uno prendido.`, 'info');
       return;
     }
     if (item.consumable) {
@@ -480,12 +482,12 @@ else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] So
       inv.remove(itemId, 1);
       game.audio?.play('pickup');
       const isDrink = item.consumable === 'sed' || item.id === 'cafe' || item.id === 'refresco' || item.id === 'aguapanela';
-      const smokes = item.id === 'cigarrillo';
-      const verb = smokes ? '🚬 Prendiste' : isDrink ? '🥤 Bebiste' : item.substance ? '🚬 Consumiste' : item.consumable === 'salud' ? '🩹 Te aplicaste' : '🍴 Comiste';
-      // el cigarrillo no se come: se queda en la mano y se fuma caminando
-      if (smokes) game.player?.startSmoking?.();
+      const verb = isDrink ? '🥤 Bebiste' : item.substance ? '🚬 Consumiste' : item.consumable === 'salud' ? '🩹 Te aplicaste' : '🍴 Comiste';
+      // el cigarrillo y el porro no se comen: se quedan en la mano y se fuman caminando
+      if (smokes) game.player?.startSmoking?.(item.id);
       else game.player?.playAction?.(isDrink ? 'beber' : 'comer', 1.2);
-      this._toast(`${verb}: ${item.name}`, 'info');
+      const lit = smokable(item.id);
+      this._toast(smokes ? `${lit.emoji} Prendiste un ${lit.name}` : `${verb}: ${item.name}`, 'info');
       this._renderInventory(inv);
       if (item.substance) window.dispatchEvent(new CustomEvent('substance-consumed', { detail: { id: itemId } }));
     } else if (item.cure) {

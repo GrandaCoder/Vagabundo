@@ -10,7 +10,7 @@ import { createCharacter } from '../character/character.js';
 import { createRealisticCharacter, REALISTIC_SCALE } from '../character/RealisticCharacter.js';
 import { PlayerRagdoll } from '../systems/PlayerRagdoll.js';
 import { WEAPONS, DEFAULT_WEAPON, COMBO_WINDOW, CHAIN_AT, comboStep } from '../data/weapons.js';
-import { SMOKE_DURATION, PUFF_INTERVAL, FIRST_PUFF, PUFF, PUFF_LENGTH, isExhaling, SmokePuffs } from '../character/smoking.js';
+import { SMOKE_DURATION, PUFF_INTERVAL, FIRST_PUFF, PUFF, PUFF_LENGTH, isExhaling, smokable, SmokePuffs } from '../character/smoking.js';
 
 // Energía que gasta cada golpe (puños o arma).
 const ATTACK_ENERGY = 8;
@@ -71,7 +71,7 @@ export class Player {
     this._attackQueued = false;
     this._targets = [];
 
-    // Cigarrillo: `smoking` = { left, nextPuff, puff } (segundos; `puff` corre durante la calada)
+    // Cigarrillo o porro: `smoking` = { kind, left, nextPuff, puff } (segundos; `puff` corre durante la calada)
     this.smoking = null;
     this._smoke = null;       // humo en la escena, se crea al primer cigarrillo
     this._wispTimer = 0;
@@ -80,12 +80,15 @@ export class Player {
     this._smokeVelocity = new THREE.Vector3();
   }
 
-  /** Prende un cigarrillo: dura 10 minutos y cada 30 s se da una calada. false si ya está fumando. */
-  startSmoking() {
+  /**
+   * Prende un cigarrillo (o un porro con kind = 'hierba'): dura 10 minutos y cada 30 s se da una
+   * calada. false si ya está fumando.
+   */
+  startSmoking(kind = 'cigarrillo') {
     if (this.smoking) return false;
-    this.smoking = { left: SMOKE_DURATION, nextPuff: FIRST_PUFF, puff: null };
-    this.procedural.setSmoking?.(true);
-    this._realistic?.setSmoking?.(true);
+    this.smoking = { kind, left: SMOKE_DURATION, nextPuff: FIRST_PUFF, puff: null };
+    this.procedural.setSmoking?.(true, kind);
+    this._realistic?.setSmoking?.(true, kind);
     return true;
   }
 
@@ -103,8 +106,9 @@ export class Player {
       smoke.left -= dt;
       if (smoke.left <= 0) {
         this.stopSmoking();
+        const { emoji, name } = smokable(smoke.kind);
         if (typeof window !== 'undefined' && window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('toast', { detail: { text: '🚬 Se acabó el cigarrillo.', type: 'info' } }));
+          window.dispatchEvent(new CustomEvent('toast', { detail: { text: `${emoji} Se acabó el ${name}.`, type: 'info' } }));
         }
         return;
       }
@@ -121,10 +125,11 @@ export class Player {
     if (!smoke && !this._smoke) return;
     this._smoke ??= new SmokePuffs(this.scene);
     if (smoke) {
+      const color = smokable(smoke.kind).smoke;
       // hilo de humo que sale de la brasa
       if ((this._wispTimer -= dt) <= 0 && this.character.cigaretteTip?.(this._smokeAt)) {
         this._wispTimer = 0.12;
-        this._smoke.emit(this._smokeAt, { size: 0.025, grow: 0.18, life: 2.2, alpha: 0.22 });
+        this._smoke.emit(this._smokeAt, { size: 0.025, grow: 0.18, life: 2.2, alpha: 0.22, color });
       }
       // la bocanada sale de la boca hacia el frente al bajar la mano
       if (isExhaling(smoke.puff) && (this._puffTimer -= dt) <= 0 && this.character.mouth?.(this._smokeAt)) {
@@ -132,7 +137,7 @@ export class Player {
         const yaw = this.root.rotation.y;
         const fade = 1 - (smoke.puff - PUFF_LENGTH + PUFF.lower) / PUFF.exhale;
         this._smokeVelocity.set(Math.sin(yaw), -0.1, Math.cos(yaw)).multiplyScalar(0.55 * Math.max(0.2, fade));
-        this._smoke.emit(this._smokeAt, { velocity: this._smokeVelocity, size: 0.05, grow: 0.45, life: 2.6, alpha: 0.38 * Math.max(0.3, fade) });
+        this._smoke.emit(this._smokeAt, { velocity: this._smokeVelocity, size: 0.05, grow: 0.45, life: 2.6, alpha: 0.38 * Math.max(0.3, fade), color });
       }
     }
     this._smoke.update(dt);
@@ -191,7 +196,7 @@ export class Player {
       this.character = this._realistic;
       this.modelScale = REALISTIC_SCALE;
       this._realistic.setWeapon?.(this.equippedWeapon === DEFAULT_WEAPON ? null : this.equippedWeapon);
-      this._realistic.setSmoking?.(!!this.smoking);
+      this._realistic.setSmoking?.(!!this.smoking, this.smoking?.kind);
     } else {
       this.root.remove(this.character.group);
       this.character = this.procedural;

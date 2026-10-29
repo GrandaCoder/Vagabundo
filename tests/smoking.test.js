@@ -66,3 +66,19 @@ test('dormir o salir volando apaga el cigarrillo', () => {
   tick(0.2);
   assert.equal(player.smoking, null);
 });
+
+test('el porro de hierba se fuma igual pero suelta humo verdoso y avisa como porro', () => {
+  const { scene, player, tick } = smoker();
+  let toast = null;
+  window.addEventListener('toast', (e) => { toast = e.detail.text; });
+  player.startSmoking('hierba');
+  assert.equal(player.smoking.kind, 'hierba');
+  tick(1);
+  const puffs = scene.getObjectByName('humo-cigarrillo').children.filter((s) => s.visible);
+  assert.ok(puffs.length > 0);
+  const { r, g, b } = puffs[0].material.color;
+  assert.ok(g > r && g > b, 'el humo tira a verde');
+  tick(SMOKE_DURATION);
+  assert.equal(player.smoking, null);
+  assert.match(toast ?? '', /porro/);
+});

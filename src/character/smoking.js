@@ -34,25 +34,35 @@ export function emberGlow(t) {
 /** ¿Está botando el humo de la calada? (empieza al bajar la mano) */
 export const isExhaling = (t) => t != null && t >= PUFF.raise + PUFF.hold && t < PUFF.raise + PUFF.hold + PUFF.exhale;
 
+// Lo que se puede fumar: id del objeto → cómo se ve y de qué color es el humo.
+export const SMOKABLES = {
+  cigarrillo: { name: 'cigarrillo', emoji: '🚬', paper: '#f1ede4', filter: '#c98a4a', radius: 0.0045, smoke: '#d8d8d8' },
+  hierba:     { name: 'porro',      emoji: '🌿', paper: '#e6dfc8', filter: '#f4f1e8', radius: 0.0058, smoke: '#8fdc74' }
+};
+export const smokable = (id) => SMOKABLES[id] ?? SMOKABLES.cigarrillo;
+
 // ---------- el cigarrillo ----------
 
-let shared = null;
-function geometries() {
-  return shared ??= {
-    paper: new THREE.CylinderGeometry(0.0045, 0.0045, 0.06, 8).translate(0, 0.03, 0),
-    filter: new THREE.CylinderGeometry(0.0047, 0.0047, 0.02, 8).translate(0, -0.01, 0),
-    ember: new THREE.CylinderGeometry(0.0046, 0.004, 0.006, 8).translate(0, 0.063, 0)
+const shared = {};
+function geometries(r) {
+  // el porro es más grueso hacia la brasa (cono) y la boquilla es de cartón
+  const cone = r > SMOKABLES.cigarrillo.radius ? 1.25 : 1;
+  return shared[r] ??= {
+    paper: new THREE.CylinderGeometry(r * cone, r, 0.06, 8).translate(0, 0.03, 0),
+    filter: new THREE.CylinderGeometry(r * 1.04, r * 1.04, 0.02, 8).translate(0, -0.01, 0),
+    ember: new THREE.CylinderGeometry(r * cone * 1.02, r * cone * 0.9, 0.006, 8).translate(0, 0.063, 0)
   };
 }
 
 /**
- * Cigarrillo con filtro y brasa. El origen es donde lo pisan los dedos; +Y apunta a la brasa.
- * `tip` marca la brasa (de ahí sale el humo) y `setGlow` la aviva.
+ * Cigarrillo (o porro, con `kind` = 'hierba') con filtro y brasa. El origen es donde lo pisan
+ * los dedos; +Y apunta a la brasa. `tip` marca la brasa (de ahí sale el humo) y `setGlow` la aviva.
  */
-export function createCigarette() {
-  const g = geometries();
-  const paper = new THREE.MeshStandardMaterial({ color: '#f1ede4', roughness: 0.9 });
-  const filter = new THREE.MeshStandardMaterial({ color: '#c98a4a', roughness: 0.8 });
+export function createCigarette(kind = 'cigarrillo') {
+  const look = smokable(kind);
+  const g = geometries(look.radius);
+  const paper = new THREE.MeshStandardMaterial({ color: look.paper, roughness: 0.9 });
+  const filter = new THREE.MeshStandardMaterial({ color: look.filter, roughness: 0.8 });
   const ember = new THREE.MeshBasicMaterial({ color: '#ff5a1f' });
   const object = new THREE.Group();
   object.name = 'prop-cigarrillo';
@@ -77,10 +87,10 @@ const _q = new THREE.Quaternion();
 const _r = new THREE.Quaternion();
 
 /** Pone el cigarrillo entre los dedos de la mano izquierda del esqueleto Mixamo. */
-export function attachCigaretteToHand(root, bones) {
+export function attachCigaretteToHand(root, bones, kind = 'cigarrillo') {
   const hand = findBone(bones, 'LeftHand');
   if (!hand) return null;
-  const cig = createCigarette();
+  const cig = createCigarette(kind);
   // Nace con los ejes de la mano (+Y hacia los dedos) y attach() lo pasa al hueso sin moverlo.
   root.updateMatrixWorld(true);
   root.worldToLocal(hand.getWorldPosition(_p));
@@ -174,13 +184,14 @@ export class SmokePuffs {
   }
 
   /** Suelta una partícula en `position` (mundo). */
-  emit(position, { velocity = null, size = 0.04, grow = 0.25, life = 2.5, alpha = 0.35 } = {}) {
+  emit(position, { velocity = null, size = 0.04, grow = 0.25, life = 2.5, alpha = 0.35, color = '#d8d8d8' } = {}) {
     const p = this.puffs[this._next];
     this._next = (this._next + 1) % this.puffs.length;
     p.sprite.position.copy(position);
     p.velocity.set((Math.random() - 0.5) * 0.06, 0.18 + Math.random() * 0.08, (Math.random() - 0.5) * 0.06);
     if (velocity) p.velocity.add(velocity);
     p.size = size; p.grow = grow; p.life = life; p.age = 0; p.alpha = alpha;
+    p.sprite.material.color.set(color);
     p.sprite.visible = true;
   }
 
