@@ -72,8 +72,9 @@ export class Sala {
     if (look) await this.player.setLook(normalizeLook({ ...look, v: 2 }));
   }
 
+  /** Cambia el modelo solo en la sala: el del juego (bazuko.modelo) no se toca */
   setModel(kind) {
-    try { localStorage.setItem('bazuko.modelo', kind); } catch { /* sin almacenamiento */ }
+    try { localStorage.setItem('bazuko.sala.modelo', kind); } catch { /* sin almacenamiento */ }
     return this.player.setModel(kind);
   }
 

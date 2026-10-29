@@ -51,7 +51,11 @@ sala.steal = { buscado: 0 };  // lo sube pelear con peatones
 window.__sala = sala;
 
 let modelo = 'realista';
-try { modelo = localStorage.getItem('bazuko.modelo') === 'procedural' ? 'procedural' : 'realista'; } catch { /* sin almacenamiento */ }
+try {
+  // la sala recuerda su propio modelo; la primera vez arranca con el del juego
+  const saved = localStorage.getItem('bazuko.sala.modelo') ?? localStorage.getItem('bazuko.modelo');
+  modelo = saved === 'procedural' ? 'procedural' : 'realista';
+} catch { /* sin almacenamiento */ }
 await sala.loadSavedLook();
 await sala.setModel(modelo);
 const montada = await prueba.montar(sala) ?? {};
