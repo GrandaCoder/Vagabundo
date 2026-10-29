@@ -108,8 +108,8 @@ export function attachCigaretteToHand(root, bones, kind = 'cigarrillo') {
 // Brazo izquierdo en ejes del personaje (+X su izquierda, +Z al frente): con la mano en la boca y,
 // sosteniéndolo abajo, con el codo apenas doblado.
 export const SMOKE_POSE = {
-  mouthArm: [-0.75, -0.9, 0],
-  mouthForearm: [-2.0, -0.6, 0],
+  mouthArm: [-0.61, -0.9, 0.08],
+  mouthForearm: [-1.92, -0.22, 0.08],
   holdForearm: [-0.45, 0, 0]
 };
 
