@@ -96,6 +96,27 @@ En PowerShell, si una política de ejecución impide usar `npm`, ejecuta los mis
 | `Z` en la calle | Hacer popó. |
 | Clic en comida o bebida del inventario | Consumir el objeto. |
 
+### Mando
+
+Funciona con mandos de Xbox, PlayStation o genéricos conectados por USB o Bluetooth. El navegador los detecta al pulsar cualquier botón. Los botones equivalen a las teclas de la tabla anterior; los menús siguen usando el ratón.
+
+| Mando (Xbox) | Función |
+| --- | --- |
+| Stick izquierdo | Moverse. |
+| Stick derecho | Girar la cámara en tercera persona. |
+| `RT` o pulsar el stick izquierdo | Correr. |
+| `A` | Interactuar (`E`). |
+| `B` | Cerrar el panel activo (`Esc`). |
+| `X` | Mantener junto a basura o abrir la tienda del dealer (`Q`). |
+| `Y` | Inventario (`I`). |
+| `LB` | Cambiar de cámara (`V`). |
+| `RB` | Golpear (`G`). |
+| `LT` | Saltar (`Espacio`). |
+| `View` | Mapa (`M`). |
+| `Menu` | Pausa (`Esc`). |
+| Pulsar el stick derecho | Radar (`N`). |
+| Cruceta ↑ ↓ ← → | Radio (`R`), lanzar o popó (`X`), limosna (`B`), boost (`F`). |
+
 ## Cómo empezar
 
 Los materiales del cambuche aparecen en bolsas de basura repartidas por nueve zonas de la ciudad. Cada conjunto de bolsas reserva al menos **8 cartones, 8 tablas, 6 latas, 1 lona, 1 colchón y 1 vela**, además del botín aleatorio. Los cartones y las latas son comunes, las tablas poco comunes, la lona y la vela raras, y el colchón muy raro. Las bolsas vaciadas se reponen tras 20 segundos y conservan su reserva de materiales para que venderlos, perderlos o usarlos no bloquee la construcción. Si el costal está lleno, lo que no cabe permanece en esa bolsa; recogerlo de nuevo no vuelve a sortear su contenido. Las rarezas aparecen al recoger materiales y al pasar el cursor sobre el inventario o los requisitos de construcción.
