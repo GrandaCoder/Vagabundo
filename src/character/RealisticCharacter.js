@@ -9,12 +9,13 @@ import { ACTIONFORGE_CLIPS, buildCharacterClips } from './actionforge.js';
 import { locomotionBlend, measureLocomotion } from './locomotion.js';
 import { PALETTES } from './look.js';
 import { addGrime, addHairTone } from './weathering.js';
-import { attachAccessories, attachWeapon } from './props.js';
+import { attachAccessories, attachWeapon, FAR_ACCESSORIES } from './props.js';
 import { attachCigaretteToHand, createSmokeOverlay, emberGlow } from './smoking.js';
 import { attachBasucoProps, createBasucoOverlay } from './pipe.js';
 import { rotateInFrame } from './melee.js';
 import { findBone } from './props.js';
 import { createMeleeOverlay } from './melee.js';
+import { createPointOverlay } from './pointing.js';
 import { addHatClip, hatEdgeProfile } from './hatFit.js';
 
 const MODEL_BASE = `${import.meta.env?.BASE_URL ?? '/'}models/`;
@@ -231,6 +232,7 @@ async function buildInstance(catalog, look, lod = false) {
 
   const hidden = new Set();
   const hair = [], hatPositions = [];
+  const uniform = look.uniforme ? new THREE.Color(look.uniforme) : null;
   parts.forEach((p, i) => {
     if (!useLod) for (const v of p.info.oculta) hidden.add(v);
     partGltfs[i].scene.traverse((o) => {
@@ -240,6 +242,9 @@ async function buildInstance(catalog, look, lod = false) {
         mesh.material.color.copy(hairTone);
         addHairTone(mesh.material);
         if (p.cat === 'pelo') hair.push(mesh);
+      } else if (uniform && p.cat !== 'barba') {
+        // uniforme: la prenda entera de un color (la textura conserva costuras y pliegues)
+        mesh.material.color.copy(uniform);
       } else {
         addGrime(mesh.material, wear, { seed });
       }
@@ -257,7 +262,8 @@ async function buildInstance(catalog, look, lod = false) {
     o.material.color.copy(hairTone);
     addHairTone(o.material);
   });
-  const accessories = useLod ? null : attachAccessories(root, bones, look.accesorios, wear);
+  const worn = (look.accesorios ?? []).filter((id) => !useLod || FAR_ACCESSORIES.has(id));
+  const accessories = worn.length ? attachAccessories(root, bones, worn, wear) : null;
   if (bodyMesh) hideCovered(bodyMesh, bodyGltf.scene.getObjectByName(bodyMesh.name)?.geometry.index ?? bodyMesh.geometry.index, hidden);
 
   const mixer = new THREE.AnimationMixer(root);
@@ -370,7 +376,7 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
       disposeRealisticInstance(inst); inst = null;
       group.removeFromParent();
     },
-    update(dt, { speed = 0, running = false, action = null, attack = null, smoke = null, basuco: pipeT = null, look = 0 } = {}) {
+    update(dt, { speed = 0, running = false, action = null, attack = null, smoke = null, basuco: pipeT = null, look = 0, point = 0 } = {}) {
       if (!inst) return;
       const a = inst.actions;
       // destino: acción especial si existe el clip (o su sustituto); si no, reposo o locomoción
@@ -422,6 +428,8 @@ export async function createRealisticCharacter(look = {}, { lod = false } = {}) 
       // el basuco: agachado con las dos manos en la boca
       if (pipeT != null || inst.pipe?.active) (inst.pipe ??= createBasucoOverlay(inst.bones, inst.root)).apply(dt, pipeT);
       inst.basucoProps?.update(pipeT ?? 0);
+      // señalar con el brazo estirado (el jefe de la limpieza social da la orden)
+      if (point || inst.point?.active) (inst.point ??= createPointOverlay(inst.bones, inst.root)).apply(dt, point);
       // paranoia: la cabeza voltea a los lados (el cuello se lleva parte del giro)
       inst.glance = (inst.glance ?? 0) + (look - (inst.glance ?? 0)) * Math.min(1, dt * 16);
       if (Math.abs(inst.glance) > 0.002) {

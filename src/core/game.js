@@ -42,6 +42,7 @@ import { RadioSystem } from '../systems/RadioSystem.js';
 import { PoopSystem } from '../systems/PoopSystem.js';
 import { PsychosisSystem } from '../systems/PsychosisSystem.js';
 import { RoadRageSystem } from '../systems/RoadRageSystem.js';
+import { LimpiezaSocialSystem } from '../systems/LimpiezaSocialSystem.js';
 import { SubstanceEffects } from '../systems/SubstanceEffects.js';
 import { SUBSTANCE_EFFECTS } from '../data/substanceEffects.js';
 import { StealSystem } from '../features/steal.js';
@@ -112,6 +113,9 @@ export class Game {
     this.roadRage = new RoadRageSystem(this.sceneMgr.scene, { player: this.player, stats: this.stats, audio: this.audio });
     this.roadRage.onPlayerHurt = () => { if (this.stats.salud <= 0) this._deathCause = 'golpiza'; };
     window.addEventListener('mirror-stolen', (e) => this.roadRage?.trigger(e.detail?.car));
+    // De noche, a veces, llega la camioneta negra de la «limpieza social»
+    this.limpieza = new LimpiezaSocialSystem(this.sceneMgr.scene, { player: this.player, stats: this.stats, audio: this.audio });
+    this.limpieza.onPlayerHurt = () => { if (this.stats.salud <= 0) this._deathCause = 'limpieza'; };
     // Imagen y sonido al consumir pegante, pastilla o hierba
     this.substanceEffects = new SubstanceEffects({ canvas, audio: this.audio });
     // el basuco además trae paranoia: sombras, susurros y mirar a los lados
@@ -253,7 +257,7 @@ export class Game {
     await withLoadTimeout(loadTaskGroups([
       [() => modelo !== 'procedural' ? this.player.setModel('realista') : Promise.resolve(),
         () => this.audio.ready],
-      [...(district?.npcs ?? []), ...(this.roadRage?.preloadables ?? [])].map(npc => () => npc.preload()),
+      [...(district?.npcs ?? []), ...(this.roadRage?.preloadables ?? []), ...(this.limpieza?.preloadables ?? [])].map(npc => () => npc.preload()),
       importedEntities.map(entity => () => entity.preloadModel()),
       [() => district?.preloadDetails?.()]
     ], (done, total) => {
@@ -283,7 +287,7 @@ export class Game {
     this.world.update(0, this.player.position, this.cameraRig.camera);
     this.localLights.update(0, this.player.position, (x, z) => district?.getGroundHeight?.(x, z) ?? 0, this.cameraRig.camera);
     await loading.stage('Preparando texturas, luces y shaders…', 4);
-    const extraModels = [...(district?.npcs ?? []), ...(this.roadRage?.preloadables ?? [])].flatMap(npc => [npc.lodChar?.group, npc.fullChar?.group]).filter(Boolean);
+    const extraModels = [...(district?.npcs ?? []), ...(this.roadRage?.preloadables ?? []), ...(this.limpieza?.preloadables ?? [])].flatMap(npc => [npc.lodChar?.group, npc.fullChar?.group]).filter(Boolean);
     const rain = this.weather?.rainParticles;
     if (rain) rain.visible = true;
     try {
@@ -563,6 +567,7 @@ export class Game {
     // Pedir limosna requiere personas cerca; El Chato no cuenta.
     this.interaction.setPedestrians(district.npcs ?? []);
     if (this.traffic) this.roadRage?.setup(district, this.traffic, district.trafficPedestrians);
+    if (this.traffic) this.limpieza?.setup(district, this.traffic.routes, district.trafficPedestrians);
 
     // ===== Tienda La Esquinita =====
     this.shop = new Shop(
@@ -700,6 +705,12 @@ export class Game {
     }, 1200);
   }
 
+  /** ¿Está el jugador a menos de `radius` m del cambuche? */
+  _nearCambuche(radius) {
+    const c = this.cambuche?.position;
+    return !!c && Math.hypot(this.player.position.x - c.x, this.player.position.z - c.z) < radius;
+  }
+
   _onVehicleImpact({ speed, direction }) {
     if (this._deathPending || this.stats.salud <= 0 || (this._vehicleImpactCooldown ?? 0) > 0) return;
     const damage = Math.min(100, Math.max(4, Math.round(.6 * speed ** 2 + 1.5 * speed)));
@@ -738,7 +749,8 @@ export class Game {
     if (this.diseases.hasAny) causes.push('enfermedad');
     this.menu.open({
       title: this._deathCause === 'atropello' ? 'Te atropellaron'
-        : this._deathCause === 'golpiza' ? 'Te dieron una golpiza' : 'Te quedaste sin salud',
+        : this._deathCause === 'golpiza' ? 'Te dieron una golpiza'
+          : this._deathCause === 'limpieza' ? 'Te mató la limpieza social' : 'Te quedaste sin salud',
       sub: 'La partida está en pausa.',
       ic: 'heart',
       dismissible: false,
@@ -750,6 +762,8 @@ export class Game {
             ? 'Mira ambos sentidos y cruza con distancia: los carros necesitan espacio para frenar.'
             : this._deathCause === 'golpiza'
               ? 'Si un conductor se baja con una varilla, corre con Shift: es más lento que tú corriendo. Apártate cuando levante la varilla.'
+              : this._deathCause === 'limpieza'
+                ? 'Si de noche frena una camioneta negra, corre con Shift sin parar: los dos que persiguen son un poco más lentos que tú y se cansan a los 22 segundos. Junto al cambuche no llegan.'
               : 'Come, bebe agua y descansa para mantener tus necesidades. Puedes consumir comida y agua haciendo clic en ellas en el inventario.' })),
         foot: [button('Volver al cambuche', { primary: true, onClick: () => this._respawn() })]
       })
@@ -829,6 +843,7 @@ export class Game {
     this.poopSystem?.activeProjectiles?.forEach?.(p => p.dispose?.());
     if (this.poopSystem) this.poopSystem.activeProjectiles = [];
     this.roadRage?.reset();
+    this.limpieza?.reset();
 
     const district = this.world.active;
     if (district?.reserved) {
@@ -991,6 +1006,13 @@ export class Game {
     this.profiler?.mark('mundoNPC');
     this.traffic?.update(dt, { player: this.player.position, pedestrians: this.world.active?.trafficPedestrians ?? this.world.active?.npcs ?? [], onPlayerHit: this._onVehicleImpact });
     this.roadRage?.update(dt);
+    this.limpieza?.update(dt, {
+      isNight: this.clock.isNight,
+      canChase: !this.isSleeping,
+      // en el cambuche no llegan: es lo único que el jugador tiene seguro
+      allowSpawn: !this.isSleeping && !this._nearCambuche(15),
+      camera: this.cameraRig.camera
+    });
     this.profiler?.mark('trafico');
     if (this._handleDeath()) return;
 
@@ -1137,6 +1159,7 @@ export class Game {
     this.substanceEffects?.dispose?.();
     this.poopSystem?.dispose?.();
     this.roadRage?.dispose?.();
+    this.limpieza?.dispose?.();
     this.radio?.destroy?.();
   }
 }

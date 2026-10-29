@@ -1,5 +1,6 @@
 // src/character/props.js
-// Accesorios rígidos del personaje realista (bastón, mochila) y armas en mano (cuchillo, botella picada). No son ropa de MakeHuman:
+// Accesorios rígidos del personaje realista (bastón, mochila, pasamontañas, gorra) y armas en mano
+// (cuchillo, botella picada, pistola). No son ropa de MakeHuman:
 // se arman con geometría simple y se atan a un hueso del esqueleto Mixamo, así siguen la animación.
 import * as THREE from 'three';
 
@@ -86,7 +87,72 @@ function backpack(wear) {
   return { bone: 'Spine2', object: group, space: 'body' };
 }
 
-const BUILDERS = { baston: cane, mochila: backpack };
+// ---------- pasamontañas y gorra ----------
+// En el espacio del personaje con origen en el hueso Head (mira a +Z). La cabeza va de ~-0,06 (mentón)
+// a +0,17 (coronilla) sobre el hueso, y los ojos quedan a ~+0,03, adelante.
+export const MASK_FIT = { center: [0, 0.1, 0.035], radius: [0.105, 0.135, 0.13], front: 0.175, eyes: [0.05, 0.082], eyeWidth: 0.062 };
+
+let headShared = null;
+function headGeometries() {
+  if (headShared) return headShared;
+  const { center: c, radius: r, front, eyes, eyeWidth } = MASK_FIT;
+  // tejido ceñido a la cabeza con la ranura de los ojos abierta adelante; la cara (nariz) sobresale más
+  const ball = new THREE.SphereGeometry(1, 20, 16).toNonIndexed();
+  const pos = ball.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const z = pos.getZ(i);
+    pos.setXYZ(i, pos.getX(i) * r[0], pos.getY(i) * r[1], z * (z > 0 ? front : r[2]));
+  }
+  ball.translate(c[0], c[1], c[2]);
+  const src = ball.attributes.position.array;
+  const keep = [];
+  for (let i = 0; i < src.length; i += 9) {
+    const x = (src[i] + src[i + 3] + src[i + 6]) / 3;
+    const y = (src[i + 1] + src[i + 4] + src[i + 7]) / 3;
+    const z = (src[i + 2] + src[i + 5] + src[i + 8]) / 3;
+    if (z > c[2] && y > eyes[0] && y < eyes[1] && Math.abs(x) < eyeWidth) continue;
+    for (let k = 0; k < 9; k++) keep.push(src[i + k]);
+  }
+  const mask = new THREE.BufferGeometry();
+  mask.setAttribute('position', new THREE.Float32BufferAttribute(keep, 3));
+  mask.computeVertexNormals();
+  // cuello del pasamontañas metido en el buzo
+  const neck = new THREE.CylinderGeometry(0.068, 0.078, 0.12, 14).translate(0, -0.05, 0.02);
+  // gorra: copa sobre la coronilla y visera hacia adelante
+  const crown = new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+  crown.scale(r[0] + 0.012, r[1] * 0.75, r[2] + 0.012);
+  crown.translate(c[0], c[1] + 0.035, c[2]);
+  const brim = new THREE.CylinderGeometry(0.085, 0.085, 0.01, 16, 1, false, -Math.PI / 2, Math.PI);
+  brim.scale(1.05, 1, 0.95);
+  brim.rotateX(0.12);
+  brim.translate(c[0], c[1] + 0.045, c[2] + r[2] - 0.01);
+  headShared = { mask, neck, crown, brim };
+  return headShared;
+}
+
+const knit = () => new THREE.MeshStandardMaterial({ color: '#141416', roughness: 1 });
+
+function balaclava() {
+  const g = headGeometries();
+  const m = knit();
+  const group = new THREE.Group();
+  group.name = 'prop-pasamontanas';
+  group.add(new THREE.Mesh(g.mask, m), new THREE.Mesh(g.neck, m));
+  return { bone: 'Head', object: group, space: 'body' };
+}
+
+function cap() {
+  const g = headGeometries();
+  const m = new THREE.MeshStandardMaterial({ color: '#0d0d0f', roughness: 0.75 });
+  const group = new THREE.Group();
+  group.name = 'prop-gorra';
+  group.add(new THREE.Mesh(g.crown, m), new THREE.Mesh(g.brim, m));
+  return { bone: 'Head', object: group, space: 'body' };
+}
+
+const BUILDERS = { baston: cane, mochila: backpack, pasamontanas: balaclava, gorra: cap };
+/** Accesorios baratos que también lleva el modelo lejano (se notan a distancia) */
+export const FAR_ACCESSORIES = new Set(['pasamontanas', 'gorra']);
 
 /**
  * Ata los accesorios elegidos al esqueleto. Devuelve los objetos creados y `update`,
@@ -175,7 +241,20 @@ function brokenBottle() {
   return group;
 }
 
-const WEAPON_BUILDERS = { cuchillo: knife, botella_picada: brokenBottle };
+/** Pistola corta empuñada: el cañón sale hacia los dedos (+Y) y la cacha baja por la palma */
+function pistol() {
+  const g = weaponGeometries();
+  g.slide ??= new THREE.BoxGeometry(0.026, 0.17, 0.034).translate(0, 0.085, 0.045);
+  g.butt ??= new THREE.BoxGeometry(0.024, 0.04, 0.1).rotateX(0.25).translate(0, 0.015, 0.0);
+  g.guardRing ??= new THREE.TorusGeometry(0.018, 0.004, 4, 8, Math.PI).rotateY(Math.PI / 2).translate(0, 0.045, 0.02);
+  const steel = new THREE.MeshStandardMaterial({ color: '#17181a', metalness: 0.7, roughness: 0.4 });
+  const group = new THREE.Group();
+  group.name = 'weapon-pistola';
+  group.add(new THREE.Mesh(g.slide, steel), new THREE.Mesh(g.butt, steel), new THREE.Mesh(g.guardRing, steel));
+  return group;
+}
+
+const WEAPON_BUILDERS = { cuchillo: knife, botella_picada: brokenBottle, pistola: pistol };
 
 const _wp = new THREE.Vector3();
 const _wq = new THREE.Quaternion();

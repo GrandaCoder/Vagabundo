@@ -9,6 +9,7 @@ import { Car } from '../entities/Car.js';
 import { WEAPONS } from '../data/weapons.js';
 import { SUBSTANCE_EFFECTS } from '../data/substanceEffects.js';
 import { SMOKABLES } from '../character/smoking.js';
+import { LimpiezaSocialSystem, straightRoute } from '../systems/LimpiezaSocialSystem.js';
 
 const toast = (text) => window.dispatchEvent(new CustomEvent('toast', { detail: { text, type: 'info' } }));
 
@@ -112,6 +113,28 @@ export const PRUEBAS = [
       let night = false;
       return {
         acciones: [{ texto: '💡 Luces', hacer: () => { night = !night; for (const c of cars) c.setNight?.(night, false); } }]
+      };
+    }
+  },
+  {
+    id: 'limpieza',
+    nombre: 'Limpieza social',
+    descripcion: 'La camioneta negra llega por la calle de la derecha (x = 7) y se bajan los tres. Corre con Shift.',
+    async montar(sala) {
+      sala.setHour(22);
+      const squad = new LimpiezaSocialSystem(sala.scene, { player: sala.player, stats: sala.stats, audio: sala.audio });
+      squad.setup(null, [straightRoute(new THREE.Vector3(7, 0, -38), new THREE.Vector3(0, 0, 1), 76)]);
+      await Promise.all(squad.preloadables.map((m) => m.preload()));
+      sala.updaters.add((dt) => squad.update(dt, { camera: sala.cameraRig.camera }));
+      sala.limpieza = squad;
+      return {
+        acciones: [
+          { texto: '🚙 Que llegue', hacer: () => { if (!squad.trigger()) toast('Ya están aquí (o estás muy lejos de la calle)'); } },
+          { texto: '❤️ Curar', hacer: () => { sala.stats.salud = 100; } },
+          { texto: '⏹ Que se vayan', hacer: () => squad.reset() }
+        ],
+        estado: () => `estado: ${squad.state}  salud: ${Math.round(sala.stats.salud)}\n` +
+          squad.members.map((m) => `${m.role}: ${m.state}`).join('\n')
       };
     }
   }

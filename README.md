@@ -70,7 +70,7 @@ En PowerShell, si una política de ejecución impide usar `npm`, ejecuta los mis
 
 ### Sala de pruebas
 
-Con `npm run dev` activo, abre **/sala.html** (por ejemplo http://localhost:5173/sala.html?prueba=fumar). Es un piso plano sin ciudad, tráfico ni guardado donde aparece tu personaje con la misma cámara y los mismos controles, y carga en segundos. Cada prueba monta solo lo que necesita y tiene sus botones: personaje, fumar, pelea, efectos de sustancias y carros. El panel también cambia de modelo (realista o liviano), acelera el tiempo (x5, x30) y pasa de día a noche. Desde la consola se maneja con `__sala`. Para agregar una prueba, suma una entrada en `src/sala/pruebas.js`. La sala no forma parte de la compilación.
+Con `npm run dev` activo, abre **/sala.html** (por ejemplo http://localhost:5173/sala.html?prueba=fumar). Es un piso plano sin ciudad, tráfico ni guardado donde aparece tu personaje con la misma cámara y los mismos controles, y carga en segundos. Cada prueba monta solo lo que necesita y tiene sus botones: personaje, fumar, pelea, efectos de sustancias, carros y limpieza social. El panel también cambia de modelo (realista o liviano), acelera el tiempo (x5, x30) y pasa de día a noche. Desde la consola se maneja con `__sala`. Para agregar una prueba, suma una entrada en `src/sala/pruebas.js`. La sala no forma parte de la compilación.
 
 ## Controles
 
@@ -148,6 +148,14 @@ Al robar el retrovisor de un carro en circulación, el conductor se baja con una
 - Antes de cada golpe levanta la varilla, así que apartarse a tiempo evita el daño. Cada golpe quita entre 10 y 16 de salud.
 - Si te alejas más de 28 metros o pasan 18 segundos, se rinde, vuelve a su carro y el tráfico sigue.
 - Solo hay un conductor fuera a la vez. Si te mata, la pantalla de recuperación lo indica, y al volver al cambuche ya está otra vez en su carro.
+
+De noche, de vez en cuando, llega la **limpieza social**: una camioneta 4x4 negra de lujo (vidrios polarizados, parrilla y rines cromados) que viene por la calle más cercana y frena en seco junto al jugador. Se bajan tres hombres todo de negro, con buzo, botas, pasamontañas y pistola corta:
+
+- El jefe, con gorra, se queda junto a la camioneta, de pie con el brazo estirado señalando al jugador, y da la orden a gritos («¡Denle a ese chirrete hijueputa!»).
+- Los otros dos lo persiguen insultándolo a 5,2 m/s: alcanzan a quien camina, no a quien corre con **Shift** sin parar.
+- Antes de cada cachazo levantan la pistola. Cada golpe quita entre 20 y 30 de salud y, a diferencia del conductor de la varilla, siguen pegando aunque el jugador esté tambaleando: si lo alcanzan, casi siempre lo matan.
+- A los 22 segundos, o si se aleja más de 32 metros, se rinden y vuelven; cuando los dos están arriba, el jefe se sube y la camioneta se va.
+- Hay como mucho una visita cada cinco minutos de juego, solo de noche, y nunca a menos de 15 metros del cambuche ni mientras duerme. Golpearlos no sirve de nada.
 
 Si la salud llega a cero, el juego se pausa y muestra una pantalla de recuperación. El regreso al cambuche ocurre al pulsar **Volver al cambuche**.
 

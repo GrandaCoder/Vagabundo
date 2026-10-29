@@ -390,7 +390,7 @@ export class Npc {
     const budget = ctx.animationBudget ?? this.animationBudget;
     const interval = dist > NPC_LOD.animEvery ? .1 * budget : budget > 1 ? budget / 60 : 0;
     if (interval && this.animAcc < interval) return;
-    this.character.update(Math.min(this.animAcc, 0.2), { speed: this.moving ? this.walkSpeed / REALISTIC_SCALE : 0, action: this.action ?? null });
+    this.character.update(Math.min(this.animAcc, 0.2), { speed: this.moving ? this.walkSpeed / REALISTIC_SCALE : 0, action: this.action ?? null, ...this.poseParams });
     this.animAcc = 0;
   }
 
