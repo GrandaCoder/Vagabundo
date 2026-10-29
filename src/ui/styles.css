@@ -745,3 +745,6 @@ body.is-loading #minimap-container { visibility: hidden; }
 .dev-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .dev-status { color:#ffd06c; }
 .dev-hint { color:#a5bbb9; font-size:11px; }
+.dev-section { margin:10px 0 6px; color:#f3ce64; font-size:12px; font-weight:700; }
+.dev-time { margin-bottom:8px; }
+#developer-panel .dev-time button[aria-pressed="true"] { background:#53c68b; color:#08151b; border-color:#53c68b; }
