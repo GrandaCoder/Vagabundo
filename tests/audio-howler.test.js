@@ -86,6 +86,8 @@ test('Howler real mezcla motores sintetizados sin grabaciones duplicadas ni pann
       assert.equal(state.output._panner,undefined);
     }
     const source=audio.motorAudio.voices.get(vehicle.car);
+    const trafficGain=source.output.gain.value;vehicle.car.controller='player';audio.updateWorld(.1,listener,camera,[vehicle],bus);
+    assert.ok(Math.abs(source.output.gain.value/trafficGain-1.3)<1e-6,'el carro que se conduce suena un 30 % más');delete vehicle.car.controller;
     vehicle.speed=0;audio.updateWorld(.1,listener,camera,[vehicle],bus);
     assert.equal(audio.motorAudio.voices.get(vehicle.car),source);
     audio.setPaused(true);assert.equal(audio.motorAudio.voices.size,0);
