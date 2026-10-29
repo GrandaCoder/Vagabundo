@@ -1,3 +1,4 @@
+import {createRoadSurfaceMaterial} from './DonorSurfaces.js';
 import * as THREE from 'three/webgpu';
 import {texture,materialColor,materialEmissive,materialRoughness,materialMetalness,positionWorld,positionView,normalView,vec3,vec4,float,mix,smoothstep,sin,time,mx_noise_float,faceDirection} from 'three/tsl';
 import {cityUniforms} from './GraphicsState.js';
@@ -46,17 +47,22 @@ export class SurfaceMaterials {
     if(kind==='facade'){
       material.colorNode=facadeColor;material.roughnessNode=mix(.86,.22,facadeWindow);material.metalnessNode=mix(.02,.3,facadeWindow);
     }
-    if(kind==='road'||kind==='busway'||kind==='sidewalk'){
+    if(kind==='sidewalk'){
       const puddles=smoothstep(.15,.65,mx_noise_float(positionWorld.mul(.35))).mul(cityUniforms.wetness);
       material.colorNode=base.mul(mix(1,.72,puddles)).mul(micro);
       material.roughnessNode=mix(materialRoughness,kind==='sidewalk'?.32:.16,puddles);
       material.metalnessNode=mix(materialMetalness,.24,puddles);
     }
+    if(kind==='road'||kind==='busway'){
+      const road=this.road??=createRoadSurfaceMaterial();
+      material.colorNode=kind==='busway'?road.colorNode.mul(vec3(1.3,.48,.42)):road.colorNode;
+      material.roughnessNode=road.roughnessNode;material.metalnessNode=road.metalnessNode;material.normalNode=road.normalNode;
+    }
     if(kind==='water'){
       const wave=sin(positionWorld.x.mul(2.8).add(time.mul(.65))).mul(.4).add(sin(positionWorld.z.mul(3.7).sub(time.mul(.45))).mul(.3));
       material.normalNode=heightNormal(wave,.12);material.roughnessNode=float(.17);material.metalnessNode=float(.32);
       material.colorNode=base.mul(.75).mul(wave.mul(.035).add(1));
-    }else if(needsMicro&&!source.normalMap){material.normalNode=heightNormal(grain,.018);}
+    }else if(needsMicro&&!source.normalMap&&kind!=='road'&&kind!=='busway'){material.normalNode=heightNormal(grain,.018);}
       this.graphs.set(graphKey,Object.fromEntries(['colorNode','roughnessNode','metalnessNode','normalNode'].map(key=>[key,material[key]])));
     }
     material.userData.shaderFamily=`bogota-surface:${graphKey}`;
@@ -69,5 +75,5 @@ export class SurfaceMaterials {
   apply(root,kinds=new Map()){
     root.traverse(object=>{if(!object.isMesh)return;useInstanceStorage(object);const convert=m=>this.convert(m,kinds.get(m)??'surface');object.material=Array.isArray(object.material)?object.material.map(convert):convert(object.material);});
   }
-  dispose(){for(const material of this.resources)material.dispose();this.resources.clear();this.cache.clear();this.graphs.clear();}
+  dispose(){for(const material of this.resources)material.dispose();this.road?.dispose();this.resources.clear();this.cache.clear();this.graphs.clear();}
 }

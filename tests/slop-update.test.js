@@ -8,7 +8,7 @@ import {TrafficSignals,intersectionPhase} from '../src/world/bogota/TrafficSigna
 import {CAR_DRIVE,driveSpeed} from '../src/vehicles/SlopDynamics.js';
 import {createSynthResources,createMotorVoice} from '../src/vehicles/SlopMotorSynthesis.js';
 
-test('las cinco clases mantienen dimensiones, orientacion, estados y liberacion del banco',()=>{
+test('todas las clases del donante mantienen dimensiones, orientacion, estados y liberacion del banco',()=>{
  const scene=new THREE.Scene();
  for(const [variant,size] of Object.entries(VEHICLE_TYPES)){
   const v=createSlopVehicle({variant,...size,scene});scene.add(v.group);v.setNight(true);v.updateMotion(3,true);v.setSteering(.2,1);
@@ -19,7 +19,7 @@ test('las cinco clases mantienen dimensiones, orientacion, estados y liberacion 
   v.dispose();
  }
  assert.equal(vehicleBatches(scene).entries.size,0);disposeVehicleBatches(scene);
- assert.deepEqual([0,.31,.8,.95,.99].map(x=>trafficVariant(()=>x)),['taxi','sedan','suv','police','bus']);
+ assert.deepEqual([0,.31,.6,.8,.85,.9,.95,.97,.99].map(x=>trafficVariant(()=>x)),['taxi','sedan','suv','van','minivan','pickup','police','police_suv','bus']);
 });
 
 test('solo un cuarto redondeado de cruces conserva postes; prioridad ignora fases invisibles',()=>{

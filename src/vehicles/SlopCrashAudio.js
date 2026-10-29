@@ -167,3 +167,28 @@ export function synthHorn(ctx, duration, seed) {
   }, 0.7);
 }
 
+
+/**
+ * Arranque al subir al carro: el motor de arranque gira el cigüeñal (pulsos de compresión sobre un zumbido
+ * eléctrico) y el motor prende con un golpe grave. Después sigue la voz de motor del donante en ralentí.
+ */
+export function synthStarter(ctx, seed = 3) {
+  const random = randomSource(seed);
+  const duration = 1.15, catchAt = 0.72 + random() * 0.12;
+  let whine = 0, rumble = 0, air = 0;
+  return makeBuffer(ctx, duration, (t) => {
+    const noise = random() * 2 - 1;
+    air += (noise - air) * 0.18;
+    rumble += (noise - rumble) * 0.02;
+    const cranking = t < catchAt ? 1 : Math.exp(-(t - catchAt) * 18);
+    // Unas 8 compresiones por segundo que aceleran un poco antes de prender.
+    const strokes = 7.2 + t * 3.5;
+    const compression = 0.55 + 0.45 * Math.max(0, Math.sin(TAU * strokes * t));
+    whine += (230 + 40 * compression) / ctx.sampleRate;
+    const motor = (Math.sin(TAU * whine) * 0.5 + Math.sin(TAU * whine * 2) * 0.22) * compression * cranking;
+    const fired = t < catchAt ? 0 : Math.exp(-(t - catchAt) * 5.5);
+    const ignition = (Math.sin(TAU * 48 * t) * 0.8 + rumble * 2.2) * fired * smoothstep((t - catchAt) / 0.02);
+    const attack = smoothstep(t / 0.03);
+    return (motor * 0.55 + air * 0.08 * cranking + ignition) * attack;
+  }, 0.55);
+}

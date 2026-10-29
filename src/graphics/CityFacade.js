@@ -1,8 +1,9 @@
+import {evaluateApartmentInterior} from './DonorSurfaces.js';
 // Fachadas de casas de Bogotá dibujadas por un solo material procedural.
 // Adaptado de la idea de Slop New York (tsl-materials.js, MIT): la fachada no es una textura por edificio
 // sino un shader compartido cuyas variaciones (ancho, pisos, estilo, tono, semilla) viajan como datos de vértice.
 import * as THREE from 'three/webgpu';
-import {attribute,uv,float,vec3,vec4,floor,fract,max,min,mix,step,smoothstep,fwidth,round,length,sin,dot,color,mx_noise_float} from 'three/tsl';
+import {attribute,uv,vec2,float,vec3,vec4,floor,fract,max,min,mix,step,smoothstep,fwidth,round,length,sin,dot,color,mx_noise_float} from 'three/tsl';
 import {cityUniforms} from './GraphicsState.js';
 import {filteredPulse} from './FacadeNodes.js';
 
@@ -85,8 +86,10 @@ function buildGraph() {
   const boarded = ruin.mul(step(rnd(key, 15), .55)).mul(windowMask);
   const plank = mix(mix(hex('#6b5a40'), hex('#5a4a33'), step(.33, rnd(vec3(floor(wv.mul(4)), cellId, seed), 16))), hex('#7a684a'), step(.66, rnd(vec3(floor(wv.mul(4)), cellId, seed), 16)));
   const frameColor = mix(hex('#2a2a2a'), hex('#e8e3d6'), brickStyle);
-  const windowColor = mix(mix(glass, curtainColor.mul(.75), curtain.mul(.75)), plank, boarded).mul(float(1).sub(barMask.mul(.8)));
-  const windowGlow = glow.mul(windowMask).mul(float(1).sub(curtain.mul(.7))).mul(float(1).sub(boarded));
+  const room=evaluateApartmentInterior(alongM,heightM,vec2(wu,wv),vec2(cellId,floorId),cellM,float(3),seed,float(.72),float(.36),vec2(fwidth(cx),fwidth(floorF)));
+  const roomGlass=mix(room.rgb,glass,.14);
+  const windowColor = mix(roomGlass, plank, boarded).mul(float(1).sub(barMask.mul(.8)));
+  const windowGlow = room.rgb.mul(room.a).mul(windowMask).mul(float(1).sub(boarded));
 
   // Planta baja: persianas metálicas con grafiti.
   const doors = max(1, round(widthM.div(4.2))), dx = alongM.div(widthM.div(doors)), doorId = floor(dx);

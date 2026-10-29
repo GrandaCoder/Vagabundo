@@ -10,7 +10,7 @@ export class PlayerDriving {
   if(this.car||!car||car.traffic||car.controller!=='parked'||this.player.position.distanceTo(car.position)>=2.5||this.player.isStunned)return false;
   if(!car.drivingVisual){this.notify('El carro todavía se está preparando.');return false;}
   this.savedVisible=this.player.root.visible;this.savedPosition=this.player.position.clone();this.car=car;initializeMotion(this);for(const key of MOTION_FIELDS)this[key]=car.parkedPhysics?.[key]??0;car.physics=this;car.controller='player';car.setControlled(true);this.speed=this.steer=0;this.pitch=this.roll=this.pitchVel=this.rollVel=0;
-  this.player.velocity?.set(0,0,0);this.player.root.visible=false;this._follow();return true;
+  this.player.velocity?.set(0,0,0);this.player.root.visible=false;this._follow();this.throttle=0;this.audio?.startEngine?.(car);return true;
  }
  _follow(){this.player.position.copy(this.car.position);this.player.root.position.copy(this.player.position);this.player.speed=Math.abs(this.speed);}
  exit(){
@@ -32,7 +32,7 @@ export class PlayerDriving {
  }
  update(dt,input,pedestrians=[]){
   if(!this.car)return;
-  const car=this.car,throttle=input.isDown('KeyW')?1:input.isDown('KeyS')?-1:0,steering=(input.isDown('KeyA')?1:0)-(input.isDown('KeyD')?1:0),boost=input.isRunning;
+  const car=this.car,throttle=input.isDown('KeyW')?1:input.isDown('KeyS')?-1:0;this.throttle=Math.abs(throttle)*(input.isRunning?1:.75);const steering=(input.isDown('KeyA')?1:0)-(input.isDown('KeyD')?1:0),boost=input.isRunning;
   if(input.consumePress('KeyB'))this.audio?.honkPlayer?.(car);
   let remaining=Math.min(Math.max(dt,0),.1);
   while(remaining>1e-8){const step=Math.min(remaining,1/120),before=this.speed;this.speed=driveSpeed(this.speed,throttle,boost,step);

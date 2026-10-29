@@ -1,5 +1,10 @@
 import {createSynthResources,createMotorVoice} from './SlopMotorSynthesis.js';
-import {synthHorn} from './SlopCrashAudio.js';
+import {synthHorn,synthStarter} from './SlopCrashAudio.js';
+
+// El donante sintetiza tres motores; las clases nuevas usan el más cercano por tamaño y peso.
+// El carro que conduce el jugador suena un 30 % más que el tráfico a la misma distancia.
+const PLAYER_GAIN=1.3;
+const MOTOR_KIND={bus:'bus',suv:'suv',police_suv:'suv',pickup:'suv',van:'suv',minivan:'suv'};
 
 /** Mono voices from the donor, mixed through the existing master volume and city acoustics. */
 export class SlopMotorAudio {
@@ -20,11 +25,13 @@ export class SlopMotorAudio {
   }else this._stopWind();
   const keep=new Set(near.map(v=>v.car));for(const [car,state] of this.voices)if(!keep.has(car)){state.voice.dispose();state.output.disconnect();this.voices.delete(car);}
   for(const entry of near){const car=entry.car;let state=this.voices.get(car);
-   if(!state){const output=ctx.createGain();output.gain.value=0;output.connect(this.howler.masterGain);const kind=entry.variant==='bus'||car.variant==='bus'?'bus':car.variant==='suv'?'suv':'sedan';state={output,voice:createMotorVoice(ctx,this.resources,kind,output)};this.voices.set(car,state);}
-   const distance=car.position.distanceTo(listener);state.output.gain.setTargetAtTime(.28*Math.max(0,1-distance/55)*gain(car),ctx.currentTime,.08);
-   state.voice.update({speed:entry.speed??0,load:Math.max(0,Math.min(1,(entry.acceleration??0)/2)),seed:car.visualSeed??0});
+   if(!state){const output=ctx.createGain();output.gain.value=0;output.connect(this.howler.masterGain);const kind=entry.variant==='bus'?'bus':MOTOR_KIND[car.variant]??'sedan';state={output,voice:createMotorVoice(ctx,this.resources,kind,output)};this.voices.set(car,state);}
+   const distance=car.position.distanceTo(listener);state.output.gain.setTargetAtTime(.28*(car.controller==='player'?PLAYER_GAIN:1)*Math.max(0,1-distance/55)*gain(car),ctx.currentTime,.08);
+   state.voice.update({speed:entry.speed??0,load:entry.load??Math.max(0,Math.min(1,(entry.acceleration??0)/2)),seed:car.visualSeed??0});
   }
  }
+ /** Motor de arranque al subir: el ralentí sigue con la voz normal del carro. */
+ starter(car,volume=.5*PLAYER_GAIN){const ctx=this._context();if(!ctx||this.paused)return;const output=ctx.createGain(),source=ctx.createBufferSource();source.buffer=this.starterBuffer??=synthStarter(ctx,(car?.visualSeed??3)+11);output.gain.value=volume;source.connect(output);output.connect(this.howler.masterGain);source.vehicle=car;this.horns.add(source);source.onended=()=>{this.horns.delete(source);source.disconnect();output.disconnect();};source.start();}
  honk(car,volume=.45){const ctx=this._context();if(!ctx||this.paused)return;const output=ctx.createGain(),source=ctx.createBufferSource();source.buffer=this.horn??=synthHorn(ctx,.55,17);output.gain.value=volume;source.connect(output);output.connect(this.howler.masterGain);source.vehicle=car;this.horns.add(source);source.onended=()=>{source.disconnect();output.disconnect();this.horns.delete(source);};source.start();
  }
  suppress(cars){const removed=new Set(cars);for(const car of removed){const state=this.voices.get(car);if(state){state.voice.dispose();state.output.disconnect();this.voices.delete(car);}}for(const source of [...this.horns])if(removed.has(source.vehicle)){source.stop();source.onended?.();}}

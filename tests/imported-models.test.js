@@ -70,16 +70,15 @@ test('los GLB reales caben en las dimensiones actuales y descansan sobre Y=0', (
   assert.ok(front.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), IMPORTED_MODELS.transmilenio.yaw).z < -.99);
 });
 
-test('carros comparten el GLB, conservan rumbo y robo, y eliminar uno conserva el otro', async () => {
+test('los carros usan la carrocería procedural del donante, comparten geometría y conservan rumbo y robo', async () => {
   const scene = new THREE.Scene();
-  const cars = [new Car(scene, new THREE.Vector3(5, .1, 6), .7), new Car(scene, new THREE.Vector3(12, 0, 6))];
-  cars.forEach(car => { car.modelKind = 'car1'; });
+  const cars = [new Car(scene, new THREE.Vector3(5, .1, 6), .7, { variant: 'sedan' }), new Car(scene, new THREE.Vector3(12, 0, 6), 0, { variant: 'sedan' })];
+  // El modo antiguo (GLB) ya no existe: 'actual' y 'slop' dibujan el mismo vehículo del donante.
   await Promise.all(cars.map(car => car.setVisualMode('actual')));
-  assert.equal(loads.get('car1.opt.glb'), 1);
-  const first = cars[0].importedModel.children[0].children[0].children[0];
-  const second = cars[1].importedModel.children[0].children[0].children[0];
+  assert.equal(loads.get('car1.opt.glb'), undefined, 'no se cargan los modelos antiguos');
+  const [first, second] = cars.map(car => car.vehicle.headlightFrame);
   assert.equal(first.geometry, second.geometry);
-  assert.equal(first.material, second.material);
+  assert.notEqual(first.material, second.material, 'cada carro conserva su pintura y estado de luces');
   let disposed = false;
   first.geometry.addEventListener('dispose', () => { disposed = true; });
   assert.equal(cars[0].group.rotation.y, .7);

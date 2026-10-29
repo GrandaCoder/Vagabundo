@@ -69,3 +69,5 @@ Vertical contact filtering and bus route constraints are local additions. Geogra
 data, New York routes and additional driving modes are not imported.
 
 - `src/graphics/CityFacade.js` adapta a Bogotá la idea de fachadas procedurales con parámetros por vértice y filtrado por periodo de `tsl-materials.js` de Slop New York (MIT). No usa su mapa, coordenadas ni rótulos.
+- `src/vehicles/donor/cars.js`, `bus.js` y `vehicles.js`: carrocerías, ruedas orientables, materiales TSL y placas de `js/cars.js`, `js/bus.js` y `js/vehicles.js` de Slop New York 09d27e050d1e75b7a0eea29a82e81aa4646f28e9 (MIT), con placas y colores bogotanos y luces ligadas al encendido nocturno del juego.
+- `src/graphics/DonorSurfaces.js`: interiores con paralaje (room mapping) y asfalto con desgaste y charcos de `js/tsl-materials.js` de la misma revisión (MIT), en metros del mundo y sin coordenadas ni rótulos de Nueva York. `src/vehicles/SlopMotorSynthesis.js` se actualizó con la síntesis de combustión de `js/audio-synthesis.js` de esa revisión.

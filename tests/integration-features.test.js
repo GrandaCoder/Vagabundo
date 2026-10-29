@@ -27,13 +27,13 @@ test('los perfiles respetan su límite de resolución incluso después de la ada
     resolution: new AdaptiveResolution(2),
     instance: { shadowMap: {}, setPixelRatio(value) { this.ratio = value; }, getPixelRatio() { return this.ratio; } }
   });
-  for (const [quality, cap] of [['baja', 1], ['media', 1.25], ['alta', 1.5]]) {
+  for (const [quality, cap] of [['baja', 1], ['media', 1], ['alta', 1]]) {
     renderer.setQuality(quality);
-    assert.equal(renderer.instance.ratio, cap);
+    assert.equal(renderer.instance.ratio, cap, 'todas las calidades dibujan a 1×');
     for (let i = 0; i < 300; i++) renderer.adaptResolution(40);
-    assert.ok(renderer.instance.ratio < cap);
+    assert.equal(renderer.instance.ratio, cap, 'la carga baja efectos, no píxeles');
     for (let i = 0; i < 4000; i++) renderer.adaptResolution(10);
-    assert.ok(renderer.instance.ratio <= cap);
+    assert.equal(renderer.instance.ratio, cap);
     // Nunca se alterna: cambiar shadowMap.enabled reconstruye todos los RenderObject.
     assert.equal(renderer.instance.shadowMap.enabled, undefined);
     assert.equal(localStorage.getItem('bazuko.webgpu.graphics_quality'), quality);

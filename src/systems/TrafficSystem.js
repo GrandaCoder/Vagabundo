@@ -189,7 +189,11 @@ export class TrafficSystem {
       // Los que ya cruzan despejan primero. La cola solo da prioridad entre
       // trayectorias que se cortan: sentidos opuestos y convoyes pueden avanzar juntos.
       const waiting = [];
-      const ordered = [...state.queue].sort((a, b) => Number(this._overlapsNode(b.car, node)) - Number(this._overlapsNode(a.car, node)) || (b.waitAge??0)-(a.waitAge??0));
+      // Quien va detrás en el mismo acceso no puede reservar antes que quien tiene delante: su reserva
+      // bloqueaba al primero y ninguno avanzaba (el reloj de espera del primero se reinicia al replanear).
+      for (const [vehicle, claim] of state.owners) if (!claim.entered && this._queuedAhead(vehicle, claim.plan, node, state)) state.owners.delete(vehicle);
+      const ordered = [...state.queue].sort((a, b) => Number(this._overlapsNode(b.car, node)) - Number(this._overlapsNode(a.car, node)) ||
+        Math.floor(this._stopDistance(a,node,state.plans.get(a))/2) - Math.floor(this._stopDistance(b,node,state.plans.get(b))/2) || (b.waitAge??0)-(a.waitAge??0));
       for (const vehicle of ordered) {
         if (state.owners.has(vehicle)) continue;
         const plan = state.plans.get(vehicle), entered = this._overlapsNode(vehicle.car, node);
@@ -205,6 +209,7 @@ export class TrafficSystem {
         }
         if(!entered&&(phase===2||(phase===1&&!committed)))continue;
         if(!entered&&!this._exitClear(vehicle,plan))continue;
+        if(!entered&&this._queuedAhead(vehicle,plan,node,state))continue;
         const blocked = (busClaims && this._pathsConflict(plan, state.busPlan)) ||
           [...state.owners.values()].some(claim => this._pathsConflict(plan, claim.plan)) ||
           waiting.some(earlier => this._pathsConflict(plan, earlier));
@@ -216,6 +221,17 @@ export class TrafficSystem {
     }
   }
 
+  /** Otro vehículo del mismo acceso y carril, más cerca del cruce y aún sin reserva. */
+  _queuedAhead(vehicle,plan,node,state){
+    const p=vehicle.car.position,own=this._stopDistance(vehicle,node,plan);
+    for(const other of state.queue){
+      if(other===vehicle||state.owners.has(other))continue;
+      const otherPlan=state.plans.get(other);if(!otherPlan||otherPlan.hx===undefined||Math.sign(otherPlan.hx)!==Math.sign(plan.hx)||Math.sign(otherPlan.hz)!==Math.sign(plan.hz))continue;
+      const o=other.car.position,lateral=plan.axis===0?Math.abs(o.z-p.z):Math.abs(o.x-p.x);
+      if(lateral<1.5&&this._stopDistance(other,node,otherPlan)<own-.5)return true;
+    }
+    return false;
+  }
   _stopDistance(vehicle,node,plan){
     const p=vehicle.car.position,pad=vehicle.car.length/2+.8;
     return Math.max(0,(plan.axis===0?(plan.hx>0?node.x0-p.x:p.x-node.x1):(plan.hz>0?node.z0-p.z:p.z-node.z1))-pad);
