@@ -1,5 +1,6 @@
 import {el} from './dom.js';
 import {DEBUG_SYSTEMS} from '../core/DebugSystems.js';
+import {NEEDS} from '../systems/StatsSystem.js';
 
 // Perfiles de luz de Slop para revisar la ciudad sin cambiar el reloj guardado.
 const TIME_PROFILES=[['golden','🌇 Golden hour'],['midday','☀️ Mediodía'],['blue-hour','🌆 Blue hour'],['night','🌙 Noche'],[null,'🕒 Reloj']];
@@ -17,6 +18,9 @@ export class DeveloperPanel {
   }
   this.timeButtons=TIME_PROFILES.map(([id,label])=>{const button=el('button',{type:'button',text:label,'data-profile':id??'clock',onclick:()=>{game.sceneMgr?.setTimeProfile?.(id);this.refresh();}});return button;});
   if(game.sceneMgr?.setTimeProfile)this.content.append(el('p',{class:'dev-section',text:'Hora del día'}),el('div',{class:'dev-actions dev-time'},...this.timeButtons));
+  this.rainButton=el('button',{type:'button',text:'🌧️ Lluvia','aria-pressed':'false',onclick:()=>{const w=game.weather;if(!w?.forceRain)return;w.forceRain(!w.isRaining);this.refresh();}});
+  this.needsButton=el('button',{type:'button',text:'🍞 Reiniciar necesidades',onclick:()=>{for(const need of NEEDS)game.stats[need]=100;this.status.textContent='Hambre, sed y demás necesidades al 100 %.';}});
+  this.content.append(el('p',{class:'dev-section',text:'Atajos'}),el('div',{class:'dev-actions'},this.rainButton,this.needsButton));
   this.lock=el('input',{type:'checkbox',checked:true});this.lock.addEventListener('change',()=>{game.renderer.adaptiveLocked=this.lock.checked?true:this.previousAdaptive;});
   this.resetButton=el('button',{type:'button',text:'Activar todo',onclick:async()=>{try{await game.debugSystems.reset();this.status.textContent='';}catch(error){this.status.textContent=error.message;}}});
   this.content.append(el('label',{class:'dev-toggle'},this.lock,el('span',{text:'Bloquear adaptación automática'})),this.metrics,
@@ -43,6 +47,7 @@ export class DeveloperPanel {
   if(this.game.debugSystems.pending.size)this.status.textContent='Preparando cambio gráfico…';
   else if(this.status.textContent==='Preparando cambio gráfico…')this.status.textContent='';
   this.resetButton.disabled=this.game.debugSystems.pending.size>0;
+  this.rainButton?.setAttribute('aria-pressed',String(!!this.game.weather?.isRaining));
   const override=this.game.sceneMgr?._timeProfileOverride??null;
   for(const button of this.timeButtons??[]){const id=button.getAttribute('data-profile'),active=(id==='clock'?null:id)===override;button.setAttribute('aria-pressed',String(active));}
  }

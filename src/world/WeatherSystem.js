@@ -168,6 +168,20 @@ export class WeatherSystem {
     }
   }
 
+  /** Herramienta de desarrollo: fuerza un aguacero (o lo quita) ignorando el interruptor global de lluvia. */
+  forceRain(on) {
+    if (on) {
+      this.rainEnabled = true;
+      this.setWeather('aguacero', false);
+      this.timer = 0;
+      this.nextChange = 600;
+    } else {
+      this.setWeather('nublado', false);
+      this.rainEnabled = RAIN_ENABLED;
+      this.nextChange = 180 + this.random() * 200;
+    }
+  }
+
   _applyRain() {
     this._appliedRain = this.rainIntensity;
     if (!this.rainParticles) return;

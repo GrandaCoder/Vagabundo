@@ -33,3 +33,21 @@ test('la hora del día de desarrollo está en el panel DEV y marca el perfil act
     assert.deepEqual(calls, ['golden', null], 'el botón de reloj devuelve la hora real sin guardar nada');
   } finally { clearInterval(panel.timer); }
 });
+
+test('el panel DEV activa la lluvia y reinicia las necesidades', () => {
+  fakeDom();
+  const rain = [];
+  const weather = { isRaining: false, forceRain(on) { rain.push(on); this.isRaining = on; } };
+  const stats = { hambre: 3, sed: 9, energia: 40, salud: 50, higiene: 1, animo: 7, vicio: 0 };
+  const game = { weather, stats, debugSystems: { subscribe: () => () => {}, isEnabled: () => true, pending: new Set(), counts: () => ({}) } };
+  const panel = new DeveloperPanel(game);
+  try {
+    panel.rainButton.listeners.click();
+    assert.deepEqual(rain, [true]);
+    assert.equal(panel.rainButton.attributes['aria-pressed'], 'true');
+    panel.rainButton.listeners.click();
+    assert.deepEqual(rain, [true, false]);
+    panel.needsButton.listeners.click();
+    assert.ok(Object.values(stats).every(v => v === 100));
+  } finally { clearInterval(panel.timer); }
+});
