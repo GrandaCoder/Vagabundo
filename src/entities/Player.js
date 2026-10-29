@@ -11,6 +11,9 @@ import { createRealisticCharacter, REALISTIC_SCALE } from '../character/Realisti
 import { PlayerRagdoll } from '../systems/PlayerRagdoll.js';
 import { WEAPONS, DEFAULT_WEAPON, COMBO_WINDOW, CHAIN_AT, comboStep } from '../data/weapons.js';
 
+// Energía que gasta cada golpe (puños o arma).
+const ATTACK_ENERGY = 8;
+
 export class Player {
   constructor(scene, input, stats=null, audio=null) {
     this.audio = audio;
@@ -56,6 +59,7 @@ export class Player {
     this.load = 0;            // 0..1: llenado del costal (tamaño del saco)
     this.action = null;       // 'pedir' | 'buscar' | 'comer' | 'dormir' | 'saludo'
     this.actionTimer = 0;
+    this.punchCooldown = 0;
     this.sorting = false;
     this.hasCart = false;     // seleccionando basura (mantener Q)
 
@@ -142,10 +146,26 @@ export class Player {
    */
   punch() {
     if (this.attack) {
-      if (this.attack.step + 1 < this.weapon.combo) this._attackQueued = true;
+      if (this.attack.step + 1 < this.weapon.combo && !this._attackQueued && this._spendAttackEnergy()) this._attackQueued = true;
       return;
     }
+    if (!this._spendAttackEnergy()) return;
     this._beginAttack(this.comboTimer > 0 ? this.comboStep : 0);
+  }
+
+  /** Cada golpe cuesta energía; exhausto no se puede pelear. */
+  _spendAttackEnergy() {
+    if (!this.stats || typeof this.stats.energia !== 'number') return true;
+    if (this.stats.energia < ATTACK_ENERGY) {
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('toast', {
+          detail: { text: '⚠️ ¡Estás demasiado exhausto para pelear! Necesitas descansar.', type: 'warn' }
+        }));
+      }
+      return false;
+    }
+    this.stats.energia = Math.max(0, this.stats.energia - ATTACK_ENERGY);
+    return true;
   }
 
   _beginAttack(step) {
@@ -225,7 +245,16 @@ export class Player {
       hit = true;
       if (drop && this.stats && typeof this.stats.dinero === 'number') this.stats.dinero += drop;
     }
-    if (hit) this.audio?.playPunchHit?.(); // una sola voz por impacto, aunque alcance a varios
+    if (hit) {
+      this.audio?.playPunchHit?.(); // una sola voz por impacto, aunque alcance a varios
+      // Agresión en vía pública: sube el nivel de búsqueda.
+      if (this.game?.steal && typeof this.game.steal.buscado === 'number') {
+        this.game.steal.buscado = Math.min(3, this.game.steal.buscado + 1);
+      }
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('street-fight', { detail: { attacker: this } }));
+      }
+    }
     targets.length = 0;
   }
 
@@ -270,6 +299,7 @@ export class Player {
       this.speed = 0; this.state = 'ragdoll';
       return;
     }
+    if (this.punchCooldown > 0) this.punchCooldown = Math.max(0, this.punchCooldown - dt);
     if (this.actionTimer > 0) {
       this.actionTimer -= dt;
       if (this.actionTimer <= 0) this.action = null;

@@ -52,6 +52,11 @@ export const NPC_COMBAT = {
   rise: 0.6,       // s en levantarse
   riseFlee: 6      // s de huida al levantarse
 };
+const DEFENSE_PHRASES = [
+  '¡A mí no me viene a montar la perseguidora, ñero!',
+  '¡Tome pa\' que lleve, respete a la gente!',
+  '¡Aquí no le vamos a copiar, atrevido!'
+];
 const HIT_PHRASES = [
   '¡Uy qué le pasa, ñero loco!',
   '¡Ayúdenme, me están atracando!',
@@ -396,6 +401,21 @@ export class Npc {
     return this.takeHit({ damage: WEAPONS.punos.damage, knockback: WEAPONS.punos.knockback, attacker, weapon: 'punos' });
   }
 
+  /** Algunos transeúntes se defienden la primera vez que los golpean. */
+  _counterAttack(attacker) {
+    const isStrong = this.look?.real?.edad === 'adulto' || Math.random() < 0.35;
+    if (!isStrong || this.koState || typeof attacker?.stats?.salud !== 'number') return;
+    const damage = Math.floor(10 + Math.random() * 7);
+    attacker.stats.salud = Math.max(0, attacker.stats.salud - damage);
+    attacker.audio?.playPunchHit?.();
+    this.say(DEFENSE_PHRASES[Math.floor(Math.random() * DEFENSE_PHRASES.length)], 4.0);
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('toast', {
+        detail: { text: `👊 ¡El transeúnte se defendió y te devolvió el golpe! (-${damage} de salud)`, type: 'death' }
+      }));
+    }
+  }
+
   /**
    * Recibe un golpe cuerpo a cuerpo: resta salud, sacude y huye; a 0 de salud queda noqueado.
    * Devuelve el dinero que soltó (0 si ya lo había soltado o está noqueado).
@@ -428,6 +448,7 @@ export class Npc {
 
     if (this.looted) return 0;
     this.looted = true;
+    this._counterAttack(attacker);
     const dropMoney = 200 + Math.floor(Math.random() * 400);
     if (typeof window !== 'undefined' && window.dispatchEvent) {
       const verb = WEAPONS[weapon]?.hitVerb ?? 'Golpe';
