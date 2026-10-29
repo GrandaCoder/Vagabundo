@@ -27,3 +27,11 @@ test('los choques respetan silencio, pausa del contexto y distancia',()=>{
  assert.equal(audio.play(hit),false);muted=false;ctx.state='suspended';assert.equal(audio.play(hit),false);
  ctx.state='running';assert.equal(audio.play({...hit,x:200}),false);assert.equal(audio.play({...hit,speed:.2}),false);assert.equal(ctx.sources.length,0);
 });
+test('el arranque gira el motor y prende con un golpe grave sin valores inválidos',async()=>{
+ const {synthStarter}=await import('../src/vehicles/SlopCrashAudio.js');
+ const ctx=context(),buffer=synthStarter(ctx,4),data=buffer.getChannelData(0);
+ assert.ok(buffer.duration>1&&buffer.duration<1.3);
+ assert.ok(data.every(Number.isFinite));assert.ok(data.some(x=>Math.abs(x)>.1));assert.equal(data.at(-1),0);
+ const rms=(a,b)=>{let s=0;for(let i=a;i<b;i++)s+=data[i]*data[i];return Math.sqrt(s/(b-a));};
+ assert.ok(rms(0,800)>.01,'el motor de arranque suena desde el principio');
+});

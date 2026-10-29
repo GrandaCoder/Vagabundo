@@ -789,7 +789,7 @@ export class Game {
       if(this._debugEnabled('cars'))this.traffic?.update(dt, { pedestrians: this._activePedestrians() });
       this.cameraRig.follow(this.player.position, dt, this.collisions);
       this.audio.updateSteps(false, false);
-      this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this._activeTraffic()),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed),acceleration:this.driving.acceleration}]:[])], this._activeBuses());
+      this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this._activeTraffic()),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed),acceleration:this.driving.acceleration,load:this.driving.throttle??0}]:[])], this._activeBuses());
       this.audio.setRaining(this._debugEnabled('rain')&&!!this.weather?.isRaining);
       this._handleDeath();
       this._renderFrame(now, false); this.input.endFrame();
@@ -901,7 +901,7 @@ export class Game {
 
     // 10. Audio
     const moving = !this.player.isStunned && Math.hypot(this.player.position.x - previousX, this.player.position.z - previousZ) > .001;
-    this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this._activeTraffic()),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed),acceleration:this.driving.acceleration}]:[])], this._activeBuses());
+    this.audio.updateWorld(dt, this.player.position, this.cameraRig.camera, [...(this._activeTraffic()),...(this.driving?.car?[{car:this.driving.car,speed:Math.abs(this.driving.speed),acceleration:this.driving.acceleration,load:this.driving.throttle??0}]:[])], this._activeBuses());
     this.audio.setRaining(this._debugEnabled('rain')&&!!this.weather?.isRaining);
     this.audio.updateSteps(moving&&!this.driving?.car, this.input.isRunning);
     this.audio.updateBoost(this.interaction.boostActive);

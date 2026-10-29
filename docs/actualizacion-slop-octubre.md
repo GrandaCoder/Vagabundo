@@ -22,3 +22,8 @@ No se atribuyen mejoras de FPS por el tamaño del mapa o por copiar módulos. La
 - Interiores con paralaje en las ventanas de las casas y asfalto con charcos que siguen la humedad del clima.
 - Tráfico: quien va detrás en el mismo acceso ya no reserva el cruce antes que quien tiene delante (dejaba ambos detenidos). Con varias semillas siguen apareciendo atascos largos, también antes de esta entrega: queda pendiente revisar la coordinación de cruces contra `traffic.js` del donante.
 - Pendiente de comprobar en un equipo real: sonido de motores, arranque y aceleración, y los FPS.
+
+## Corrección de carrocerías y sonido al conducir
+
+- Techo, vidrios, rines, retrovisores y aviso del taxi salían negros. El material del donante se escribió para una versión de Three más nueva: en la 0.186 cada nodo compartido (normal de vista, anchos de derivada, máscaras de rueda, pintura base) se asigna donde se usa por primera vez, y eso ocurría dentro del If de la carrocería. Las demás piezas leían esas variables sin valor y la luz las pintaba negras. Ahora se usan antes de las ramas por pieza.
+- Al subir a un carro suena el motor de arranque; el acelerador del jugador (W, con Shift a fondo) es la carga del motor, así que los cambios y las revoluciones responden al pedal. Pickup, furgón, miniván y SUV de policía usan el motor de SUV del donante.

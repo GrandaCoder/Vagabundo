@@ -1441,7 +1441,14 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
 
   // ---- Colour (per-part If branches so each fragment only evaluates its own part's masks) ---------------------------
   const colorFn = Fn(() => {
-    const outCol = vec3(color(0x181b1f)).toVar();
+    // Three 0.186 asigna cada nodo compartido (normal de vista, anchos de derivada, máscaras de rueda, pintura
+    // base) donde se usa por primera vez. Si eso ocurría dentro del If de la carrocería, el vidrio, el techo, los
+    // rines y el aviso leían esas variables sin valor y salían negros. Usarlos aquí los asigna para todas las piezas.
+    const shared = vec4(ndv, fresnel, fwp.x.add(fwp.y).add(fwp.z), isSide)
+      .add(vec4(belt, ax, rNorm, wheelDist)).add(vec4(fwRing, fwSpoke, proxyAlloy, isAlloyFace))
+      .add(vec4(isTyreRubber, ao, archLip, paintLuma)).add(vec4(basePaint, isTwoTone))
+      .add(vec4(isBlackout, hasChrome, isPolice, wheelDir.x)).add(vec4(isBoro, isTLC, 0.0, 0.0));
+    const outCol = vec3(color(0x181b1f)).add(shared.xyz.add(shared.w).mul(0.0)).toVar();
 
     // Sample plate texture outside If() so hardware mipmaps + anisotropy filter cleanly without derivative issues
     const plateVariant = floor(fract(paint.r.mul(7).add(paint.g.mul(13)).add(paint.b.mul(17)).add(isTLC.mul(0.75))).mul(4));
@@ -1556,7 +1563,8 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
         const plateFront = cov(frontPlateEdge.d, frontPlateEdge.w).mul(front);
         bCol.assign(mix(bCol, color(0x1e2227), plateRecessF));
         bCol.assign(mix(bCol, plateCol, plateFront));
-      }).ElseIf(p.z.lessThan(rearZone).and(n.z.lessThan(-0.02)), () => {
+      });
+      If(p.z.lessThan(rearZone).and(n.z.lessThan(-0.02)), () => {
         // Rear fascia: wraparound tail lamps, diffuser, exhausts & rear NY license plate
         const rear = smoothstep(0.12, 0.38, n.z.negate());
         const rearPlateEdge = rrectEdge(vec2(p.x, p.y.sub(plateR)), vec2(0.155, 0.06), 0.008, fwXY);
@@ -1617,7 +1625,8 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
 
       const under = smoothstep(-0.25, -0.55, n.y);
       outCol.assign(mix(bCol, color(0x0c0e11), under));
-    }).ElseIf(isWindow.greaterThan(0.5), () => {
+    });
+    If(isWindow.greaterThan(0.5), () => {
       const { glass, frontGlass, rearGlass, seal } = evalWindowGlass();
       const beltStrip = band(p.y.sub(belt.add(0.01)), 0.007, fwY)
         .mul(smoothstep(0.5, 0.7, abs(n.x)))
@@ -1664,7 +1673,8 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
         chmsl
       );
       outCol.assign(mix(wCol, color(0x14171a), rearWiper));
-    }).ElseIf(isAlloyFace.greaterThan(0.5), () => {
+    });
+    If(isAlloyFace.greaterThan(0.5), () => {
       // Evaluate atan2 and ONLY the active wheel spoke pattern on alloy fragments
       const wAngle = atan(wheelVec.y, wheelVec.x);
       const inSpokeZone = smoothstep(0.14, 0.18, rNorm).mul(smoothstep(0.63, 0.59, rNorm));
@@ -1701,18 +1711,21 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
       );
       const rotorCol = mix(mix(color(0x0c0f13), color(0x3e444b), brakeDisc), color(0x8a1c20), brakeCaliper);
       outCol.assign(mix(rotorCol, wheelFinish, alloyMetal));
-    }).ElseIf(isTyreRubber.greaterThan(0.5), () => {
+    });
+    If(isTyreRubber.greaterThan(0.5), () => {
       const sidewallRib = smoothstep(0.018, 0.004, abs(rNorm.sub(0.8))).mul(0.06).mul(fadeFine(fwRing));
       const tyreShade = smoothstep(0.88, 0.96, rNorm).mul(-0.14).add(0.92).add(sidewallRib);
       outCol.assign(color(0x17191c).mul(tyreShade));
-    }).ElseIf(isMirror.greaterThan(0.5), () => {
+    });
+    If(isMirror.greaterThan(0.5), () => {
       const mirrorGlass = smoothstep(0.45, 0.65, n.z.negate());
       const mirrorTurn = smoothstep(0.05, 0.2, n.z)
         .mul(band(p.y.sub(bc.y + 0.082), 0.006, fwY))
         .mul(cov(float(0.88).sub(ax), fwX));
       const mirrorCapPaint = mix(basePaint, color(0x121519), max(isTwoTone, isBlackout));
       outCol.assign(mix(mix(mirrorCapPaint, color(0x8896a2), mirrorGlass), color(0x98a4ae), mirrorTurn));
-    }).ElseIf(isSign.greaterThan(0.5), () => {
+    });
+    If(isSign.greaterThan(0.5), () => {
       const signFace = smoothstep(0.55, 0.75, abs(n.z));
       const signGlyph = signGlyphMask();
       outCol.assign(mix(color(0xf3efe2), mix(color(0xfff1b8), color(0x15181b), signGlyph), signFace));
@@ -1730,14 +1743,18 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
     If(isBody.greaterThan(0.5), () => {
       const lowMatte = smoothstep(sillY + 0.10, sillY - 0.01, p.y).mul(0.16);
       r.assign(paintRough.add(lowMatte));
-    }).ElseIf(isWindow.greaterThan(0.5), () => {
+    });
+    If(isWindow.greaterThan(0.5), () => {
       const { glass, seal } = evalWindowGlass();
       r.assign(mix(mix(paintRough, float(0.78), seal), float(0.08), glass));
-    }).ElseIf(isAlloyFace.greaterThan(0.5), () => {
+    });
+    If(isAlloyFace.greaterThan(0.5), () => {
       r.assign(mix(float(0.22), float(0.52), isPolice));
-    }).ElseIf(isMirror.greaterThan(0.5), () => {
+    });
+    If(isMirror.greaterThan(0.5), () => {
       r.assign(0.12);
-    }).ElseIf(isSign.greaterThan(0.5), () => {
+    });
+    If(isSign.greaterThan(0.5), () => {
       r.assign(0.35);
     });
     return r;
@@ -1747,12 +1764,15 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
     const m = float(0.04).toVar();
     If(isBody.greaterThan(0.5), () => {
       m.assign(paintMetal);
-    }).ElseIf(isWindow.greaterThan(0.5), () => {
+    });
+    If(isWindow.greaterThan(0.5), () => {
       const { glass, seal } = evalWindowGlass();
       m.assign(mix(mix(paintMetal, float(0.04), seal), mix(float(0.16), float(0.36), fresnel), glass));
-    }).ElseIf(isAlloyFace.greaterThan(0.5), () => {
+    });
+    If(isAlloyFace.greaterThan(0.5), () => {
       m.assign(mix(float(0.84), float(0.22), isPolice));
-    }).ElseIf(isMirror.greaterThan(0.5), () => {
+    });
+    If(isMirror.greaterThan(0.5), () => {
       m.assign(mix(paintMetal, float(0.65), smoothstep(0.45, 0.65, n.z.negate())));
     });
     return m;
@@ -1773,7 +1793,8 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
           .mul(one.sub(max(turnFront, drl).mul(blink))).mul(nightHeadlamp);
         const turn = color(0xff9812).mul(max(turnFront, drl.mul(0.75)).mul(blink).mul(2.4));
         emit.assign(headlamps.add(turn));
-      }).ElseIf(p.z.lessThan(rearZone).and(n.z.lessThan(-0.02)), () => {
+      });
+      If(p.z.lessThan(rearZone).and(n.z.lessThan(-0.02)), () => {
         const { tailLens, turnRearSection, reverseRearSection, ledBar: ledBarMask } = taillightMasks();
         const turnRear = turnRearSection.mul(tailLens);
         const redArea = tailLens.mul(one.sub(max(turnRearSection, reverseRearSection)));
@@ -1785,11 +1806,13 @@ function createLoftedCarMaterial(spec, fixedColorHex = null) {
         if (fixed) rearEmit = rearEmit.add(color(0xf0f6ff).mul(tailLens).mul(reverseRearSection).mul(state.w).mul(1.8));
         emit.assign(rearEmit);
       });
-    }).ElseIf(isSign.greaterThan(0.5), () => {
+    });
+    If(isSign.greaterThan(0.5), () => {
       const signFace = smoothstep(0.55, 0.75, abs(n.z));
       const signGlyph = signGlyphMask();
       emit.assign(color(0xffe28a).mul(signFace.mul(one.sub(signGlyph.mul(0.9))).mul(1.65)).mul(nightHeadlamp));
-    }).ElseIf(isWindow.mul(brake).greaterThan(0.5), () => {
+    });
+    If(isWindow.mul(brake).greaterThan(0.5), () => {
       const chmsl = chmslMask(() => {
         const rear = polygonEdge(ax, p.z, rearGlassPlanes, 0.085, fwX, fwZ);
         return cov(rear.d, rear.w);

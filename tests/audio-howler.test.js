@@ -91,6 +91,7 @@ test('Howler real mezcla motores sintetizados sin grabaciones duplicadas ni pann
     audio.setPaused(true);assert.equal(audio.motorAudio.voices.size,0);
     audio.updateWorld(.1,listener,camera,[vehicle],bus);assert.equal(audio.motorAudio.voices.size,2);
     audio.honkPlayer(vehicle.car);assert.ok(audio.motorAudio.horn.getChannelData(0).some(x=>x!==0));
+    audio.startEngine(vehicle.car);assert.ok(audio.motorAudio.starterBuffer.getChannelData(0).some(x=>x!==0),'subir al carro suena el arranque');
     vehicle.car.position.x=500;audio.updateWorld(.1,listener,camera,[vehicle],bus);assert.equal(audio.motorAudio.voices.size,1);
     assert.equal(Howler.ctx.listener.positionX.value,0);
     assert.equal(Howler.ctx.listener.positionZ.value,0);

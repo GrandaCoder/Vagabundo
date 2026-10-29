@@ -281,6 +281,9 @@ export class AudioSystem {
     } else if (this._ambientStarted) this.sounds.ambient.play(this._ambientId);
   }
 
+  /** Arranque al subir a un carro estacionado; sin síntesis disponible no suena nada (no hay muestra grabada). */
+  startEngine(car){if(this.muted)return;this.motorAudio?.starter(car);}
+
   honkPlayer(car){
     const now=performance.now();if(now-(this._playerHornAt??-Infinity)<650||this._paused)return;
     this._playerHornAt=now;if(this.motorAudio.available){this.motorAudio.honk(car);return;}const sound=this.vehicleSounds.horn1,id=sound.play('honk');sound.volume(this.muted?0:.55,id);
