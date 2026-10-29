@@ -1,7 +1,7 @@
 import {vehicleBatches} from './VehicleBatches.js';
 import * as THREE from 'three';
 import { BODY_SPECS,buildCarGeometry } from './SlopGeometry.js';
-import { createSlopMaterial } from './SlopMaterial.js';
+import { createSlopMaterial,vehicleStyle } from './SlopMaterial.js';
 import { VEHICLE_TYPES } from './VehicleTypes.js';
 
 const geometries=new Map();
@@ -17,12 +17,12 @@ export function createSlopVehicle({variant='sedan',seed=0,length=4.3,width=1.76,
   const group=new THREE.Group();group.name=variant==='taxi'?'Taxi bogotano procedural':'Sedán procedural';
   group.scale.set(length/size.z,VEHICLE_TYPES[variant].height/size.y,width/size.x);
   // La carrocería original está centrada en X/Z y apoyada en Y=0.
-  group.add(mesh);const state=material.userData.vehicleState;
+  mesh.position.y=-geometry.boundingBox.min.y;const baseY=mesh.position.y;group.add(mesh);const state=material.userData.vehicleState;state.style.value=vehicleStyle(variant,seed);
   let disposed=false;
-  const visual={group,wheels:[],tailMat:null,variant,material,headlightFrame:mesh,headlightSpec:spec,
+  const visual={group,wheels:[],tailMat:null,variant,seed,material,headlightFrame:mesh,headlightSpec:spec,
     updateMotion(distance,braking){state.wheelAngle.value=(state.wheelAngle.value+distance/(spec.wheelRadius*group.scale.y))%(Math.PI*2);state.braking.value=braking?1:0;},
     setNight(night){state.night.value=night?1:0;},
-    setPose(pitch,roll,heave){mesh.rotation.set(pitch,Math.PI/2,roll,'YXZ');mesh.position.y=heave;visual.pose={pitch,roll,heave};},
+    setPose(pitch,roll,heave){mesh.rotation.set(pitch,Math.PI/2,roll,'YXZ');mesh.position.y=baseY+heave;visual.pose={pitch,roll,heave};},
     setSteering(angle,signal){visual.steerAngle=angle;visual.turnSignal=signal;},
     dispose(){if(disposed)return;disposed=true;group.removeFromParent();material.dispose();}
   };

@@ -43,7 +43,8 @@ test('las ruedas, luces nocturnas y frenado tienen estado independiente sin luce
   assert.notEqual(state.wheelAngle.value,0);assert.equal(state.braking.value,1);assert.equal(state.night.value,1);
   assert.equal(other.wheelAngle.value,0);assert.equal(other.braking.value,0);assert.equal(other.night.value,0);
   let lights=0;a.group.traverse(o=>{if(o.isLight)lights++;});assert.equal(lights,0);
-  assert.equal(a.material.isMeshStandardNodeMaterial,true);assert.ok(a.material.positionNode);assert.ok(a.material.colorNode);assert.ok(a.material.emissiveNode);
+  // El material actual del donante no deforma posiciones: las ruedas son mallas propias.
+  assert.equal(a.material.isMeshStandardNodeMaterial,true);assert.ok(a.material.colorNode);assert.ok(a.material.emissiveNode);
   assert.equal(a.material.userData.carState.value.x,1);
   a.dispose();b.dispose();
 });

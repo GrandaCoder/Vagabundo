@@ -32,27 +32,25 @@ test('FPS usa tiempo real, promedio ponderado y conserva los tirones sin limitar
   assert.equal(metrics.min, 40);
 });
 
-test('resolución adaptable responde antes a carga severa y recupera efectos antes que píxeles', () => {
+test('la resolución se mantiene en 1× y la carga severa solo baja efectos, que se recuperan después', () => {
   const quality = new AdaptiveResolution(2);
+  assert.equal(quality.ratio, 1, 'un píxel de render por píxel CSS, también en pantallas densas');
   for (let i = 0; i < 9; i++) assert.equal(quality.sample(100), false);
-  assert.equal(quality.ratio, 1.5);
-  assert.equal(quality.sample(100), true);
-  assert.equal(quality.ratio, 1.2);
+  assert.equal(quality.sample(100), true, 'la carga severa reacciona en cuanto hay ocho cuadros lentos');
+  assert.equal(quality.ratio, 1);
+  assert.equal(quality.pressure, 1);
   for (let i = 0; i < 400; i++) quality.sample(100);
-  assert.equal(quality.ratio, .75);
+  assert.equal(quality.ratio, 1);
   assert.equal(quality.pressure, 2);
   quality.resetWindow();
-  for (let i = 0; i < 700; i++) quality.sample(16);
-  assert.equal(quality.ratio, .75);
-  for (let i = 0; i < 100; i++) quality.sample(16);
-  assert.equal(quality.ratio, .75);
-  assert.equal(quality.pressure, 1);
+  for (let i = 0; i < 800; i++) quality.sample(16);
+  assert.equal(quality.pressure, 1, 'cuatro ventanas rápidas devuelven un nivel de efectos');
   for (let i = 0; i < 5000; i++) quality.sample(16);
-  assert.equal(quality.ratio, 1.5);
   assert.equal(quality.pressure, 0);
+  assert.equal(quality.ratio, 1);
   const lowDpi = new AdaptiveResolution(.5);
   for (let i = 0; i < 100; i++) lowDpi.sample(100);
-  assert.equal(lowDpi.ratio, .5);
+  assert.equal(lowDpi.ratio, 1);
 });
 
 test('206 fuentes usan exactamente 2 luces de shader, también de día, y siguen al jugador', () => {

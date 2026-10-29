@@ -1,7 +1,7 @@
 import {getDrivingAssets} from './DrivingVisual.js';
 import * as THREE from 'three/webgpu';
 import {BODY_SPECS,buildCarProxyGeometry} from './SlopGeometry.js';
-import {createSlopMaterial} from './SlopMaterial.js';
+import {createSlopMaterial,createVehicleWheelMaterial,vehicleStyle} from './SlopMaterial.js';
 const banks=new WeakMap(),zero=new THREE.Matrix4().makeScale(0,0,0);
 const CAPACITY=256;
 export class VehicleBatches {
@@ -14,9 +14,9 @@ export class VehicleBatches {
       for(const [name,size] of [['paintColor',3],['carState',4],['wheelAngle',1],['carNight',1]])geo.setAttribute(name,new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY*size),size).setUsage(THREE.DynamicDrawUsage));
       this.root.add(mesh);return mesh;
     };
-    const assets=getDrivingAssets(variant),wheelMaterials=[new THREE.MeshStandardNodeMaterial({color:'#17191b',roughness:.9}),new THREE.MeshStandardNodeMaterial({color:'#a5adb2',roughness:.35,metalness:.7})];
+    const assets=getDrivingAssets(variant),wheelMaterials=[createVehicleWheelMaterial(BODY_SPECS[variant])];
     const wheels=[];
-    for(const [sideIndex,side] of [-1,1].entries())for(let part=0;part<2;part++){
+    for(const [sideIndex,side] of [-1,1].entries())for(let part=0;part<1;part++){
       const mesh=new THREE.InstancedMesh(assets.wheels[sideIndex][part].clone(),wheelMaterials[part],CAPACITY*2);mesh.count=0;mesh.name='Ruedas orientables de tráfico';mesh.castShadow=mesh.receiveShadow=true;mesh.frustumCulled=false;
       mesh.instanceMatrix=new THREE.StorageInstancedBufferAttribute(mesh.instanceMatrix.array,16);mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);this.root.add(mesh);wheels.push({side,mesh});
     }
@@ -65,7 +65,7 @@ export class VehicleBatches {
         }
       }
       const g=target.geometry.attributes,c=state.paint.value;
-      g.paintColor.setXYZ(i,c.r,c.g,c.b);g.carState.setXYZW(i,state.braking.value,visual.turnSignal>0?1:0,visual.turnSignal<0?1:0,0);g.wheelAngle.setX(i,state.wheelAngle.value);g.carNight.setX(i,state.night.value);
+      g.paintColor.setXYZ(i,c.r,c.g,c.b);g.carState.setXYZW(i,state.braking.value,visual.turnSignal>0?1:0,visual.turnSignal<0?1:0,vehicleStyle(visual.variant,visual.seed));g.wheelAngle.setX(i,state.wheelAngle.value);g.carNight.setX(i,state.night.value);
     }
     if(this.markers?.size){
       const batch=this.ensureMarkers(this.markers.values().next().value);batch.count=0;
