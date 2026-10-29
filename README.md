@@ -15,6 +15,9 @@ Este proyecto es un fork de [juanagogo/bazuko](https://github.com/juanagogo/bazu
 - Peatones que caminan por los andenes y cruzan las calles.
 - Diez palomas en cada uno de los tres parques: caminan, levantan vuelo cuando el jugador o un NPC se acerca a menos de 3,5 metros y aterrizan en otro lugar. Cada bandada usa cinco lotes de geometría instanciada, sin luces ni física; se suspende a más de 90 metros del jugador.
 - Carros y taxis con recorridos aleatorios entre 90 alternativas transitables y un bus articulado que circula por la troncal y para en la estación.
+- Carros criollos (Zapatico, Huevito y Amigo Fiel) con placas bogotanas, y patrullas de la Policía Nacional que persiguen a quien ven robando.
+- Comida callejera en chazas y fritangas: empanada, morcilla, papa criolla y aguapanela, que además dan calor. En las noches con lluvia, sin calor se pierde energía y ánimo; las fogatas de El Cartucho calientan cada 20 segundos.
+- Pedir limosna requiere alguien a menos de 7 metros.
 - Calzadas de 12 metros y andenes de 4 metros.
 - Ciudad de 240 × 322 metros: conserva la ampliación urbana y añade un gran parque al sur, con barrios nuevos al oriente y al sur, dos calles y dos carreras adicionales y dos parques nuevos.
 - Creación de personaje, inventario, reciclaje, comercio, talentos y construcción del cambuche.

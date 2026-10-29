@@ -548,6 +548,8 @@ export class Game {
     this.dog.resetNear(this.dog.position);
     this.interaction.register(this.dog);
     district.trafficPedestrians = [...(district.npcs ?? []), this.dog];
+    // Pedir limosna requiere personas cerca; El Chato no cuenta.
+    this.interaction.setPedestrians(district.npcs ?? []);
     if (this.traffic) this.roadRage?.setup(district, this.traffic, district.trafficPedestrians);
 
     // ===== Tienda La Esquinita =====
@@ -560,8 +562,9 @@ export class Game {
     );
     this.interaction.register(this.shop);
 
-    // ===== Vendedores ambulantes del distrito (chazas, fritanga) =====
+    // ===== Vendedores ambulantes del distrito (chazas, fritanga) y fogatas de El Cartucho =====
     for (const v of district.vendors ?? []) this.interaction.register(v);
+    for (const fb of district.fireBarrels ?? []) this.interaction.register(fb);
     this.collisions.add(
       this.shop.group,
       new THREE.Vector3(2.4, 2, 1.5),
@@ -913,7 +916,7 @@ export class Game {
     this.profiler?.mark?.('jugadorCamaraColisiones');
 
     // 4. Stats
-    this.stats.update(dt, this.player, this.diseases, this.clock, this.talents);
+    this.stats.update(dt, this.player, this.diseases, this.clock, this.talents, this.weather);
     this.radio?.update(dt, this.stats, this.dog);
     if (this._handleDeath()) return;
 

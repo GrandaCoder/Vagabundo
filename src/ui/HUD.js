@@ -303,6 +303,7 @@ export class HUD {
         let text = interaction?.stealPrompt ?? '';
         if (type === 'pickup') text = '[E] Recoger basura · [Mantener Q] Seleccionar';
         else if (type === 'car') text = interaction.currentTarget?.traffic ? '[E] Robar retrovisor del carro en circulación' : '[E] Robar retrovisor de auto';
+        else if (type === 'fireBarrel') text = '🔥 [E] Calentarte las manos en la fogata (+Calor, +Ánimo, +Energía)';
         else if (type === 'sell') text = '[E] Recicladora El Progreso · Vender material';
         else if (type === 'shop') text = `[E] ${interaction.currentTarget.title ?? 'Tienda La Esquinita'} · Comprar`;
         else if (type === 'dog') {
@@ -335,6 +336,8 @@ else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] So
 
     if (this.statusEl) {
       const warnings = [];
+      if (stats.calor > 0) warnings.push(`🔥 Calientito (${Math.ceil(stats.calor)}s)`);
+      else if (stats.isFreezing) warnings.push('🥶 Congelándote: el frío y la lluvia te debilitan.');
       if (stats.sed <= 20) warnings.push(stats.sed <= 0 ? 'Sin agua: estás perdiendo salud.' : 'Sed crítica: bebe agua.');
       if (stats.hambre <= 20) warnings.push(stats.hambre <= 0 ? 'Sin alimento: estás perdiendo salud.' : 'Hambre crítica: come algo.');
       if (stats.energia <= 20) warnings.push('Energía baja: descansa.');
@@ -460,9 +463,12 @@ else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] So
         const delta = (k === item.consumable ? item.amount : 0) + (k !== item.consumable ? (item[k] ?? 0) : 0);
         if (delta) game.stats[k] = Math.max(0, Math.min(100, game.stats[k] + delta));
       }
+      if (item.calor) {
+        game.stats.calor = Math.min(300, (game.stats.calor || 0) + item.calor);
+      }
       inv.remove(itemId, 1);
       game.audio?.play('pickup');
-      const isDrink = item.consumable === 'sed' || item.id === 'cafe' || item.id === 'refresco';
+      const isDrink = item.consumable === 'sed' || item.id === 'cafe' || item.id === 'refresco' || item.id === 'aguapanela';
       const verb = isDrink ? '🥤 Bebiste' : item.substance ? '🚬 Consumiste' : item.consumable === 'salud' ? '🩹 Te aplicaste' : '🍴 Comiste';
       game.player?.playAction?.(isDrink ? 'beber' : 'comer', 1.2);
       this._toast(`${verb}: ${item.name}`, 'info');

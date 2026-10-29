@@ -23,6 +23,8 @@ function createSeatedDriver(height) {
   return group;
 }
 
+const CRIOLLOS = new Set(['zapatico', 'huevito', 'amigofiel']);
+
 export class Car {
   constructor(scene, position, rotation = 0, { traffic = false, kind = null } = {}) {
     this.scene = scene;
@@ -98,8 +100,9 @@ export class Car {
   get position() { return this.group.position; }
 
   preloadModel() {
-    // No hay modelo importado de patrulla: conserva la carrocería con su barra de luces.
-    if (this.kind === 'police') return this._modelPromise ??= Promise.resolve();
+    // Patrullas y carros criollos (Zapatico, Huevito, Amigo Fiel) no tienen modelo
+    // importado: conservan su carrocería propia, con luces o vidrios transparentes.
+    if (this.kind === 'police' || CRIOLLOS.has(this.vehicle.model)) return this._modelPromise ??= Promise.resolve();
     return this._modelPromise ??= createImportedModel(this.modelKind).then(model => {
       if (this._disposed) { disposeImportedInstance(model); return; }
       this.group.remove(this.vehicle.group);
