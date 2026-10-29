@@ -564,3 +564,12 @@ test('los 24 carros siguen circulando durante diez minutos sin bloqueos permanen
   assert.ok(travel.every(distance => distance > 500));
   traffic.dispose();
 });
+
+test('la patrulla conserva su carrocería con luces al precargar modelos', async () => {
+  const traffic = new TrafficSystem(new THREE.Scene(), [new TrafficRoute(0, 40, 0, 40)], { carsPerRoute: 0, policeCount: 1, random: () => 0.3 });
+  const { car } = traffic.vehicles[0];
+  await car.preloadModel();
+  assert.ok(car.vehicle.policeLights);
+  assert.equal(car.importedModel, undefined);
+  traffic.dispose();
+});

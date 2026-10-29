@@ -63,6 +63,8 @@ export class Car {
   get position() { return this.group.position; }
 
   preloadModel() {
+    // No hay modelo importado de patrulla: conserva la carrocería con su barra de luces.
+    if (this.kind === 'police') return this._modelPromise ??= Promise.resolve();
     return this._modelPromise ??= createImportedModel(this.modelKind).then(model => {
       if (this._disposed) { disposeImportedInstance(model); return; }
       this.group.remove(this.vehicle.group);
