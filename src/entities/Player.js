@@ -10,6 +10,7 @@ import { createCharacter } from '../character/character.js';
 import { createRealisticCharacter, REALISTIC_SCALE } from '../character/RealisticCharacter.js';
 import { PlayerRagdoll } from '../systems/PlayerRagdoll.js';
 import { WEAPONS, DEFAULT_WEAPON, COMBO_WINDOW, CHAIN_AT, comboStep } from '../data/weapons.js';
+import { SMOKE_DURATION, PUFF_INTERVAL, FIRST_PUFF, PUFF, PUFF_LENGTH, isExhaling, SmokePuffs } from '../character/smoking.js';
 
 // Energía que gasta cada golpe (puños o arma).
 const ATTACK_ENERGY = 8;
@@ -59,7 +60,6 @@ export class Player {
     this.load = 0;            // 0..1: llenado del costal (tamaño del saco)
     this.action = null;       // 'pedir' | 'buscar' | 'comer' | 'dormir' | 'saludo'
     this.actionTimer = 0;
-    this.punchCooldown = 0;
     this.sorting = false;
     this.hasCart = false;     // seleccionando basura (mantener Q)
 
@@ -70,6 +70,72 @@ export class Player {
     this.comboTimer = 0;      // ventana restante para continuar el combo
     this._attackQueued = false;
     this._targets = [];
+
+    // Cigarrillo: `smoking` = { left, nextPuff, puff } (segundos; `puff` corre durante la calada)
+    this.smoking = null;
+    this._smoke = null;       // humo en la escena, se crea al primer cigarrillo
+    this._wispTimer = 0;
+    this._puffTimer = 0;
+    this._smokeAt = new THREE.Vector3();
+    this._smokeVelocity = new THREE.Vector3();
+  }
+
+  /** Prende un cigarrillo: dura 10 minutos y cada 30 s se da una calada. false si ya está fumando. */
+  startSmoking() {
+    if (this.smoking) return false;
+    this.smoking = { left: SMOKE_DURATION, nextPuff: FIRST_PUFF, puff: null };
+    this.procedural.setSmoking?.(true);
+    this._realistic?.setSmoking?.(true);
+    return true;
+  }
+
+  stopSmoking() {
+    if (!this.smoking) return;
+    this.smoking = null;
+    this.procedural.setSmoking?.(false);
+    this._realistic?.setSmoking?.(false);
+  }
+
+  _updateSmoking(dt) {
+    const smoke = this.smoking;
+    if (smoke) {
+      if (this.action === 'dormir') { this.stopSmoking(); return; }
+      smoke.left -= dt;
+      if (smoke.left <= 0) {
+        this.stopSmoking();
+        if (typeof window !== 'undefined' && window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('toast', { detail: { text: '🚬 Se acabó el cigarrillo.', type: 'info' } }));
+        }
+        return;
+      }
+      // el reloj de la próxima calada corre también durante la actual: una cada 30 s exactos
+      smoke.nextPuff -= dt;
+      if (smoke.puff != null) {
+        smoke.puff += dt;
+        if (smoke.puff >= PUFF_LENGTH + PUFF.exhale) smoke.puff = null;
+      } else if (smoke.nextPuff <= 0 && !this.attack && !this.isStunned && !this.action) {
+        smoke.puff = 0;
+        smoke.nextPuff += PUFF_INTERVAL;
+      }
+    }
+    if (!smoke && !this._smoke) return;
+    this._smoke ??= new SmokePuffs(this.scene);
+    if (smoke) {
+      // hilo de humo que sale de la brasa
+      if ((this._wispTimer -= dt) <= 0 && this.character.cigaretteTip?.(this._smokeAt)) {
+        this._wispTimer = 0.12;
+        this._smoke.emit(this._smokeAt, { size: 0.025, grow: 0.18, life: 2.2, alpha: 0.22 });
+      }
+      // la bocanada sale de la boca hacia el frente al bajar la mano
+      if (isExhaling(smoke.puff) && (this._puffTimer -= dt) <= 0 && this.character.mouth?.(this._smokeAt)) {
+        this._puffTimer = 0.05;
+        const yaw = this.root.rotation.y;
+        const fade = 1 - (smoke.puff - PUFF_LENGTH + PUFF.lower) / PUFF.exhale;
+        this._smokeVelocity.set(Math.sin(yaw), -0.1, Math.cos(yaw)).multiplyScalar(0.55 * Math.max(0.2, fade));
+        this._smoke.emit(this._smokeAt, { velocity: this._smokeVelocity, size: 0.05, grow: 0.45, life: 2.6, alpha: 0.38 * Math.max(0.3, fade) });
+      }
+    }
+    this._smoke.update(dt);
   }
 
   get weapon() { return WEAPONS[this.equippedWeapon] ?? WEAPONS[DEFAULT_WEAPON]; }
@@ -125,6 +191,7 @@ export class Player {
       this.character = this._realistic;
       this.modelScale = REALISTIC_SCALE;
       this._realistic.setWeapon?.(this.equippedWeapon === DEFAULT_WEAPON ? null : this.equippedWeapon);
+      this._realistic.setSmoking?.(!!this.smoking);
     } else {
       this.root.remove(this.character.group);
       this.character = this.procedural;
@@ -294,12 +361,13 @@ export class Player {
     this._lastCollisions = collisions;
     if (this.ragdoll?.active) {
       this.attack = null;
+      this.stopSmoking(); // el cigarrillo se cae al salir volando
+      this._smoke?.update(dt);
       this.velocity?.set(0, 0, 0);
       this.ragdoll.update(dt, collisions);
       this.speed = 0; this.state = 'ragdoll';
       return;
     }
-    if (this.punchCooldown > 0) this.punchCooldown = Math.max(0, this.punchCooldown - dt);
     if (this.actionTimer > 0) {
       this.actionTimer -= dt;
       if (this.actionTimer <= 0) this.action = null;
@@ -319,6 +387,7 @@ export class Player {
       this.punch();
     }
     this._updateAttack(dt, npcs);
+    this._updateSmoking(dt);
 
     const { x = 0, z = 0 } = this.input?.axis ?? {};
     const stunned = this._impactTime > 0;
@@ -419,6 +488,7 @@ export class Player {
       running,
       action: stunned ? null : (this.sorting ? 'buscar' : this.action),
       attack: this.attack,
+      smoke: this.smoking,
       t: this.time,
       load: this.load,
       dirt: this.stats ? Math.max(0, (40 - this.stats.higiene) / 40) : 0
@@ -427,6 +497,7 @@ export class Player {
 
   dispose() {
     this.ragdoll.clear();
+    this._smoke?.dispose();
     this._realistic?.dispose?.();
     this._realisticPromise?.then(character => character.dispose?.()).catch(() => {});
     this.procedural.group.traverse((o) => {

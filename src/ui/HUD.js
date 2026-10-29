@@ -460,6 +460,10 @@ else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] So
       return;
     }
 
+    if (item.id === 'cigarrillo' && game.player?.smoking) {
+      this._toast('🚬 Ya tienes uno prendido.', 'info');
+      return;
+    }
     if (item.consumable) {
       if (item.consumable === 'hambre' && game.stats.canEat?.() === false) {
         this._toast('No puedes comer mientras tienes náuseas.', 'warning');
@@ -476,8 +480,11 @@ else if (type === 'cart') text = interaction.currentTarget?.isAttached ? '[E] So
       inv.remove(itemId, 1);
       game.audio?.play('pickup');
       const isDrink = item.consumable === 'sed' || item.id === 'cafe' || item.id === 'refresco' || item.id === 'aguapanela';
-      const verb = isDrink ? '🥤 Bebiste' : item.substance ? '🚬 Consumiste' : item.consumable === 'salud' ? '🩹 Te aplicaste' : '🍴 Comiste';
-      game.player?.playAction?.(isDrink ? 'beber' : 'comer', 1.2);
+      const smokes = item.id === 'cigarrillo';
+      const verb = smokes ? '🚬 Prendiste' : isDrink ? '🥤 Bebiste' : item.substance ? '🚬 Consumiste' : item.consumable === 'salud' ? '🩹 Te aplicaste' : '🍴 Comiste';
+      // el cigarrillo no se come: se queda en la mano y se fuma caminando
+      if (smokes) game.player?.startSmoking?.();
+      else game.player?.playAction?.(isDrink ? 'beber' : 'comer', 1.2);
       this._toast(`${verb}: ${item.name}`, 'info');
       this._renderInventory(inv);
       if (item.substance) window.dispatchEvent(new CustomEvent('substance-consumed', { detail: { id: itemId } }));

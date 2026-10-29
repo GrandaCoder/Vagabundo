@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PALETTES, DEFAULT_LOOK, normalizeLook } from './look.js';
 import { attackExtension, attackSide } from './melee.js';
+import { createCigarette, puffReach, emberGlow } from './smoking.js';
 
 export { DEFAULT_LOOK };
 
@@ -331,7 +332,20 @@ export function createCharacter(initial = DEFAULT_LOOK) {
   let phase = 0;
   let blink = 2;
 
-  function update(dt, { speed = 0, running = false, action = null, t = 0, load = 0, dirt = 0, wet = 0, look: lookAt = 0, attack = null }) {
+  // Cigarrillo en la mano izquierda (al final del antebrazo), con la brasa hacia el frente
+  let cigarette = null;
+  function setSmoking(on) {
+    if (!!cigarette === !!on) return;
+    if (cigarette) { cigarette.dispose(); cigarette = null; return; }
+    cigarette = createCigarette();
+    cigarette.object.position.set(-0.02, -0.25, 0.05);
+    cigarette.object.rotation.x = Math.PI / 2;
+    cigarette.object.scale.setScalar(1.4);
+    arms[0].elbow.add(cigarette.object);
+  }
+  const _mouthOffset = new THREE.Vector3();
+
+  function update(dt, { speed = 0, running = false, action = null, t = 0, load = 0, dirt = 0, wet = 0, look: lookAt = 0, attack = null, smoke = null }) {
     const target = { lean: 0, armLx: 0, armRx: 0, armLz: 0.12, armRz: -0.12, elbL: -0.2, elbR: -0.2, legL: 0, legR: 0, kneeL: 0, kneeR: 0, bob: 0, lie: 0, headX: 0, headY: lookAt };
     const amp = Math.min(1, speed / 3.6) * (running ? 1.1 : 0.9);
     if (speed > 0.15) {
@@ -435,6 +449,15 @@ export function createCharacter(initial = DEFAULT_LOOK) {
         break;
       default:
     }
+    if (smoke && action !== 'dormir') {
+      // sosteniéndolo con el codo algo doblado; en la calada, la mano sube a la boca
+      const r = puffReach(smoke.puff);
+      target.elbL = lerp(Math.min(target.elbL, -0.5), -1.95, r);
+      target.armLx = lerp(target.armLx, -1.35, r);
+      target.armLz = lerp(target.armLz, -0.35, r);
+      target.headX = lerp(target.headX, 0.12, r);
+    }
+    cigarette?.setGlow(emberGlow(smoke?.puff));
     const k = Math.min(1, dt * 12);
     for (const key of Object.keys(pose)) pose[key] = lerp(pose[key], target[key], k);
 
@@ -478,6 +501,12 @@ export function createCharacter(initial = DEFAULT_LOOK) {
     setLook(l) {
       look = normalizeLook(l);
       build();
+    },
+    setSmoking,
+    cigaretteTip(target) { return cigarette ? cigarette.tip.getWorldPosition(target) : null; },
+    mouth(target) {
+      head.getWorldPosition(target);
+      return target.add(_mouthOffset.set(0, 0.05, 0.14).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion())));
     },
     update,
   };

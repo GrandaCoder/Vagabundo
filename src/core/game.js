@@ -782,6 +782,7 @@ export class Game {
 
   _finishArrest() {
     if (!this._arrestPending) return;
+    this.player.stopSmoking?.();
     this.inventory.clear();
     this.stats.dinero = 0;
     const pos = this._randomWalkablePosition();
@@ -802,6 +803,7 @@ export class Game {
 
   _respawn() {
     if (!this._deathPending) return;
+    this.player.stopSmoking?.();
     const half = Math.floor(this.inventory.items.length / 2);
     for (let i = 0; i < half; i++) {
       const it = this.inventory.items[0];

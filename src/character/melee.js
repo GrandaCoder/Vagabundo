@@ -91,6 +91,20 @@ const _f = new THREE.Quaternion();
 const _p = new THREE.Quaternion();
 
 /**
+ * Gira `bone` por (x, y, z) en ejes de `frame` (el personaje), sumándolo a la pose actual:
+ * q_local = rel⁻¹ · R · rel, con rel = frame⁻¹ · padre.
+ */
+export function rotateInFrame(frame, bone, x, y, z) {
+  if (!x && !y && !z) return;
+  frame.getWorldQuaternion(_f).invert();
+  bone.parent.getWorldQuaternion(_p);
+  _p.premultiply(_f);
+  _q.setFromEuler(_e.set(x, y, z, 'YXZ'));
+  _q.premultiply(_f.copy(_p).invert()).multiply(_p);
+  bone.quaternion.premultiply(_q);
+}
+
+/**
  * Superposición de ataque para un esqueleto. `frame` es el objeto cuyos ejes definen el espacio del
  * personaje (la raíz de la instancia). Llamar a `apply` cada cuadro después de `mixer.update`.
  */
@@ -116,16 +130,7 @@ export function createMeleeOverlay(bones, frame) {
     }
   }
 
-  // Gira `bone` por (x, y, z) en ejes del personaje: q_local = rel⁻¹ · R · rel, con rel = frame⁻¹ · padre
-  function rotate(bone, x, y, z) {
-    if (!x && !y && !z) return;
-    frame.getWorldQuaternion(_f).invert();
-    bone.parent.getWorldQuaternion(_p);
-    _p.premultiply(_f);
-    _q.setFromEuler(_e.set(x, y, z, 'YXZ'));
-    _q.premultiply(_f.copy(_p).invert()).multiply(_p);
-    bone.quaternion.premultiply(_q);
-  }
+  const rotate = (bone, x, y, z) => rotateInFrame(frame, bone, x, y, z);
 
   const overlay = {
     active: false,
