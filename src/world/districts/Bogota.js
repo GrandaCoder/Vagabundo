@@ -980,13 +980,20 @@ export class Bogota {
     });
   }
 
-  /** Bailarín fijo junto al Audio Hatch (X 141.7, Z 100.5): mira hacia el carro y baila en bucle. */
+  /** Bailarín fijo junto al Audio Hatch (X 141.7, Z 100.5) que baila en bucle; tres personas con los brazos cruzados lo rodean. */
   _spawnDancer() {
     const dancer = new Npc(this.scene, new THREE.Vector3(141.7, this.getGroundHeight(141.7, 100.5), 100.5), {
       facing: 0, isWalkable: () => false, groundHeight: this.getGroundHeight.bind(this)
     });
     dancer.action = 'bailar';
     this.npcs.push(dancer);
+    for (const [x, z] of [[139.7, 101.5], [143.7, 101.5], [141.7, 98]]) {
+      const watcher = new Npc(this.scene, new THREE.Vector3(x, this.getGroundHeight(x, z), z), {
+        facing: Math.atan2(141.7 - x, 100.5 - z), isWalkable: () => false, groundHeight: this.getGroundHeight.bind(this)
+      });
+      watcher.action = 'brazos';
+      this.npcs.push(watcher);
+    }
   }
 
   /** Peatones que recorren la ciudad; los vendedores conservan su puesto. */

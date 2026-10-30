@@ -74,7 +74,7 @@ test('el distrito completo construye y actualiza barrios, vendedores, peatones y
   assert.equal(city.busServices.length, 2);
   try {
     await Promise.all(city.npcs.map(npc=>npc.ready));
-    assert.equal(city.npcs.length,73); // 66 peatones, 6 vendedores y el bailarín.
+    assert.equal(city.npcs.length,76); // 66 peatones, 6 vendedores, el bailarín y sus 3 acompañantes.
     assert.equal(city.vendors.length,6);
     assert.equal(city.pigeonFlocks.length, 3);
     for (const flock of city.pigeonFlocks) {
