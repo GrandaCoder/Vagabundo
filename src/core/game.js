@@ -962,6 +962,12 @@ export class Game {
     const kind=variant==='taxi'?'taxi':variant?.startsWith('police')?'police':'carro';
     // El frente de la carrocería es +X local: queda mirando hacia donde mira el jugador.
     const car=new Car(this.sceneMgr.scene,new THREE.Vector3(x,y,z),Math.atan2(-dir.z,dir.x),{kind,variant});
+    // Al cambiar a la carrocería del donante, el carro descarta la procedural: sus geometrías se comparten con otros carros
+    // ya dibujados y destruirlas en GPU rompía el dispositivo gráfico. Aquí se conserva (fuga mínima, solo desarrollo).
+    car.vehicle.dispose=()=>{};
+    // Cada SpotLight nueva cambia el número de luces de la escena y obliga a recompilar la ciudad entera (el juego se congelaba):
+    // los carros creados en partida van sin faros físicos; conservan los reflejos de la carrocería.
+    for(const light of car.headlights.splice(0)){light.target.removeFromParent();light.removeFromParent();}
     this.cars.push(car);this.interaction.register(car);car.preloadModel?.();this._syncVehicleColliders();
     return `Carro «${variant??'criollo'}» creado a ${distance.toFixed(1)} m.`;
   }
