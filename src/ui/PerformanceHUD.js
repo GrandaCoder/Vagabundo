@@ -11,6 +11,12 @@ export class PerformanceHUD {
     this.text = this.element.querySelector('pre');
     this.element.querySelector('button').addEventListener('click', () => this.metrics.reset());
     document.body.appendChild(this.element);
+    // Lectura mínima siempre visible en el borde superior derecho.
+    this.readout = document.createElement('div');
+    this.readout.id = 'top-readout';
+    this.readout.setAttribute('aria-label', 'FPS y coordenadas');
+    document.body.appendChild(this.readout);
+    this.nextReadout = 0;
     // Oculto por defecto: F3 o Ajustes lo muestran. Las métricas se toman igual.
     let saved = null;
     try { saved = localStorage.getItem('bazuko.perf_visible'); } catch { /* sin almacenamiento */ }
@@ -31,6 +37,10 @@ export class PerformanceHUD {
 
   update(now, position, renderer, active, lighting = null) {
     const sampled = this.metrics.sample(now, active && !document.hidden);
+    if (this.readout && now >= this.nextReadout) {
+      this.nextReadout = now + 250;
+      this.readout.textContent = `${this.metrics.frames ? Math.round(this.metrics.current) : '—'} FPS · X ${position.x.toFixed(1)} · Z ${position.z.toFixed(1)}`;
+    }
     if (now < this.nextPaint || this.visible === false) return sampled;
     this.nextPaint = now + 250; // 4 escrituras/s; las muestras sí se toman cada cuadro.
     const m = this.metrics;
@@ -59,5 +69,6 @@ export class PerformanceHUD {
   dispose() {
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.element.remove();
+    this.readout?.remove();
   }
 }
