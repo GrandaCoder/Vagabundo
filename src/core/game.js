@@ -39,7 +39,7 @@ import { CollisionSystem } from '../systems/CollisionSystem.js';
 import { TrafficSystem } from '../systems/TrafficSystem.js';
 import { distributeShelterLoot, spreadPickupPositions } from '../systems/ShelterLoot.js';
 import { InventorySystem } from '../systems/InventorySystem.js';
-import { AudioSystem } from '../systems/AudioSystem.js';
+import { AudioSystem, CAR_MUSIC } from '../systems/AudioSystem.js';
 import { CityAcoustics } from '../systems/CityAcoustics.js';
 import { InteractionSystem } from '../systems/InteractionSystem.js';
 import { DiseaseSystem } from '../systems/DiseaseSystem.js';
@@ -581,6 +581,7 @@ export class Game {
     // Carro fijo: Audio Hatch estacionado en X 141.5, Z 104.5.
     const hatch = new Car(this.sceneMgr.scene, new THREE.Vector3(141.5, district.getGroundHeight?.(141.5, 104.5) ?? 0, 104.5), -Math.PI / 2, { kind: 'carro', variant: 'audio_hatch' });
     hatch.vehicle.dispose = () => {}; // su carrocería procedural comparte geometrías con otros audio_hatch
+    this.audio.setCarMusic(hatch, CAR_MUSIC.bailaConmigo.file, { start: CAR_MUSIC.bailaConmigo.start, range: 30 }); // alterna: CAR_MUSIC.dejameEnPaz
     this.cars.push(hatch);
     this.interaction.register(hatch);
     if (district.getTrafficRoutes) {

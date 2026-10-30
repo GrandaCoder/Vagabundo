@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { mock, test } from 'node:test';
 import * as THREE from 'three';
-import { AudioSystem } from '../src/systems/AudioSystem.js';
+import { AudioSystem, CAR_MUSIC } from '../src/systems/AudioSystem.js';
 import { audioMetadata } from './helpers/audio-file.js';
 import { InteractionSystem } from '../src/systems/InteractionSystem.js';
 import { VehicleAudio } from '../src/systems/VehicleAudio.js';
@@ -205,13 +205,16 @@ test('la carpeta de audio contiene únicamente archivos utilizados y todos tiene
   const { audio } = fixture();
   try {
     const sounds = [...Object.values(audio.sounds), ...Object.values(audio.vehicleSounds), ...audio.driverSounds, ...audio.theftSounds];
-    const used = sounds.map(sound => decodeURIComponent(sound.options.src[0].split('/').at(-1))).sort();
+    const used = [...sounds.map(sound => decodeURIComponent(sound.options.src[0].split('/').at(-1))), ...Object.values(CAR_MUSIC).map(track => track.file)].sort();
     const files = readdirSync(new URL('../public/audio/', import.meta.url)).sort();
     assert.deepEqual(files, used);
-    assert.equal(files.filter(file => file.endsWith('.opus')).length, 10);
+    assert.equal(files.filter(file => file.endsWith('.opus')).length, 12);
     for (const file of files) {
       const bytes = readFileSync(new URL(`../public/audio/${encodeURIComponent(file)}`, import.meta.url));
       assert.ok(audioMetadata(bytes).duration > 0);
+    }
+    for (const { file, start } of Object.values(CAR_MUSIC)) {
+      assert.ok(audioMetadata(readFileSync(new URL(`../public/audio/${file}`, import.meta.url))).duration > start + 10, `${file} dura más que su segundo de inicio`);
     }
   } finally { audio.dispose(); }
 });
@@ -601,4 +604,24 @@ test('una lluvia que todavía carga no acumula reproducciones pendientes', () =>
   assert.equal(rain.starts,1);
   audio.setRaining(false);assert.equal(rain.playing(),false);
   audio.dispose();
+});
+
+test('la música del carro fijo arranca en su segundo, se oye hasta 30 m y se pausa con el juego', () => {
+  const { audio } = fixture();
+  const car = { position: new THREE.Vector3(10, 0, 10) };
+  audio.setCarMusic(car, 'Music_car_Baila_Conmigo.opus', { start: 35, range: 30 });
+  const music = audio.carMusic, base = audio._baseVolume.get(music.sound);
+  const at = (x, z) => { audio._updateCarMusic({ x, y: 0, z }); return music.sound.voices.get(music.id).volume; };
+  assert.equal(at(12, 10), base);
+  assert.equal(music.sound.voices.get(music.id).seek, 35);
+  assert.ok(at(25, 10) > 0 && at(25, 10) < base);
+  assert.equal(at(41, 10), 0);
+  assert.equal(at(10, 45), 0);
+  audio._paused = false;
+  audio.setPaused(true);
+  assert.equal(music.sound.voices.get(music.id).playing, false);
+  audio.setPaused(false);
+  assert.equal(music.sound.voices.get(music.id).playing, true);
+  audio.dispose();
+  assert.equal(music.sound.unloaded, true);
 });

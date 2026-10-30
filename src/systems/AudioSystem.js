@@ -2,8 +2,13 @@ import {SlopCrashAudio} from '../vehicles/SlopCrashAudio.js';
 import {SlopMotorAudio} from '../vehicles/SlopMotorAudio.js';
 // src/systems/AudioSystem.js
 import { Howl, Howler } from 'howler';
-import { VehicleAudio } from './VehicleAudio.js';
+import { VehicleAudio, distanceGain } from './VehicleAudio.js';
 
+// Canciones para la música de un carro y el segundo desde el que arrancan.
+export const CAR_MUSIC = {
+  bailaConmigo: { file: 'Music_car_Baila_Conmigo.opus', start: 35 },
+  dejameEnPaz: { file: 'Music_car_Dejame_en_paz.opus', start: 34 }
+};
 export const MIX_CATEGORIES = ['ambient', 'traffic', 'voices', 'effects'];
 // Mientras suena una frase, tráfico y ambiente bajan a esta fracción para que se entienda.
 const VOICE_DUCK = .45, DUCK_ATTACK = 10, DUCK_RELEASE = 2.5;
@@ -33,6 +38,8 @@ export class AudioSystem {
       },
       onplayerror(id) { this.once('unlock', () => this.play(id)); }
     }));
+    this._makeSound = sound;
+    this.carMusic = null;
     // Obstrucción por edificios (CityAcoustics); sin ella las voces suenan como antes.
     this.acoustics = null;
     this._ears = { x: 0, y: 0, z: 0 };
@@ -378,6 +385,8 @@ export class AudioSystem {
     this._paused = paused;
     this._syncRain();
     this.vehicles.setPaused(paused);
+    const music = this.carMusic;
+    if (music?.id !== null && music?.id !== undefined) paused ? music.sound.pause(music.id) : music.sound.play(music.id);
     if(paused)this.collisionAudio.stop();
     if (paused) {
       for (const voice of this._theftVoices.values()) voice.sound.stop(voice.id);
@@ -413,6 +422,30 @@ export class AudioSystem {
     return this.acoustics.gain(car, car.position, this._ears, height);
   }
 
+  /**
+   * Música de un carro fijo: suena en bucle desde el segundo `start` y se oye hasta `range` metros
+   * (volumen pleno a 5 m, sin panner). Va por la categoría de tráfico y la tapan los edificios.
+   */
+  setCarMusic(car, file, { start = 0, range = 30, volume = .8 } = {}) {
+    this.carMusic?.sound.unload();
+    this.carMusic = car ? { car, start, range, id: null, volume: -1, sound: this._makeSound(file, { volume, loop: true }) } : null;
+  }
+
+  _updateCarMusic(position) {
+    const music = this.carMusic;
+    if (!music || !position || this._paused || music.sound.state() !== 'loaded') return;
+    if (music.id === null) {
+      music.id = music.sound.play();
+      music.sound.seek(music.start, music.id);
+    }
+    const { car, sound, range } = music;
+    const distance = Math.hypot(car.position.x - position.x, car.position.y - position.y, car.position.z - position.z);
+    const volume = this._baseVolume.get(sound) * this._level('traffic') * distanceGain(distance, 5, range) * this._obstructionGain(car);
+    if (Math.abs(volume - music.volume) < .001 && (volume > 0 || music.volume === 0)) return;
+    music.volume = volume;
+    sound.volume(volume, music.id);
+  }
+
   updateWorld(dt, position, _camera, vehicles, bus) {
     this._listenerPosition = position;
     if (position) { this._ears.x = position.x; this._ears.y = position.y + 1.6; this._ears.z = position.z; }
@@ -421,6 +454,7 @@ export class AudioSystem {
     this._duck += (duckTarget - this._duck) * (1 - Math.exp(-dt * (duckTarget < this._duck ? DUCK_ATTACK : DUCK_RELEASE)));
     this._applyLevels();
     this.vehicles.update(dt, position, vehicles, bus, car => this._obstructionGain(car));
+    this._updateCarMusic(position);
     for (const [car, voice] of this._theftVoices) {
       if (!voice.sound.playing(voice.id)) this._theftVoices.delete(car);
       else voice.sound.volume(this._theftVolume(car, position), voice.id);
@@ -446,6 +480,7 @@ export class AudioSystem {
     this.eventTarget?.removeEventListener('dog-bark', this._dogBark);
     this.eventTarget?.removeEventListener('car-honk', this._carHonk);
     this.vehicles.clear();
+    this.carMusic?.sound.unload();
     this._removeUnlock();
     globalThis.document?.removeEventListener?.('visibilitychange', this._visibilityChanged);
     for (const sound of [...Object.values(this.sounds), ...Object.values(this.vehicleSounds), ...this.driverSounds, ...this.theftSounds]) sound.unload();
