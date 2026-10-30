@@ -987,11 +987,11 @@ export class Bogota {
     });
     dancer.action = 'bailar';
     this.npcs.push(dancer);
-    for (const [x, z] of [[139.7, 101.5], [143.7, 101.5], [141.7, 98]]) {
+    for (const [x, z, action] of [[139.7, 101.5, 'brazos'], [143.7, 101.5, 'telefono'], [141.7, 98, 'brazos']]) {
       const watcher = new Npc(this.scene, new THREE.Vector3(x, this.getGroundHeight(x, z), z), {
         facing: Math.atan2(141.7 - x, 100.5 - z), isWalkable: () => false, groundHeight: this.getGroundHeight.bind(this)
       });
-      watcher.action = 'brazos';
+      watcher.action = action;
       this.npcs.push(watcher);
     }
   }
