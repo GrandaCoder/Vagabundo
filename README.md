@@ -4,7 +4,7 @@ Juego de supervivencia urbana en 3D para el navegador, ambientado en un barrio i
 
 Este proyecto es un fork de [juanagogo/bazuko](https://github.com/juanagogo/bazuko), con mejoras de cámara, visibilidad, circulación y equilibrio de supervivencia.
 
-![Cruce nocturno en tercera persona con gasolinera, edificios altos, carros y viaducto](docs/images/ciudad-nocturna-tercera-persona.webp)
+![Gasolinera de noche con un Audio Hatch de parlantes iluminados y personas bailando a su lado](docs/images/gasolinera-audio-hatch-y-bailarines.png)
 
 ## Características
 
@@ -16,7 +16,7 @@ Este proyecto es un fork de [juanagogo/bazuko](https://github.com/juanagogo/bazu
 - Combate cuerpo a cuerpo: golpes con preparación, impacto y recuperación, y combos de hasta tres golpes si se pulsa durante la recuperación. Los puños (jab, cruzado y gancho) pegan poco y a un solo peatón; el cuchillo, fabricado con chatarra y tablas, es rápido y alcanza a varios; la botella picada, hecha con una botella y una lata, llega un poco más lejos. Los peatones no mueren: al quedarse sin fuerzas caen, permanecen tendidos unos segundos y se levantan huyendo. Ver [animaciones del personaje](docs/animaciones-actionforge.md#combate-cuerpo-a-cuerpo).
 - Diez palomas en cada uno de los tres parques: caminan, levantan vuelo cuando el jugador o un NPC se acerca a menos de 3,5 metros y aterrizan en otro lugar. Cada bandada usa cinco lotes de geometría instanciada, sin luces ni física; se suspende a más de 90 metros del jugador.
 - Carros y taxis con recorridos aleatorios entre 90 alternativas transitables y un bus articulado que circula por la troncal y para en la estación.
-- Carros criollos (Zapatico, Huevito y Amigo Fiel) con placas bogotanas, y patrullas de la Policía Nacional que persiguen a quien ven robando.
+- Carros con placas bogotanas y patrullas de la Policía Nacional que persiguen a quien ven robando.
 - Comida callejera en chazas y fritangas: empanada, morcilla, papa criolla y aguapanela, que además dan calor. En las noches con lluvia, sin calor se pierde energía y ánimo; las fogatas de El Cartucho calientan cada 20 segundos.
 - Pedir limosna requiere alguien a menos de 7 metros.
 - Calzadas de 12 metros y andenes de 4 metros.
@@ -29,25 +29,25 @@ Este proyecto es un fork de [juanagogo/bazuko](https://github.com/juanagogo/bazu
 
 ## Capturas
 
-Las capturas actuales muestran la ciudad de noche en tercera persona, con edificios de distintas alturas, tráfico y los nuevos espacios urbanos. Son imágenes reales del juego compartidas durante el desarrollo.
+Las capturas muestran la ciudad de día y de noche, con el tráfico, el viaducto y el comercio callejero. Son imágenes reales del juego compartidas durante el desarrollo.
 
-### Parque, palomas y El Chato
+### Cruce de día con una Prado
 
-![Parque de noche con palomas, El Chato, vendedor ambulante y bus sobre el viaducto](docs/images/parque-palomas-y-chato.webp)
+![Camioneta Prado blanca en un cruce, con el viaducto y los edificios al fondo a contraluz](docs/images/cruce-de-dia-con-prado.webp)
 
-### Estación Portal del Centro
+### Carro estacionado bajo el viaducto
 
-![Bus articulado junto a la estación Portal del Centro, con la pasarela y el viaducto al fondo](docs/images/estacion-portal-del-centro.webp)
+![Personaje junto a un sedán blanco estacionado bajo el viaducto, con la indicación para conducirlo](docs/images/carro-estacionado-bajo-el-viaducto.webp)
 
-### Calles y comercio bajo el viaducto
+### Calle de noche con tráfico
 
-![Cruce bajo el viaducto con semáforos, peatones, vendedor de frutas y fachadas de ladrillo](docs/images/acceso-al-viaducto.webp)
+![Calle de noche con una farola encendida, taxis, edificios y el viaducto al fondo](docs/images/noche-con-farola-y-trafico.webp)
 
-### Recorrido elevado junto a Colpatria
+### Semáforo y vendedor bajo el viaducto
 
-![Buses articulados sobre el viaducto, junto a la Torre Colpatria y los edificios del barrio](docs/images/viaducto-y-colpatria.webp)
+![Semáforo en rojo y un vendedor de frutas junto a un paso peatonal bajo el viaducto de noche](docs/images/noche-semaforo-y-vendedor.webp)
 
-Las cinco capturas están en [docs/images](docs/images), en formato WebP optimizado y con su resolución original.
+Las cinco capturas están en [docs/images](docs/images), en formato WebP optimizado salvo la de la gasolinera, que es PNG, y con su resolución original.
 
 ## Ejecutar en el navegador
 
