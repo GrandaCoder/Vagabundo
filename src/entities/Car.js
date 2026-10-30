@@ -46,9 +46,9 @@ export class Car {
     scene.add(this.group);
 
     // Particular, taxi o patrulla; la carrocería del donante usa el frente +X local.
-    const resolvedKind = kind ?? (Math.random() < 0.3 ? 'taxi' : 'carro');
+    const resolvedKind = (variant?.startsWith('police')?'police':kind) ?? (Math.random() < 0.3 ? 'taxi' : 'carro');
     this.kind = resolvedKind;
-    if (resolvedKind === 'police') variant ??= 'police';
+    if (resolvedKind === 'police') variant ??= 'police_pickup';
     this._variant = variant;
     this.modelKind = (variant ?? (resolvedKind === 'taxi' ? 'taxi' : 'sedan')) === 'taxi' ? 'car2' : 'car1';
     this.visualSeed = Math.floor(Math.random() * 8);
@@ -122,7 +122,7 @@ export class Car {
   }
 
   _buildLightbar() {
-    const roof = (VEHICLE_TYPES.police?.height ?? 1.75) + .02, width = this.width;
+    const roof = (VEHICLE_TYPES[this.variant]?.height ?? 1.75) + .02, width = this.width;
     const bar = new THREE.Mesh(new THREE.BoxGeometry(.85, .1, width - .35), new THREE.MeshStandardMaterial({ color: '#101214', roughness: .4, metalness: .65 }));
     bar.position.set(-.2, roof, 0);
     const blue = new THREE.MeshBasicMaterial({ color: new THREE.Color('#1a6cff').multiplyScalar(3) });

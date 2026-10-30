@@ -3,11 +3,17 @@ import * as THREE from 'three';
 import {driveSpeed,CAR_DRIVE} from './SlopDynamics.js';
 import {vehicleBlocked,resolveVehicleWalls} from './DrivingCollision.js';
 import {initializeMotion,MOTION_FIELDS} from './SlopCollisionPhysics.js';
+/** Distance to the oriented body, not its center; large parked vehicles remain reachable. */
+export function vehicleEntryDistance(position,car){
+ const dx=position.x-car.position.x,dz=position.z-car.position.z,yaw=car.group.rotation.y;
+ const along=dx*Math.cos(yaw)-dz*Math.sin(yaw),side=dx*Math.sin(yaw)+dz*Math.cos(yaw);
+ return Math.hypot(Math.max(0,Math.abs(along)-car.length/2),Math.max(0,Math.abs(side)-car.width/2),position.y-car.position.y);
+}
 export class PlayerDriving {
  constructor({player,cars,collisions,district,audio,contacts=()=>{},onCollision=()=>{},notify=()=>{}}){Object.assign(this,{player,cars,collisions,district,audio,contacts,onCollision,notify});this.car=null;this.speed=0;this.steer=0;this.pitch=this.roll=this.pitchVel=this.rollVel=0;this.candidate=new THREE.Vector3();this.lastHorn=-Infinity;}
- nearest(){let best=null,d=2.5;for(const car of this.cars()){if(car.controller!=='parked'||car.traffic||car._disposed)continue;const distance=this.player.position.distanceTo(car.position);if(distance<d){d=distance;best=car;}}return best;}
+ nearest(){let best=null,d=2.5;for(const car of this.cars()){if(car.controller!=='parked'||car.traffic||car._disposed)continue;const distance=vehicleEntryDistance(this.player.position,car);if(distance<d){d=distance;best=car;}}return best;}
  enter(car=this.nearest()){
-  if(this.car||!car||car.traffic||car.controller!=='parked'||this.player.position.distanceTo(car.position)>=2.5||this.player.isStunned)return false;
+  if(this.car||!car||car._disposed||car.traffic||car.controller!=='parked'||vehicleEntryDistance(this.player.position,car)>=2.5||this.player.isStunned)return false;
   if(!car.drivingVisual){this.notify('El carro todavía se está preparando.');return false;}
   this.savedVisible=this.player.root.visible;this.savedPosition=this.player.position.clone();this.car=car;initializeMotion(this);for(const key of MOTION_FIELDS)this[key]=car.parkedPhysics?.[key]??0;car.physics=this;car.controller='player';car.setControlled(true);this.speed=this.steer=0;this.pitch=this.roll=this.pitchVel=this.rollVel=0;
   this.player.velocity?.set(0,0,0);this.player.root.visible=false;this._follow();this.throttle=0;this.audio?.startEngine?.(car);return true;

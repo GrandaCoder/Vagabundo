@@ -80,7 +80,7 @@ export class TrafficSystem {
     route.sample(distance, this._position, this._direction);
     // Las patrullas usan la carrocería de policía del donante; el resto, una clase al azar del tráfico.
     const car = new Car(scene, this._position, Math.atan2(-this._direction.z, this._direction.x),
-      { traffic: true, kind: police ? 'police' : null, variant: police ? 'police' : trafficVariant(random) });
+      { traffic: true, kind: police ? 'police' : null, variant: police ? 'police_pickup' : trafficVariant(random) });
     const cruiseSpeed = car.variant==='bus'?8+random()*2:10 + random() * 4;
     const driver=car.variant==='bus'?BUS_DRIVER:CAR_DRIVER;
     this.vehicles.push({ car, route, distance, speed: 0, cruiseSpeed, patrolSpeed: cruiseSpeed, nextDistance: distance, nextSpeed: 0,
@@ -708,3 +708,4 @@ export class TrafficSystem {
     this.vehicles.length = 0;
   }
 }
+

@@ -12,7 +12,7 @@ export function createSlopVehicle({variant='sedan',seed=0,length=4.3,width=1.76,
     const geometry=buildCarGeometry(spec,true,false);geometry.computeBoundingBox();geometry.computeBoundingSphere();geometries.set(variant,geometry);
   }
   const geometry=geometries.get(variant),size=geometry.boundingBox.getSize(new THREE.Vector3());
-  const material=createSlopMaterial(spec,variant==='taxi'?'#edbd18':variant==='police'?'#e7eee8':PAINTS[Math.abs(seed)%PAINTS.length]);
+  const material=createSlopMaterial(spec,variant==='prado'?'#f2f3f0':variant==='audio_hatch'?'#c81020':variant==='taxi'?'#edbd18':variant==='police'?'#e7eee8':PAINTS[Math.abs(seed)%PAINTS.length]);
   const mesh=new THREE.Mesh(geometry,material);mesh.rotation.y=Math.PI/2;mesh.castShadow=mesh.receiveShadow=true;
   const group=new THREE.Group();group.name=variant==='taxi'?'Taxi bogotano procedural':'Sedán procedural';
   group.scale.set(length/size.z,VEHICLE_TYPES[variant].height/size.y,width/size.x);

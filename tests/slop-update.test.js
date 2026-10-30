@@ -19,7 +19,7 @@ test('todas las clases del donante mantienen dimensiones, orientacion, estados y
   v.dispose();
  }
  assert.equal(vehicleBatches(scene).entries.size,0);disposeVehicleBatches(scene);
- assert.deepEqual([0,.31,.6,.8,.85,.9,.95,.97,.99].map(x=>trafficVariant(()=>x)),['taxi','sedan','suv','van','minivan','pickup','police','police_suv','bus']);
+ assert.deepEqual([0,.31,.6,.8,.85,.9,.95,.97,.99].map(x=>trafficVariant(()=>x)),['taxi','sedan','suv','van','minivan','pickup','police_pickup','police_suv','bus']);
 });
 
 test('solo un cuarto redondeado de cruces conserva postes; prioridad ignora fases invisibles',()=>{
@@ -47,3 +47,4 @@ test('buffers de motores finitos y voces de combustion liberables sin modalidade
  for(const kind of ['sedan','suv','bus']){const voice=createMotorVoice(ctx,resources,kind,node());voice.update({speed:12,load:1});voice.dispose();voice.dispose();}
  assert.ok(sources.every(n=>n.stopped));assert.throws(()=>createMotorVoice(ctx,resources,'helicopter',node()),RangeError);
 });
+
