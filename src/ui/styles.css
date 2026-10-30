@@ -809,6 +809,7 @@ body.night-mode .cinematic-vignette {
 .dev-toggle input { accent-color:#53c68b; width:16px; height:16px; }
 .dev-metrics { white-space:pre-wrap; padding:10px; background:#08151b; font:12px/1.6 monospace; }
 .dev-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.dev-command { flex:1 1 150px; min-width:0; padding:5px 8px; font:inherit; color:inherit; background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.25); border-radius:4px; }
 .dev-status { color:#ffd06c; }
 .dev-hint { color:#a5bbb9; font-size:11px; }
 .dev-section { margin:10px 0 6px; color:#f3ce64; font-size:12px; font-weight:700; }

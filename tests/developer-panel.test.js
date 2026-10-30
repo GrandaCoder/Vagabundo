@@ -51,3 +51,18 @@ test('el panel DEV activa la lluvia y reinicia las necesidades', () => {
     assert.ok(Object.values(stats).every(v => v === 100));
   } finally { clearInterval(panel.timer); }
 });
+
+test('la barra de comandos del panel DEV pide un carro con Enter y muestra la respuesta', () => {
+  fakeDom();
+  const orders = [];
+  const game = { spawnCarAhead: text => { orders.push(text); return 'Carro creado'; }, debugSystems: { subscribe: () => () => {}, isEnabled: () => true, pending: new Set(), counts: () => ({}) } };
+  const panel = new DeveloperPanel(game);
+  try {
+    panel.command.value = '/carro taxi';
+    panel.command.listeners.keydown({ code: 'KeyA', preventDefault() {} });
+    assert.deepEqual(orders, [], 'solo Enter ejecuta');
+    panel.command.listeners.keydown({ code: 'Enter', preventDefault() {} });
+    assert.deepEqual(orders, ['/carro taxi']);
+    assert.equal(panel.status.textContent, 'Carro creado');
+  } finally { clearInterval(panel.timer); }
+});

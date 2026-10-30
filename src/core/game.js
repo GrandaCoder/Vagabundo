@@ -26,6 +26,7 @@ import { SellPoint } from '../entities/SellPoint.js';
 import { Cambuche } from '../entities/Cambuche.js';
 import { Shop } from '../entities/Shop.js';
 import { Car } from '../entities/Car.js';
+import { VEHICLE_TYPES } from '../vehicles/VehicleTypes.js';
 import { DrugDealer } from '../entities/DrugDealer.js';
 import { CraftingStation } from '../entities/CraftingStation.js';
 import { Cart } from '../entities/Cart.js';
@@ -81,6 +82,8 @@ import {
 
 // Distancia máxima a la que los objetos pequeños proyectan sombra del sol (la cascada cercana cubre ~70 m).
 const SMALL_SHADOW_RANGE = 60;
+// Nombres cortos de la barra de comandos del panel DEV.
+const CAR_ALIASES = { carro: 'sedan', auto: 'sedan', camioneta: 'suv', patrulla: 'police_pickup', policia: 'police_suv' };
 const STATIC_PLACES = new Set(['SellPoint', 'DrugDealer', 'CraftingStation', 'Shop', 'TrashContainer']);
 
 export class Game {
@@ -943,6 +946,22 @@ export class Game {
   }
 
   _debugEnabled(key){return this.debugSystems?.isEnabled(key)??true;}
+  /** Herramienta de desarrollo: estaciona un carro delante de la cámara. Devuelve el texto para el panel. */
+  spawnCarAhead(name=''){
+    const word=String(name).trim().toLowerCase().replace(/^\//,'').replace(/^(carro|spawn)\s*/,'');
+    const types=Object.keys(VEHICLE_TYPES).filter(id=>id!=='bus');
+    const variant=CAR_ALIASES[word]??(word===''||word==='random'||word==='aleatorio'?types[Math.floor(Math.random()*types.length)]:word);
+    if(!types.includes(variant))return `Tipo «${word}» desconocido. Tipos: ${[...types,...Object.keys(CAR_ALIASES)].join(', ')}`;
+    const camera=this.cameraRig.camera,dir=new THREE.Vector3();camera.getWorldDirection(dir);dir.y=0;
+    if(dir.lengthSq()<1e-6)dir.set(0,0,-1);dir.normalize();
+    const distance=VEHICLE_TYPES[variant].length/2+3,x=this.player.position.x+dir.x*distance,z=this.player.position.z+dir.z*distance;
+    const y=this.world.active?.getGroundHeight?.(x,z)??0;
+    const kind=variant==='taxi'?'taxi':variant.startsWith('police')?'police':'carro';
+    // El frente de la carrocería es +X local: queda mirando hacia donde mira el jugador.
+    const car=new Car(this.sceneMgr.scene,new THREE.Vector3(x,y,z),Math.atan2(-dir.z,dir.x),{kind,variant});
+    this.cars.push(car);this.interaction.register(car);car.preloadModel?.();this._syncVehicleColliders();
+    return `Carro «${variant}» creado a ${distance.toFixed(1)} m.`;
+  }
   _activeCars(){return this._debugEnabled('cars')?this.cars??[]:[];}
   _activeTraffic(){return this._debugEnabled('cars')?this.traffic?.vehicles??[]:[];}
   _activeBuses(){const d=this.world.active;return this._debugEnabled('transit')?d?.busServices??(d?.busService?[d.busService]:[]):[];}
