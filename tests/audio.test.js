@@ -208,7 +208,7 @@ test('la carpeta de audio contiene únicamente archivos utilizados y todos tiene
     const used = [...sounds.map(sound => decodeURIComponent(sound.options.src[0].split('/').at(-1))), ...Object.values(CAR_MUSIC).map(track => track.file)].sort();
     const files = readdirSync(new URL('../public/audio/', import.meta.url)).sort();
     assert.deepEqual(files, used);
-    assert.equal(files.filter(file => file.endsWith('.opus')).length, 12);
+    assert.equal(files.filter(file => file.endsWith('.opus')).length, 15);
     for (const file of files) {
       const bytes = readFileSync(new URL(`../public/audio/${encodeURIComponent(file)}`, import.meta.url));
       assert.ok(audioMetadata(bytes).duration > 0);

@@ -7,7 +7,10 @@ import { VehicleAudio, distanceGain } from './VehicleAudio.js';
 // Canciones para la música de un carro y el segundo desde el que arrancan.
 export const CAR_MUSIC = {
   bailaConmigo: { file: 'Music_car_Baila_Conmigo.opus', start: 35 },
-  dejameEnPaz: { file: 'Music_car_Dejame_en_paz.opus', start: 34 }
+  dejameEnPaz: { file: 'Music_car_Dejame_en_paz.opus', start: 34 },
+  myBichi: { file: 'Music_car_my_bichi.opus', start: 33 },
+  myBichiVol2: { file: 'Music_car_my_bichi_vol2.opus', start: 33 },
+  myBichiV3: { file: 'Music_car_my_bichi_v3.opus', start: 33 }
 };
 export const MIX_CATEGORIES = ['ambient', 'traffic', 'voices', 'effects'];
 // Mientras suena una frase, tráfico y ambiente bajan a esta fracción para que se entienda.

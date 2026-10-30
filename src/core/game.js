@@ -581,7 +581,8 @@ export class Game {
     // Carro fijo: Audio Hatch estacionado en X 141.5, Z 104.5.
     const hatch = new Car(this.sceneMgr.scene, new THREE.Vector3(141.5, district.getGroundHeight?.(141.5, 104.5) ?? 0, 104.5), -Math.PI / 2, { kind: 'carro', variant: 'audio_hatch' });
     hatch.vehicle.dispose = () => {}; // su carrocería procedural comparte geometrías con otros audio_hatch
-    this.audio.setCarMusic(hatch, CAR_MUSIC.bailaConmigo.file, { start: CAR_MUSIC.bailaConmigo.start, range: 30 }); // alterna: CAR_MUSIC.dejameEnPaz
+    const tracks = Object.values(CAR_MUSIC), track = tracks[Math.floor(Math.random() * tracks.length)]; // suena una al azar
+    this.audio.setCarMusic(hatch, track.file, { start: track.start, range: 30 });
     this.cars.push(hatch);
     this.interaction.register(hatch);
     if (district.getTrafficRoutes) {
