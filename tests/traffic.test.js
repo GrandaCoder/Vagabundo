@@ -597,3 +597,11 @@ test('la patrulla conserva su carrocería con luces al precargar modelos', async
   assert.equal(car.vehicle.variant, 'police');
   traffic.dispose();
 });
+
+test('los carros estacionados nunca son criollos: civilianVariant solo entrega carrocerías del donante sin patrullas ni buses', async () => {
+  const { civilianVariant, VEHICLE_TYPES } = await import('../src/vehicles/VehicleTypes.js');
+  const seen = new Set();
+  for (let i = 0; i < 400; i++) seen.add(civilianVariant(() => i / 400));
+  assert.ok(seen.has('taxi') && seen.has('sedan') && seen.has('audio_hatch'));
+  for (const id of seen) assert.ok(VEHICLE_TYPES[id] && id !== 'bus' && !id.startsWith('police'), id);
+});

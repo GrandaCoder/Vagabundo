@@ -67,13 +67,14 @@ test('la barra de comandos del panel DEV pide un carro con Enter y muestra la re
   } finally { clearInterval(panel.timer); }
 });
 
-test('la lista de carros del comando sale del juego y el criollo y «lista» no fallan', async () => {
+test('la lista de carros del comando sale del juego y «lista» no falla y el criollo ya no existe', async () => {
   fakeDom();
   const { Game } = await import('../src/core/game.js');
   const names = Game.prototype.carSpawnNames.call({});
-  for (const id of ['taxi', 'sedan', 'suv', 'pickup', 'van', 'minivan', 'audio_hatch', 'police_pickup', 'police_suv', 'patrulla', 'criollo']) assert.ok(names.includes(id), id);
+  for (const id of ['taxi', 'sedan', 'suv', 'pickup', 'van', 'minivan', 'audio_hatch', 'police_pickup', 'police_suv', 'patrulla']) assert.ok(names.includes(id), id);
+  assert.ok(!names.includes('criollo'));
   assert.ok(!names.includes('bus'));
-  assert.match(Game.prototype.spawnCarAhead.call({ carSpawnNames: Game.prototype.carSpawnNames }, '/carro lista'), /Carros: .*taxi.*criollo/);
+  assert.match(Game.prototype.spawnCarAhead.call({ carSpawnNames: Game.prototype.carSpawnNames }, '/carro lista'), /Carros: .*taxi/);
   assert.match(Game.prototype.spawnCarAhead.call({}, 'nave'), /desconocido/);
   const game = { carSpawnNames: () => names, debugSystems: { subscribe: () => () => {}, isEnabled: () => true, pending: new Set(), counts: () => ({}) } };
   const panel = new DeveloperPanel(game);

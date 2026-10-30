@@ -26,7 +26,7 @@ import { SellPoint } from '../entities/SellPoint.js';
 import { Cambuche } from '../entities/Cambuche.js';
 import { Shop } from '../entities/Shop.js';
 import { Car } from '../entities/Car.js';
-import { VEHICLE_TYPES } from '../vehicles/VehicleTypes.js';
+import { VEHICLE_TYPES, civilianVariant } from '../vehicles/VehicleTypes.js';
 import { DrugDealer } from '../entities/DrugDealer.js';
 import { CraftingStation } from '../entities/CraftingStation.js';
 import { Cart } from '../entities/Cart.js';
@@ -574,7 +574,8 @@ export class Game {
       if (spot) placed.push(spot);
       const pos = spot ? new THREE.Vector3(spot.x, 0, spot.z) : findValidSpawn(null, 6);
       const rot = spot ? spot.rot : Math.random() * Math.PI * 2;
-      const car = new Car(this.sceneMgr.scene, pos, rot);
+      const variant = civilianVariant(); // sin carros criollos: todos llevan una carrocería del donante
+      const car = new Car(this.sceneMgr.scene, pos, rot, { kind: variant === 'taxi' ? 'taxi' : 'carro', variant });
       this.cars.push(car);
       this.interaction.register(car);
     }
@@ -954,13 +955,13 @@ export class Game {
 
   _debugEnabled(key){return this.debugSystems?.isEnabled(key)??true;}
   /** Herramienta de desarrollo: estaciona un carro delante de la cámara. Devuelve el texto para el panel. */
-  /** Nombres que acepta spawnCarAhead: los tipos de VEHICLE_TYPES (menos el bus), los alias y el carro criollo. */
-  carSpawnNames(){return [...Object.keys(VEHICLE_TYPES).filter(id=>id!=='bus'),...Object.keys(CAR_ALIASES),'criollo'];}
+  /** Nombres que acepta spawnCarAhead: los tipos de VEHICLE_TYPES (menos el bus) y los alias. */
+  carSpawnNames(){return [...Object.keys(VEHICLE_TYPES).filter(id=>id!=='bus'),...Object.keys(CAR_ALIASES)];}
   spawnCarAhead(name=''){
     const word=String(name).trim().toLowerCase().replace(/^\//,'').replace(/^(carro|spawn)\s*/,'');
     const types=Object.keys(VEHICLE_TYPES).filter(id=>id!=='bus');
     if(word==='lista'||word==='list'||word==='?')return `Carros: ${this.carSpawnNames().join(', ')}`;
-    const variant=word==='criollo'?null:CAR_ALIASES[word]??(word===''||word==='random'||word==='aleatorio'?types[Math.floor(Math.random()*types.length)]:word);
+    const variant=CAR_ALIASES[word]??(word===''||word==='random'||word==='aleatorio'?types[Math.floor(Math.random()*types.length)]:word);
     if(variant&&!types.includes(variant))return `Tipo «${word}» desconocido. Escribe «lista» para verlos.`;
     const camera=this.cameraRig.camera,dir=new THREE.Vector3();camera.getWorldDirection(dir);dir.y=0;
     if(dir.lengthSq()<1e-6)dir.set(0,0,-1);dir.normalize();
@@ -976,7 +977,7 @@ export class Game {
     // los carros creados en partida van sin faros físicos; conservan los reflejos de la carrocería.
     for(const light of car.headlights.splice(0)){light.target.removeFromParent();light.removeFromParent();}
     this.cars.push(car);this.interaction.register(car);car.preloadModel?.();this._syncVehicleColliders();
-    return `Carro «${variant??'criollo'}» creado a ${distance.toFixed(1)} m.`;
+    return `Carro «${variant}» creado a ${distance.toFixed(1)} m.`;
   }
   _activeCars(){return this._debugEnabled('cars')?this.cars??[]:[];}
   _activeTraffic(){return this._debugEnabled('cars')?this.traffic?.vehicles??[]:[];}

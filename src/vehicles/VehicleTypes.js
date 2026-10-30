@@ -13,3 +13,5 @@ export const VEHICLE_TYPES=Object.freeze({
  bus:{length:11.56,width:2.6,height:3.05}
 });
 export function trafficVariant(random=Math.random){const n=random();return n<.30?'taxi':n<.49?'sedan':n<.54?'audio_hatch':n<.70?'suv':n<.75?'prado':n<.83?'van':n<.89?'minivan':n<.93?'pickup':n<.96?'police_pickup':n<.98?'police_suv':'bus';}
+/** Variante de carro civil (taxi incluido) con las proporciones del tráfico: sin patrullas ni buses. */
+export function civilianVariant(random=Math.random){return trafficVariant(()=>random()*.93);} // por debajo de .93 no hay patrullas ni bus
