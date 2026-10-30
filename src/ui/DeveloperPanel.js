@@ -21,9 +21,10 @@ export class DeveloperPanel {
   this.rainButton=el('button',{type:'button',text:'🌧️ Lluvia','aria-pressed':'false',onclick:()=>{const w=game.weather;if(!w?.forceRain)return;w.forceRain(!w.isRaining);this.refresh();}});
   this.needsButton=el('button',{type:'button',text:'🍞 Reiniciar necesidades',onclick:()=>{for(const need of NEEDS)game.stats[need]=100;this.status.textContent='Hambre, sed y demás necesidades al 100 %.';}});
   this.content.append(el('p',{class:'dev-section',text:'Atajos'}),el('div',{class:'dev-actions'},this.rainButton,this.needsButton));
-  this.command=el('input',{type:'text',class:'dev-command',placeholder:'/carro taxi · /carro suv · /carro patrulla','aria-label':'Comando de desarrollo',autocomplete:'off',spellcheck:'false'});
+  this.command=el('input',{type:'text',class:'dev-command',placeholder:'/carro taxi · /carro lista','aria-label':'Comando de desarrollo',autocomplete:'off',spellcheck:'false',list:'dev-car-names'});
+  this.carNames=el('datalist',{id:'dev-car-names'},...(game.carSpawnNames?.()??[]).map(name=>el('option',{value:'/carro '+name})));
   this.command.addEventListener('keydown',e=>{if(e.code!=='Enter'&&e.code!=='NumpadEnter')return;e.preventDefault();this.runCommand(this.command.value);});
-  this.content.append(el('p',{class:'dev-section',text:'Comando · carros'}),el('div',{class:'dev-actions'},this.command,el('button',{type:'button',text:'Crear',onclick:()=>this.runCommand(this.command.value)})));
+  this.content.append(el('p',{class:'dev-section',text:'Comando · carros'}),el('div',{class:'dev-actions'},this.command,this.carNames,el('button',{type:'button',text:'Crear',onclick:()=>this.runCommand(this.command.value)})));
   this.lock=el('input',{type:'checkbox',checked:true});this.lock.addEventListener('change',()=>{game.renderer.adaptiveLocked=this.lock.checked?true:this.previousAdaptive;});
   this.resetButton=el('button',{type:'button',text:'Activar todo',onclick:async()=>{try{await game.debugSystems.reset();this.status.textContent='';}catch(error){this.status.textContent=error.message;}}});
   this.content.append(el('label',{class:'dev-toggle'},this.lock,el('span',{text:'Bloquear adaptación automática'})),this.metrics,

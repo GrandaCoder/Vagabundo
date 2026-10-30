@@ -947,20 +947,23 @@ export class Game {
 
   _debugEnabled(key){return this.debugSystems?.isEnabled(key)??true;}
   /** Herramienta de desarrollo: estaciona un carro delante de la cámara. Devuelve el texto para el panel. */
+  /** Nombres que acepta spawnCarAhead: los tipos de VEHICLE_TYPES (menos el bus), los alias y el carro criollo. */
+  carSpawnNames(){return [...Object.keys(VEHICLE_TYPES).filter(id=>id!=='bus'),...Object.keys(CAR_ALIASES),'criollo'];}
   spawnCarAhead(name=''){
     const word=String(name).trim().toLowerCase().replace(/^\//,'').replace(/^(carro|spawn)\s*/,'');
     const types=Object.keys(VEHICLE_TYPES).filter(id=>id!=='bus');
-    const variant=CAR_ALIASES[word]??(word===''||word==='random'||word==='aleatorio'?types[Math.floor(Math.random()*types.length)]:word);
-    if(!types.includes(variant))return `Tipo «${word}» desconocido. Tipos: ${[...types,...Object.keys(CAR_ALIASES)].join(', ')}`;
+    if(word==='lista'||word==='list'||word==='?')return `Carros: ${this.carSpawnNames().join(', ')}`;
+    const variant=word==='criollo'?null:CAR_ALIASES[word]??(word===''||word==='random'||word==='aleatorio'?types[Math.floor(Math.random()*types.length)]:word);
+    if(variant&&!types.includes(variant))return `Tipo «${word}» desconocido. Escribe «lista» para verlos.`;
     const camera=this.cameraRig.camera,dir=new THREE.Vector3();camera.getWorldDirection(dir);dir.y=0;
     if(dir.lengthSq()<1e-6)dir.set(0,0,-1);dir.normalize();
-    const distance=VEHICLE_TYPES[variant].length/2+3,x=this.player.position.x+dir.x*distance,z=this.player.position.z+dir.z*distance;
+    const distance=(VEHICLE_TYPES[variant]?.length??4.3)/2+3,x=this.player.position.x+dir.x*distance,z=this.player.position.z+dir.z*distance;
     const y=this.world.active?.getGroundHeight?.(x,z)??0;
-    const kind=variant==='taxi'?'taxi':variant.startsWith('police')?'police':'carro';
+    const kind=variant==='taxi'?'taxi':variant?.startsWith('police')?'police':'carro';
     // El frente de la carrocería es +X local: queda mirando hacia donde mira el jugador.
     const car=new Car(this.sceneMgr.scene,new THREE.Vector3(x,y,z),Math.atan2(-dir.z,dir.x),{kind,variant});
     this.cars.push(car);this.interaction.register(car);car.preloadModel?.();this._syncVehicleColliders();
-    return `Carro «${variant}» creado a ${distance.toFixed(1)} m.`;
+    return `Carro «${variant??'criollo'}» creado a ${distance.toFixed(1)} m.`;
   }
   _activeCars(){return this._debugEnabled('cars')?this.cars??[]:[];}
   _activeTraffic(){return this._debugEnabled('cars')?this.traffic?.vehicles??[]:[];}
