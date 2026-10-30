@@ -83,6 +83,11 @@ import {
 // Distancia máxima a la que los objetos pequeños proyectan sombra del sol (la cascada cercana cubre ~70 m).
 const SMALL_SHADOW_RANGE = 60;
 // Nombres cortos de la barra de comandos del panel DEV.
+/** Argumentos de setCarMusic para una canción al azar de CAR_MUSIC. */
+const randomCarTrack = (range = 30) => {
+  const tracks = Object.values(CAR_MUSIC), track = tracks[Math.floor(Math.random() * tracks.length)];
+  return [track.file, { start: track.start, range }];
+};
 const CAR_ALIASES = { carro: 'sedan', auto: 'sedan', camioneta: 'suv', patrulla: 'police_pickup', policia: 'police_suv' };
 const STATIC_PLACES = new Set(['SellPoint', 'DrugDealer', 'CraftingStation', 'Shop', 'TrashContainer']);
 
@@ -582,14 +587,17 @@ export class Game {
     // Carro fijo: Audio Hatch estacionado en X 141.5, Z 104.5.
     const hatch = new Car(this.sceneMgr.scene, new THREE.Vector3(141.5, district.getGroundHeight?.(141.5, 104.5) ?? 0, 104.5), -Math.PI / 2, { kind: 'carro', variant: 'audio_hatch' });
     hatch.vehicle.dispose = () => {}; // su carrocería procedural comparte geometrías con otros audio_hatch
-    const tracks = Object.values(CAR_MUSIC), track = tracks[Math.floor(Math.random() * tracks.length)]; // suena una al azar
-    this.audio.setCarMusic(hatch, track.file, { start: track.start, range: 30 });
+    this.audio.setCarMusic(hatch, ...randomCarTrack(45)); // el fijo se oye hasta 45 m
     this.cars.push(hatch);
     this.interaction.register(hatch);
     if (district.getTrafficRoutes) {
       this.traffic = new TrafficSystem(this.sceneMgr.scene, district.getTrafficRoutes(), { policeCount: 2 });
       this.traffic.setParkedCars(this.cars);
-      for (const { car } of this.traffic.vehicles) this.interaction.register(car);
+      for (const { car } of this.traffic.vehicles) {
+        this.interaction.register(car);
+        // Los Audio Hatch en circulación llevan música al azar con un 70 % de probabilidad.
+        if (car.variant === 'audio_hatch' && Math.random() < .7) this.audio.setCarMusic(car, ...randomCarTrack());
+      }
     }
 
     // ===== Puesto de venta =====

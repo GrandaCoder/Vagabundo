@@ -606,22 +606,42 @@ test('una lluvia que todavía carga no acumula reproducciones pendientes', () =>
   audio.dispose();
 });
 
-test('la música del carro fijo arranca en su segundo, se oye hasta 30 m y se pausa con el juego', () => {
+test('la música de un carro fijo arranca en su segundo, se oye hasta 30 m y se pausa con el juego', () => {
   const { audio } = fixture();
   const car = { position: new THREE.Vector3(10, 0, 10) };
   audio.setCarMusic(car, 'Music_car_Baila_Conmigo.opus', { start: 35, range: 30 });
-  const music = audio.carMusic, base = audio._baseVolume.get(music.sound);
+  const music = audio.carMusic.get(car), base = audio._baseVolume.get(music.sound);
   const at = (x, z) => { audio._updateCarMusic({ x, y: 0, z }); return music.sound.voices.get(music.id).volume; };
   assert.equal(at(12, 10), base);
   assert.equal(music.sound.voices.get(music.id).seek, 35);
   assert.ok(at(25, 10) > 0 && at(25, 10) < base);
   assert.equal(at(41, 10), 0);
   assert.equal(at(10, 45), 0);
-  audio._paused = false;
   audio.setPaused(true);
   assert.equal(music.sound.voices.get(music.id).playing, false);
   audio.setPaused(false);
   assert.equal(music.sound.voices.get(music.id).playing, true);
   audio.dispose();
   assert.equal(music.sound.unloaded, true);
+});
+
+test('la música de un carro en circulación solo suena cerca, mientras el tráfico lo mantiene activo, y comparte el archivo', () => {
+  const { audio } = fixture();
+  const a = { traffic: true, position: new THREE.Vector3(0, 0, 0) }, b = { traffic: true, position: new THREE.Vector3(5, 0, 0) };
+  audio.setCarMusic(a, 'Music_car_my_bichi.opus', { start: 33 });
+  audio.setCarMusic(b, 'Music_car_my_bichi.opus', { start: 33 });
+  const music = audio.carMusic.get(a);
+  assert.equal(audio.carMusic.get(b).sound, music.sound, 'un solo Howl por archivo');
+  const near = [{ car: a }, { car: b }], far = { x: 200, y: 0, z: 0 };
+  audio._updateCarMusic(far, near);
+  assert.equal(music.id, null, 'lejos no reproduce');
+  audio._updateCarMusic({ x: 10, y: 0, z: 0 }, near);
+  assert.notEqual(music.id, null);
+  assert.notEqual(audio.carMusic.get(b).id, music.id, 'cada carro tiene su voz');
+  audio._updateCarMusic({ x: 10, y: 0, z: 0 }, [{ car: b }]);
+  assert.equal(music.id, null, 'si el tráfico lo desactiva, calla');
+  audio._updateCarMusic({ x: 10, y: 0, z: 0 }, near);
+  audio._updateCarMusic({ x: 100, y: 0, z: 0 }, near);
+  assert.equal(music.id, null, 'a más de 50 m libera la voz');
+  audio.dispose();
 });

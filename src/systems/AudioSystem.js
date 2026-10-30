@@ -42,7 +42,8 @@ export class AudioSystem {
       onplayerror(id) { this.once('unlock', () => this.play(id)); }
     }));
     this._makeSound = sound;
-    this.carMusic = null;
+    this.carMusic = new Map(); // carro → música propia; los Howl se comparten por archivo
+    this._musicSounds = new Map();
     // Obstrucción por edificios (CityAcoustics); sin ella las voces suenan como antes.
     this.acoustics = null;
     this._ears = { x: 0, y: 0, z: 0 };
@@ -256,6 +257,7 @@ export class AudioSystem {
 
   suppressVehicles(cars){
     this.vehicles.suppress(cars);this.collisionAudio?.stop();
+    for(const car of cars){const music=this.carMusic.get(car);if(music)this._stopCarMusic(music);}
     for(const car of cars){
       const voice=this._theftVoices.get(car);if(voice)voice.sound.stop(voice.id);this._theftVoices.delete(car);
       const alarm=this._carAlarms.get(car);if(alarm)this.sounds.carAlarm.stop(alarm.id);this._carAlarms.delete(car);
@@ -388,8 +390,7 @@ export class AudioSystem {
     this._paused = paused;
     this._syncRain();
     this.vehicles.setPaused(paused);
-    const music = this.carMusic;
-    if (music?.id !== null && music?.id !== undefined) paused ? music.sound.pause(music.id) : music.sound.play(music.id);
+    for (const music of this.carMusic.values()) if (music.id !== null) paused ? music.sound.pause(music.id) : music.sound.play(music.id);
     if(paused)this.collisionAudio.stop();
     if (paused) {
       for (const voice of this._theftVoices.values()) voice.sound.stop(voice.id);
@@ -426,27 +427,50 @@ export class AudioSystem {
   }
 
   /**
-   * Música de un carro fijo: suena en bucle desde el segundo `start` y se oye hasta `range` metros
-   * (volumen pleno a 5 m, sin panner). Va por la categoría de tráfico y la tapan los edificios.
+   * Música de un carro: suena en bucle desde el segundo start y se oye hasta range metros (volumen pleno a 5 m,
+   * sin panner). Va por la categoría de tráfico y la tapan los edificios. Un carro fijo sigue sonando sin volumen
+   * cuando está lejos; uno en circulación solo reproduce mientras está a menos de range + 20 m.
    */
   setCarMusic(car, file, { start = 0, range = 30, volume = .8 } = {}) {
-    this.carMusic?.sound.unload();
-    this.carMusic = car ? { car, start, range, id: null, volume: -1, sound: this._makeSound(file, { volume, loop: true }) } : null;
+    if (!car) return;
+    this.clearCarMusic(car);
+    let sound = this._musicSounds.get(file);
+    if (!sound) this._musicSounds.set(file, sound = this._makeSound(file, { volume, loop: true, pool: 6 }));
+    this.carMusic.set(car, { car, start, range, id: null, volume: -1, sound });
   }
 
-  _updateCarMusic(position) {
-    const music = this.carMusic;
-    if (!music || !position || this._paused || music.sound.state() !== 'loaded') return;
-    if (music.id === null) {
-      music.id = music.sound.play();
-      music.sound.seek(music.start, music.id);
+  clearCarMusic(car) {
+    const music = this.carMusic.get(car);
+    if (music?.id !== null && music?.id !== undefined) music.sound.stop(music.id);
+    this.carMusic.delete(car);
+  }
+
+  _updateCarMusic(position, vehicles = []) {
+    if (!this.carMusic.size || !position || this._paused) return;
+    let active = null;
+    for (const music of this.carMusic.values()) {
+      const { car, sound, range } = music;
+      if (sound.state() !== 'loaded') continue;
+      const moving = !!car.traffic;
+      if (moving && !(active ??= new Set(vehicles.map(vehicle => vehicle.car))).has(car)) { this._stopCarMusic(music); continue; }
+      const distance = Math.hypot(car.position.x - position.x, car.position.y - position.y, car.position.z - position.z);
+      if (moving && distance > range + 20) { this._stopCarMusic(music); continue; }
+      if (music.id === null) {
+        if (moving && distance >= range) continue;
+        music.id = sound.play();
+        sound.seek(music.start, music.id);
+        music.volume = -1;
+      }
+      const volume = this._baseVolume.get(sound) * this._level('traffic') * distanceGain(distance, 5, range) * this._obstructionGain(car);
+      if (Math.abs(volume - music.volume) < .001 && (volume > 0 || music.volume === 0)) continue;
+      music.volume = volume;
+      sound.volume(volume, music.id);
     }
-    const { car, sound, range } = music;
-    const distance = Math.hypot(car.position.x - position.x, car.position.y - position.y, car.position.z - position.z);
-    const volume = this._baseVolume.get(sound) * this._level('traffic') * distanceGain(distance, 5, range) * this._obstructionGain(car);
-    if (Math.abs(volume - music.volume) < .001 && (volume > 0 || music.volume === 0)) return;
-    music.volume = volume;
-    sound.volume(volume, music.id);
+  }
+
+  _stopCarMusic(music) {
+    if (music.id !== null) music.sound.stop(music.id);
+    music.id = null;
   }
 
   updateWorld(dt, position, _camera, vehicles, bus) {
@@ -457,7 +481,7 @@ export class AudioSystem {
     this._duck += (duckTarget - this._duck) * (1 - Math.exp(-dt * (duckTarget < this._duck ? DUCK_ATTACK : DUCK_RELEASE)));
     this._applyLevels();
     this.vehicles.update(dt, position, vehicles, bus, car => this._obstructionGain(car));
-    this._updateCarMusic(position);
+    this._updateCarMusic(position, vehicles);
     for (const [car, voice] of this._theftVoices) {
       if (!voice.sound.playing(voice.id)) this._theftVoices.delete(car);
       else voice.sound.volume(this._theftVolume(car, position), voice.id);
@@ -483,7 +507,7 @@ export class AudioSystem {
     this.eventTarget?.removeEventListener('dog-bark', this._dogBark);
     this.eventTarget?.removeEventListener('car-honk', this._carHonk);
     this.vehicles.clear();
-    this.carMusic?.sound.unload();
+    for (const sound of this._musicSounds.values()) sound.unload();
     this._removeUnlock();
     globalThis.document?.removeEventListener?.('visibilitychange', this._visibilityChanged);
     for (const sound of [...Object.values(this.sounds), ...Object.values(this.vehicleSounds), ...this.driverSounds, ...this.theftSounds]) sound.unload();
