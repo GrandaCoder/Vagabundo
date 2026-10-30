@@ -4,7 +4,7 @@ Juego de supervivencia urbana en 3D para el navegador, ambientado en un barrio i
 
 Este proyecto es un fork de [juanagogo/bazuko](https://github.com/juanagogo/bazuko), con mejoras de cámara, visibilidad, circulación y equilibrio de supervivencia.
 
-![Gasolinera de noche con un Audio Hatch de parlantes iluminados y personas bailando a su lado](docs/images/gasolinera-audio-hatch-y-bailarines.png)
+![Camioneta Prado blanca en un cruce, con el viaducto y los edificios al fondo a contraluz](docs/images/cruce-de-dia-con-prado.webp)
 
 ## Características
 
@@ -31,10 +31,6 @@ Este proyecto es un fork de [juanagogo/bazuko](https://github.com/juanagogo/bazu
 
 Las capturas muestran la ciudad de día y de noche, con el tráfico, el viaducto y el comercio callejero. Son imágenes reales del juego compartidas durante el desarrollo.
 
-### Cruce de día con una Prado
-
-![Camioneta Prado blanca en un cruce, con el viaducto y los edificios al fondo a contraluz](docs/images/cruce-de-dia-con-prado.webp)
-
 ### Carro estacionado bajo el viaducto
 
 ![Personaje junto a un sedán blanco estacionado bajo el viaducto, con la indicación para conducirlo](docs/images/carro-estacionado-bajo-el-viaducto.webp)
@@ -46,6 +42,10 @@ Las capturas muestran la ciudad de día y de noche, con el tráfico, el viaducto
 ### Semáforo y vendedor bajo el viaducto
 
 ![Semáforo en rojo y un vendedor de frutas junto a un paso peatonal bajo el viaducto de noche](docs/images/noche-semaforo-y-vendedor.webp)
+
+### Gasolinera, Audio Hatch y bailarines
+
+![Gasolinera de noche con un Audio Hatch de parlantes iluminados y personas bailando a su lado](docs/images/gasolinera-audio-hatch-y-bailarines.png)
 
 Las cinco capturas están en [docs/images](docs/images), en formato WebP optimizado salvo la de la gasolinera, que es PNG, y con su resolución original.
 
